@@ -268,9 +268,13 @@ function extractVerseRow(row: Record<string, unknown>, translation: string): Ver
   const textVal =
     headerMap.get('text') ??
     headerMap.get('versetext') ??
-    headerMap.get('verse') ??
+    headerMap.get('bereanstandardbible') ??
+    headerMap.get('bsb') ??
     headerMap.get('content');
-  const refVal = headerMap.get('reference') ?? headerMap.get('ref');
+  let refVal = headerMap.get('reference') ?? headerMap.get('ref');
+  if (!refVal && typeof verseVal === 'string' && verseVal.includes(':')) {
+    refVal = verseVal;
+  }
 
   if (bookVal && chapterVal && verseVal && textVal) {
     return {
@@ -309,14 +313,32 @@ async function loadBsbVerses(): Promise<VerseRow[]> {
   if (!sheet) {
     throw new Error('No sheets found in BSB workbook');
   }
-  const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+
+  const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: '',
+    range: 2
+  });
+
   const verses: VerseRow[] = [];
+
   for (const row of rows) {
-    const parsed = extractVerseRow(row, 'BSB');
-    if (parsed && parsed.text.length > 0) {
-      verses.push(parsed);
-    }
+    const verseRef = String(row['Verse'] || '').trim();
+    const text = String(row['Berean Standard Bible'] || '').trim();
+
+    if (!verseRef || !text) continue;
+
+    const match = verseRef.match(/^(.+?)\s+(\d+):(\d+)$/);
+    if (!match) continue;
+
+    verses.push({
+      book: normalizeBook(match[1]),
+      chapter: Number.parseInt(match[2], 10),
+      verse: Number.parseInt(match[3], 10),
+      text,
+      translation: 'BSB'
+    });
   }
+
   return verses;
 }
 
@@ -356,7 +378,7 @@ function toVectorString(embedding: number[]): string {
 }
 
 async function insertVerseBatch(pool: Pool, rows: VerseRow[], embeddings?: number[][]) {
-  const values: Array<string | number> = [];
+  const values: Array<string | number | null> = [];
   const placeholders: string[] = [];
 
   for (let i = 0; i < rows.length; i += 1) {
@@ -433,7 +455,8 @@ async function insertCrossReferenceBatch(pool: Pool, rows: CrossRefRow[]) {
       target_chapter,
       target_verse,
       votes
-    ) VALUES ${placeholders.join(', ')}`,
+    ) VALUES ${placeholders.join(', ')}
+     ON CONFLICT DO NOTHING`,
     values,
   );
 }
@@ -446,9 +469,9 @@ async function seedCrossReferences(pool: Pool) {
   const stream = fs.createReadStream(TSK_PATH, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-  const batch: CrossRefRow[] = [];
-  let total = 0;
+  const allRows: CrossRefRow[] = [];
   let isHeader = true;
+  let skipped = 0;
 
   for await (const line of rl) {
     if (isHeader) {
@@ -460,25 +483,43 @@ async function seedCrossReferences(pool: Pool) {
     const parts = line.split('\t');
     if (parts.length < 2) continue;
 
-    const fromRefs = parseRange(parts[0]);
-    const toRefs = parseRange(parts[1]);
+    let fromRefs: VerseRef[] = [];
+    let toRefs: VerseRef[] = [];
+
+    try {
+      fromRefs = parseRange(parts[0]);
+      toRefs = parseRange(parts[1]);
+    } catch {
+      skipped++;
+      continue;
+    }
+
     const votes = parts.length >= 3 ? Number.parseInt(parts[2], 10) : null;
 
     for (const source of fromRefs) {
       for (const target of toRefs) {
-        batch.push({ source, target, votes: Number.isNaN(votes) ? null : votes });
-        total += 1;
-        if (batch.length >= BATCH_SIZE) {
-          await insertCrossReferenceBatch(pool, batch.splice(0, batch.length));
-          console.log(`Inserted ${total} cross references`);
-        }
+        allRows.push({
+          source,
+          target,
+          votes: Number.isNaN(votes) ? null : votes
+        });
       }
     }
   }
 
-  if (batch.length > 0) {
+  rl.close();
+  stream.close();
+
+  console.log(`Parsed ${allRows.length} cross references`);
+
+  for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
+    const batch = allRows.slice(i, i + BATCH_SIZE);
     await insertCrossReferenceBatch(pool, batch);
-    console.log(`Inserted ${total} cross references`);
+    console.log(`Inserted ${i + batch.length}`);
+  }
+
+  if (skipped > 0) {
+    console.log(`Skipped ${skipped} invalid lines`);
   }
 }
 
@@ -606,6 +647,35 @@ async function ensureSchema(pool: Pool) {
      ON verses (book, chapter, verse, translation);`,
   );
   await pool.query(`ALTER TABLE cross_references ADD COLUMN IF NOT EXISTS votes INT;`);
+  await pool.query(
+    `WITH ranked AS (
+       SELECT
+         ctid,
+         ROW_NUMBER() OVER (
+           PARTITION BY source_book,
+                        source_chapter,
+                        source_verse,
+                        target_book,
+                        target_chapter,
+                        target_verse
+           ORDER BY ctid
+         ) AS rn
+       FROM cross_references
+     )
+     DELETE FROM cross_references
+     WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1);`,
+  );
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS cross_references_unique
+     ON cross_references (
+       source_book,
+       source_chapter,
+       source_verse,
+       target_book,
+       target_chapter,
+       target_verse
+     );`,
+  );
 }
 
 async function main() {
