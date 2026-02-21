@@ -6,14 +6,25 @@ import remarkGfm from 'remark-gfm';
 import { OriginalLangBlock } from './OriginalLangBlock';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Message as AiMessage } from 'ai';
+import type { UIMessage } from 'ai';
 
-export function Message({ message }: { message: AiMessage }) {
+function getMessageText(message: UIMessage): string {
+  const legacyContent = (message as { content?: unknown }).content;
+  if (typeof legacyContent === 'string') return legacyContent;
+  if (!Array.isArray(message.parts)) return '';
+
+  return message.parts
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('');
+}
+
+export function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
+  const messageText = getMessageText(message);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
+    navigator.clipboard.writeText(messageText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -27,7 +38,7 @@ export function Message({ message }: { message: AiMessage }) {
     });
   };
 
-  const processedContent = preprocessContent(message.content);
+  const processedContent = preprocessContent(messageText);
 
   return (
     <div className={`flex w-full my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>

@@ -1,9 +1,9 @@
 import { createGroq } from '@ai-sdk/groq';
-import { streamText, Message } from 'ai';
+import { convertToModelMessages, streamText } from 'ai';
 import { retrieveContextForQuery } from '@/lib/retrieval';
 import { buildContextPrompt } from '@/lib/prompts';
 
-export const runtime = 'edge';
+// export const runtime = 'edge';
 
 export async function POST(req: Request) {
   try {
@@ -32,18 +32,19 @@ export async function POST(req: Request) {
 
     // Remove the last message from history since we are injecting it via the system prompt context
     const history = messages.slice(0, -1);
+    const modelHistory = await convertToModelMessages(history);
     
     const result = await streamText({
       model: groq(modelName) as any,
       messages: [
         { role: 'system', content: systemPrompt },
-        ...history,
+        ...modelHistory,
         { role: 'user', content: query }
       ],
       temperature: 0.1, // Strict factual responses
     });
 
-    return result.toDataStreamResponse();
+    return result.toUIMessageStreamResponse();
   } catch (e: unknown) {
     console.error('API Error:', e);
     const error = e as Error;

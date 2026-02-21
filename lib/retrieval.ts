@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText, Output } from 'ai';
 import { createGroq } from '@ai-sdk/groq';
 import { z } from 'zod';
 import { fetchVerseHelloAO, fetchVerseFallback, fetchStrongsDefinition, VerseContext } from './bible-fetch';
@@ -44,20 +44,22 @@ export async function retrieveContextForQuery(query: string, translation: string
   // 2. Semantic Hint via Groq (only if direct parsing yields few results)
   if (verses.length < 2) {
     try {
-      const { object } = await generateObject({
-        model: groq('llama-3.1-8b-instant') as any, // bypassing strict structural type change in ai sdk v3
-        schema: z.object({
-          verses: z.array(z.object({
-            bookAbbreviation: z.string().describe('3-letter book code, e.g. GEN, EXO, MAT, JHN'),
-            chapter: z.number(),
-            startVerse: z.number(),
-          }))
+      const { output } = await generateText({
+        model: groq('llama-3.1-8b-instant'),
+        output: Output.object({
+          schema: z.object({
+            verses: z.array(z.object({
+              bookAbbreviation: z.string().describe('3-letter book code, e.g. GEN, EXO, MAT, JHN'),
+              chapter: z.number(),
+              startVerse: z.number(),
+            }))
+          })
         }),
         prompt: `Extract up to 3 most relevant Bible verse references for the following query. Focus on the most commonly quoted verses. If no clear verse applies, return an empty array.\nQuery: "${query}"`,
         temperature: 0.1,
       });
 
-      for (const hint of object.verses) {
+      for (const hint of output.verses) {
         const refStr = `${hint.bookAbbreviation} ${hint.chapter}:${hint.startVerse}`;
         
         // Skip if we already got it

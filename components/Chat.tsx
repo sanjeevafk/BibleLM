@@ -1,14 +1,13 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
-import { useChat } from 'ai/react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useChat } from '@ai-sdk/react';
 import { TranslationSelect } from './TranslationSelect';
 import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Check, Edit, Moon, Settings, Sun, Trash2 } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
+import { Moon, Settings, Sun, Trash2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,11 +17,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+type ChatInnerProps = {
+  translation: string;
+  onTranslationChange: (val: string) => void;
+  customKey: string;
+  onCustomKeyChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+  onClearChat: () => void;
+};
+
 export function Chat() {
   const [translation, setTranslation] = useState('WEB');
   const [customKey, setCustomKey] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [resetKey, setResetKey] = useState(0);
 
   useEffect(() => {
     // Load local storage
@@ -39,28 +48,6 @@ export function Chat() {
     }
   }, []);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, error } = useChat({
-    api: '/api/chat',
-    body: {
-      translation: translation,
-      customApiKey: customKey || undefined,
-    },
-    initialMessages: [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: `Welcome to the Bible Librarian. I provide neutral, direct quotes of Scripture along with original Greek and Hebrew word meanings. Ask me anything, such as *"What does the Bible say about creation?"*`
-      }
-    ]
-  });
-
-  // Auto scroll to bottom
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isLoading]);
-
   const onTranslationChange = (val: string) => {
     setTranslation(val);
     localStorage.setItem('bible-translation', val);
@@ -74,6 +61,86 @@ export function Chat() {
   const toggleDarkMode = () => {
     const isDark = document.documentElement.classList.toggle('dark');
     setIsDarkMode(isDark);
+  };
+
+  const resetChat = () => {
+    setResetKey((prev) => prev + 1);
+  };
+
+  return (
+    <ChatInner
+      key={resetKey}
+      translation={translation}
+      onTranslationChange={onTranslationChange}
+      customKey={customKey}
+      onCustomKeyChange={saveCustomKey}
+      isDarkMode={isDarkMode}
+      toggleDarkMode={toggleDarkMode}
+      onClearChat={resetChat}
+    />
+  );
+}
+
+function ChatInner({
+  translation,
+  onTranslationChange,
+  customKey,
+  onCustomKeyChange,
+  isDarkMode,
+  toggleDarkMode,
+  onClearChat,
+}: ChatInnerProps) {
+  const [input, setInput] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const initialMessages = useMemo(
+    () => [
+      {
+        id: 'welcome',
+        role: 'assistant' as const,
+        parts: [
+          {
+            type: 'text' as const,
+            text: 'Welcome to the Bible Librarian. I provide neutral, direct quotes of Scripture along with original Greek and Hebrew word meanings. Ask me anything, such as *"What does the Bible say about creation?"*',
+          },
+        ],
+      },
+    ],
+    []
+  );
+
+  const { messages, sendMessage, status, error, clearError } = useChat({
+    messages: initialMessages,
+  });
+
+  const isLoading = status === 'submitted' || status === 'streaming';
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isLoading]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = input.trim();
+    if (!trimmed || isLoading) return;
+
+    await sendMessage(
+      { text: trimmed },
+      {
+        body: {
+          translation,
+          customApiKey: customKey || undefined,
+        },
+      }
+    );
+    setInput('');
+  };
+
+  const handleClearChat = () => {
+    clearError();
+    onClearChat();
   };
 
   return (
@@ -111,13 +178,13 @@ export function Chat() {
                     type="password" 
                     placeholder="gsk_..." 
                     value={customKey} 
-                    onChange={saveCustomKey}
+                    onChange={onCustomKeyChange}
                     className="h-8 text-xs"
                   />
                 </div>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setMessages([])}>
+              <DropdownMenuItem onClick={handleClearChat}>
                 <Trash2 className="h-4 w-4 mr-2" /> Clear Chat History
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -128,8 +195,8 @@ export function Chat() {
       {/* Messages */}
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         <div className="flex flex-col gap-2 pb-4">
-          {messages.map(m => (
-            <Message key={m.id} message={m} />
+          {messages.map((message) => (
+            <Message key={message.id} message={message} />
           ))}
           
           {isLoading && messages[messages.length - 1]?.role === 'user' && (
@@ -156,7 +223,7 @@ export function Chat() {
         >
           <Input 
             value={input}
-            onChange={handleInputChange}
+            onChange={(event) => setInput(event.target.value)}
             placeholder="Ask a question..."
             disabled={isLoading}
             className="pr-12 py-6 rounded-full"
