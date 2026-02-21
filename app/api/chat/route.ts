@@ -9,29 +9,59 @@ export async function POST(req: Request) {
   try {
     const { messages, translation, customApiKey } = await req.json();
 
+    const rawMessages = Array.isArray(messages) ? messages : [];
+    const sanitizedMessages = rawMessages.filter((message: { role?: string; content?: unknown }) => {
+      const role = message?.role;
+      if (role !== 'system' && role !== 'assistant' && role !== 'user') {
+        return false;
+      }
+      return message.content !== undefined && message.content !== null;
+    });
+
+    const apiKey = customApiKey || process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({
+          error: 'Groq API key is missing. Set GROQ_API_KEY or provide a custom API key.'
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const groq = createGroq({
-      apiKey: customApiKey || process.env.GROQ_API_KEY,
+      apiKey,
     });
 
     const modelName = customApiKey ? 'llama-3.1-70b-versatile' : 'llama-3.1-8b-instant';
     
     // Get the latest user message
-    const lastMessage = messages[messages.length - 1];
-    
-    if (!lastMessage || lastMessage.role !== 'user') {
+    let lastUserIndex = -1;
+    let lastUserMessage: { role?: string; content?: unknown } | undefined;
+    for (let i = sanitizedMessages.length - 1; i >= 0; i -= 1) {
+      if (sanitizedMessages[i].role === 'user') {
+        lastUserIndex = i;
+        lastUserMessage = sanitizedMessages[i];
+        break;
+      }
+    }
+
+    if (!lastUserMessage) {
       return new Response('Missing user query', { status: 400 });
     }
 
-    const query = lastMessage.content;
+    const query = typeof lastUserMessage.content === 'string' ? lastUserMessage.content.trim() : '';
+    if (!query) {
+      return new Response('Missing user query', { status: 400 });
+    }
     
     // RAG Retrieval
-    const verses = await retrieveContextForQuery(query, translation || 'WEB');
+    const verses = await retrieveContextForQuery(query, translation || 'WEB', apiKey);
     
     // Build context-aware prompt
     const systemPrompt = buildContextPrompt(query, verses, translation || 'WEB');
 
     // Remove the last message from history since we are injecting it via the system prompt context
-    const history = messages.slice(0, -1);
+    const history = lastUserIndex > 0 ? sanitizedMessages.slice(0, lastUserIndex) : [];
     const modelHistory = await convertToModelMessages(history);
     
     const result = await streamText({

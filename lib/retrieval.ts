@@ -8,11 +8,11 @@ import strongsDictData from '../data/strongs-dict.json';
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
 const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
 
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY,
-});
-
-export async function retrieveContextForQuery(query: string, translation: string): Promise<VerseContext[]> {
+export async function retrieveContextForQuery(
+  query: string,
+  translation: string,
+  apiKey?: string
+): Promise<VerseContext[]> {
   const verses: VerseContext[] = [];
 
   // 1. Direct Reference Parsing (e.g., "John 3:16")
@@ -43,6 +43,14 @@ export async function retrieveContextForQuery(query: string, translation: string
 
   // 2. Semantic Hint via Groq (only if direct parsing yields few results)
   if (verses.length < 2) {
+    const groqApiKey = apiKey || process.env.GROQ_API_KEY;
+    if (!groqApiKey) {
+      console.warn('Semantic retrieval skipped: GROQ_API_KEY is missing.');
+      return enrichOriginalLanguages(verses);
+    }
+    const groq = createGroq({
+      apiKey: groqApiKey,
+    });
     try {
       const { output } = await generateText({
         model: groq('llama-3.1-8b-instant'),
