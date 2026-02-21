@@ -1,5 +1,7 @@
 # BibleLM
 
+<!-- ✅ File write permissions confirmed -->
+
 A minimalist, fast, neutral Bible chatbot web app that quotes real verses with original-language (Hebrew/Greek) data. Zero-cost deployment on Vercel Hobby + Groq free tier.
 
 ## Features
