@@ -12,7 +12,8 @@ const BATCH_SIZE = Number.parseInt(process.env.EMBED_BATCH_SIZE || '64', 10);
 const RATE_LIMIT_MS = Number.parseInt(process.env.HF_RATE_LIMIT_MS || '0', 10);
 const FORCE = process.env.FORCE_EMBEDDINGS === 'true';
 
-const HF_ENDPOINT = `https://api-inference.huggingface.co/pipeline/feature-extraction/${MODEL}`;
+// === UPDATED ENDPOINT (this fixes the 410 error) ===
+const HF_ENDPOINT = `https://router.huggingface.co/hf-inference/models/${MODEL}/pipeline/feature-extraction`;
 
 type VerseRow = {
   id: number;
@@ -49,13 +50,17 @@ function normalizeEmbedding(raw: unknown): number[] {
 
 async function fetchEmbeddings(texts: string[]): Promise<number[][]> {
   const inputs = texts.map((text) => `passage: ${text}`);
+
   const response = await fetch(HF_ENDPOINT, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${HF_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ inputs })
+    body: JSON.stringify({
+      inputs,
+      options: { wait_for_model: true }   // ← helps with cold-start models
+    })
   });
 
   if (!response.ok) {
@@ -76,12 +81,14 @@ function toVectorString(embedding: number[]): string {
 }
 
 async function updateEmbeddings(pool: Pool, rows: VerseRow[], embeddings: number[][]) {
+  if (rows.length === 0) return;
+
   const values: Array<number | string> = [];
   const placeholders: string[] = [];
 
   for (let i = 0; i < rows.length; i += 1) {
     const base = i * 2;
-    placeholders.push(`($${base + 1}, $${base + 2})`);
+    placeholders.push(`($${base + 1}::bigint, $${base + 2})`);
     values.push(rows[i].id, toVectorString(embeddings[i]));
   }
 
@@ -139,6 +146,8 @@ async function main() {
         await sleep(RATE_LIMIT_MS);
       }
     }
+
+    console.log('✅ All embeddings completed!');
   } finally {
     await pool.end();
   }

@@ -314,25 +314,33 @@ async function loadBsbVerses(): Promise<VerseRow[]> {
     throw new Error('No sheets found in BSB workbook');
   }
 
-  const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+  const rows = xlsx.utils.sheet_to_json<unknown[]>(sheet, {
     defval: '',
-    range: 2
+    header: 1
   });
 
   const verses: VerseRow[] = [];
+  let skippedEmpty = 0;
+  let skippedRegex = 0;
 
-  for (const row of rows) {
-    const verseRef = String(row['Verse'] || '')
+  for (let rowIndex = 3; rowIndex < rows.length; rowIndex += 1) {
+    const rawRow = rows[rowIndex];
+    const row = Array.isArray(rawRow) ? rawRow : [];
+    const verseRef = String(row[1] ?? '')
+      .trim()
       .replace(/\u00A0/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    const text = String(row['Berean Standard Bible'] || '').trim();
+    const text = String(row[2] ?? '').trim();
 
-    if (!verseRef || !text) continue;
+    if (!verseRef || !text) {
+      skippedEmpty += 1;
+      continue;
+    }
 
     const match = verseRef.match(/^(.+?)\s*(\d+):(\d+)$/);
     if (!match) {
-      console.warn('Failed to parse verse reference:', verseRef);
+      skippedRegex += 1;
       continue;
     }
 
@@ -344,6 +352,10 @@ async function loadBsbVerses(): Promise<VerseRow[]> {
       translation: 'BSB'
     });
   }
+
+  console.info(
+    `BSB parse debug: skipped ${skippedEmpty} empty rows, ${skippedRegex} regex failures.`
+  );
 
   if (verses.length !== 31102) {
     console.warn(`Warning: Expected 31102 verses, but parsed ${verses.length}.`);
