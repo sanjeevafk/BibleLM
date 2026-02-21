@@ -84,7 +84,7 @@ function ChatInner({
         parts: [
           {
             type: 'text',
-            text: 'Welcome to the Bible Librarian. I provide neutral, direct quotes of Scripture along with original Greek and Hebrew word meanings. Ask me anything, such as *"What does the Bible say about creation?"*',
+            text: 'Welcome to BibleLM. I provide neutral, direct quotes of Scripture along with original Greek and Hebrew word meanings. Ask me anything, such as *"What does the Bible say about creation?"*',
           },
         ],
       },
@@ -132,7 +132,7 @@ function ChatInner({
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b bg-card">
         <div className="flex items-center gap-2">
-          <span className="font-serif text-xl font-bold">Bible Librarian</span>
+          <span className="font-serif text-xl font-bold">BibleLM</span>
           <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Beta</span>
         </div>
 
@@ -152,23 +152,19 @@ function ChatInner({
               <DropdownMenuSeparator />
               <div className="p-2 space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  By default, we use a free rate-limited Groq Llama 3.1 8B model. Enter your own Groq API key to use Llama 3.1 70B instantly.
+                  The Librarian currently operates on a free, rate-limited resource. To ensure uninterrupted service and deeper research capabilities, you may provide your own API key.
                 </p>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold">Groq API Key (Stored Locally)</label>
+                  <label className="text-xs font-semibold">API Key (Stored Locally)</label>
                   <Input 
                     type="password" 
-                    placeholder="gsk_..." 
+                    placeholder="Enter your access key..." 
                     value={customKey} 
                     onChange={onCustomKeyChange}
                     className="h-8 text-xs"
                   />
                 </div>
               </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleClearChat}>
-                <Trash2 className="h-4 w-4 mr-2" /> Clear Chat History
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -220,7 +216,7 @@ function ChatInner({
           </Button>
         </form>
         <div className="text-center text-xs text-muted-foreground mt-2">
-          Librarian can make mistakes. All responses are direct quotes based on your chosen translation.
+          The Librarian provides direct scriptural reports via semantic RAG, primarily using the BSB translation. Verifying references is recommended.
         </div>
       </div>
     </div>

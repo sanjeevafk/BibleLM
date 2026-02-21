@@ -115,7 +115,7 @@ export async function POST(req: Request) {
     const errorMsg = error?.message?.toLowerCase() || '';
     if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
       return new Response(JSON.stringify({ 
-        error: 'Rate limit exceeded. The free tier API is currently overloaded. Please wait a moment or provide your own Groq API key in the settings.' 
+        error: 'Rate limit exceeded. The shared resource is currently overloaded. Please wait a moment or provide your own API key in the settings.' 
       }), { status: 429, headers: { 'Content-Type': 'application/json' } });
     }
     

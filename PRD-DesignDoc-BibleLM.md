@@ -1,8 +1,8 @@
-### Product Requirements Document (PRD) - Bible Librarian Chatbot
+### Product Requirements Document (PRD) - BibleLM Chatbot
 
 **1\. Product Overview**
 
-- **Name**: Bible Librarian (working title)
+- **Name**: BibleLM
 - **One-liner**: A fast, neutral, Scripture-first chatbot that answers Bible-related questions by quoting exact verses from multiple translations and always including original Hebrew/Greek linguistic details - powered by Groq + free Bible data.
 - **Vision**: Provide users with direct access to biblical text on any topic (including controversial ones) without added interpretation, opinion, or denominational bias. Emphasize textual faithfulness, transparency, and educational value through original languages.
 - **Target users**:
@@ -26,16 +26,16 @@
 
 **3\. Key Features (MVP scope)**
 
-| Priority | Feature | Description | Acceptance Criteria |
-| --- | --- | --- | --- |
-| P0  | Chat interface | Conversational UI like ChatGPT/Grok: bubbles, streaming text, markdown support | User types question → sees typing indicator → text streams in → history scrolls |
-| P0  | LLM-powered answers | Groq (llama-3.1-70b or equivalent free model) with strict system prompt | Response follows exact template: neutral summary + verse bullets + original lang blocks |
-| P0  | Verse quoting | Fetch real verse text from free API(s) → LLM quotes accurately | No hallucinated verses; always cites translation & reference |
-| P0  | Mandatory original lang | For every verse/passage quoted: Hebrew/Greek word(s) • translit • Strong's • 1-5 word gloss | Format consistent: e.g. "Hebrew: בָּרָא (baraʾ, H1254 - create)" |
-| P1  | Translation selection | Dropdown: ESV (default), KJV, NIV, NASB, YLT, etc. (from available free sources) | Selection persists in session (localStorage); affects quoted verses |
-| P1  | Topic handling (no direct verse) | Explicitly state absence + closest thematic verses | e.g. Abortion: "No explicit command on elective abortion; closest themes in Ps 139, Ex 21, etc." |
-| P2  | Search / verse lookup helper | Backend fetches verses via API before/parallel to LLM call (tool use or pre-fetch) | Reduces hallucinations; enriches context |
-| P2  | Error handling & fallbacks | Rate-limit message, API down → fallback to bundled JSON | Graceful degradation |
+| Priority | Feature                          | Description                                                                                 | Acceptance Criteria                                                                              |
+| -------- | -------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| P0       | Chat interface                   | Conversational UI like ChatGPT/Grok: bubbles, streaming text, markdown support              | User types question → sees typing indicator → text streams in → history scrolls                  |
+| P0       | LLM-powered answers              | Groq (llama-3.1-70b or equivalent free model) with strict system prompt                     | Response follows exact template: neutral summary + verse bullets + original lang blocks          |
+| P0       | Verse quoting                    | Fetch real verse text from free API(s) → LLM quotes accurately                              | No hallucinated verses; always cites translation & reference                                     |
+| P0       | Mandatory original lang          | For every verse/passage quoted: Hebrew/Greek word(s) • translit • Strong's • 1-5 word gloss | Format consistent: e.g. "Hebrew: בָּרָא (baraʾ, H1254 - create)"                                 |
+| P1       | Translation selection            | Dropdown: ESV (default), KJV, NIV, NASB, YLT, etc. (from available free sources)            | Selection persists in session (localStorage); affects quoted verses                              |
+| P1       | Topic handling (no direct verse) | Explicitly state absence + closest thematic verses                                          | e.g. Abortion: "No explicit command on elective abortion; closest themes in Ps 139, Ex 21, etc." |
+| P2       | Search / verse lookup helper     | Backend fetches verses via API before/parallel to LLM call (tool use or pre-fetch)          | Reduces hallucinations; enriches context                                                         |
+| P2       | Error handling & fallbacks       | Rate-limit message, API down → fallback to bundled JSON                                     | Graceful degradation                                                                             |
 
 **4\. Success Metrics (MVP launch)**
 
@@ -53,12 +53,12 @@
 
 **6\. Risks & Mitigations**
 
-| Risk | Likelihood | Mitigation |
-| --- | --- | --- |
-| Groq free tier throttles | Medium | Short prompts, low temp, fallback model, show polite wait message |
-| Bible API downtime / changes | Medium | Multiple sources (helloao + bolls + bible-api.com) + bundled JSON fallback |
-| LLM hallucinates verses | High | Strict prompt + pre-fetch real verses into context + low temperature (0.1-0.3) |
-| Vercel Hobby limits hit | Low | Optimize edge functions, short context |
+| Risk                         | Likelihood | Mitigation                                                                     |
+| ---------------------------- | ---------- | ------------------------------------------------------------------------------ |
+| Groq free tier throttles     | Medium     | Short prompts, low temp, fallback model, show polite wait message              |
+| Bible API downtime / changes | Medium     | Multiple sources (helloao + bolls + bible-api.com) + bundled JSON fallback     |
+| LLM hallucinates verses      | High       | Strict prompt + pre-fetch real verses into context + low temperature (0.1-0.3) |
+| Vercel Hobby limits hit      | Low        | Optimize edge functions, short context                                         |
 
 ### High-Level Design Document
 
@@ -74,12 +74,12 @@
 
 From current landscape:
 
-| Source | Type | Translations | Original Lang / Strong's? | Latency | Usage |
-| --- | --- | --- | --- | --- | --- |
-| bible.helloao.org | API | 1000+ (incl. many public domain) | Limited footnotes; no direct Strong's | Low (AWS/Cloudflare) | Primary for English/modern translations |
-| bolls.life/api | API | Many (KJV, NKJV, NASB, ESV, YLT, WLC Hebrew, LXX Greek, etc.) | Yes - Strong's via dictionary endpoints (BDBT/RUSD), morphology hints | Low | Best for original lang + Strong's lookup |
-| bible-api.com | API | Dozens (public domain focus) | No  | Very low | Lightweight fallback |
-| Bundled JSON | Static | User-selected subset (e.g. KJV, YLT, WEB) | Yes - from HF / OpenScriptures / STEP Bible exports | Instant | Fallback + mandatory originals (hebrew-strongs.json, greek-strongs.json) |
+| Source            | Type   | Translations                                                  | Original Lang / Strong's?                                             | Latency              | Usage                                                                    |
+| ----------------- | ------ | ------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
+| bible.helloao.org | API    | 1000+ (incl. many public domain)                              | Limited footnotes; no direct Strong's                                 | Low (AWS/Cloudflare) | Primary for English/modern translations                                  |
+| bolls.life/api    | API    | Many (KJV, NKJV, NASB, ESV, YLT, WLC Hebrew, LXX Greek, etc.) | Yes - Strong's via dictionary endpoints (BDBT/RUSD), morphology hints | Low                  | Best for original lang + Strong's lookup                                 |
+| bible-api.com     | API    | Dozens (public domain focus)                                  | No                                                                    | Very low             | Lightweight fallback                                                     |
+| Bundled JSON      | Static | User-selected subset (e.g. KJV, YLT, WEB)                     | Yes - from HF / OpenScriptures / STEP Bible exports                   | Instant              | Fallback + mandatory originals (hebrew-strongs.json, greek-strongs.json) |
 
 **Bundled originals recommendation** (5-30 MB total, fits Vercel):
 
