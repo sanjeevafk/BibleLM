@@ -36,31 +36,36 @@ export function Message({ message }: { message: UIMessage }) {
       return '```orig|' + word + '|' + (translit || '') + '|' + strongs + '|' + (gloss || '') + '```';
     });
 
-    // Convert plain markdown "Original key words" bullets into the same codeblock format.
     const lines = xmlProcessed.split(/\r?\n/);
     let inOriginalBlock = false;
+    
     const outLines = lines.map((line) => {
-      if (/^\s*\*\*Original key words:\*\*/i.test(line)) {
+      const indentMatch = line.match(/^(\s*)/);
+      const indent = indentMatch ? indentMatch[1] : '';
+      const trimmedLine = line.trim();
+
+      if (/\*\*Original key words:\*\*/i.test(trimmedLine)) {
         inOriginalBlock = true;
         return line;
       }
 
-      if (inOriginalBlock && line.trim() === '') {
+      // If we encounter a new main bullet or empty line, we might be out of the local original block
+      // But we should only exit on empty line or a line that clearly starts a new verse "Full quote"
+      if (inOriginalBlock && (trimmedLine === '' || trimmedLine.startsWith('- "'))) {
         inOriginalBlock = false;
         return line;
       }
 
       if (!inOriginalBlock) return line;
 
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('- ')) return line;
+      // Handle both "- [word]" and nested "  - [word]"
+      if (!trimmedLine.startsWith('- ')) return line;
 
-      const content = trimmed.slice(2).trim();
+      const content = trimmedLine.slice(2).trim();
       const match = content.match(/^(.+?)\s*\((.+)\)\s*$/);
       if (!match) return line;
 
       let word = match[1].trim();
-      // Strip potential brackets [word] -> word
       if (word.startsWith('[') && word.endsWith(']')) {
         word = word.slice(1, -1);
       }
@@ -79,8 +84,7 @@ export function Message({ message }: { message: UIMessage }) {
       const beforeStrongs = details.split(/Strong's\s+[A-Z]?\d+/i)[0] || '';
       const translit = beforeStrongs.replace(/[\s,]+$/g, '').trim();
 
-      return '```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '```';
-
+      return indent + '- ```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '```';
     });
 
     return outLines.join('\n');
@@ -93,55 +97,57 @@ export function Message({ message }: { message: UIMessage }) {
       <div 
         className={`relative flex flex-col max-w-[85%] md:max-w-[75%] px-4 py-3 rounded-2xl ${
           isUser 
-            ? 'bg-blue-600 text-white rounded-br-sm' 
-            : 'bg-muted text-foreground border rounded-bl-sm'
+            ? 'bg-blue-600 text-white rounded-br-sm shadow-md' 
+            : 'bg-muted text-foreground border rounded-bl-sm shadow-sm'
         }`}
       >
-        <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed overflow-x-auto">
+        <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed overflow-x-visible">
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{
               p({ children }) {
                 const text = React.Children.toArray(children).join('');
-                // If it's the citation/source line at the end
                 if (text.includes('All quotes from') && text.includes('OSHB')) {
-                  return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase">{children}</p>;
+                  return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase opacity-70">{children}</p>;
                 }
-                return <p className="mb-4 last:mb-0">{children}</p>;
+                return <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>;
               },
               li({ children }) {
-                const text = React.Children.toArray(children).join('');
+                const text = React.Children.toArray(children).join('').trim();
                 
-                // Identify verses vs original words
                 const isOriginalWord = text.includes('orig|');
-                const isReference = /^[A-Z]{3}\s\d+:\d+/i.test(text);
+                // More robust reference detection: Look for 3-letter book code at start or within parentheses
+                const isReference = /([A-Z0-9]{3})\s\d+:\d+/i.test(text);
 
                 if (isOriginalWord) {
-                  return <li className="list-none inline-block mr-1">{children}</li>;
+                  return <li className="list-none inline-block mr-1 my-1">{children}</li>;
                 }
 
-                if (isReference) {
-                  return <li className="list-none text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1 mb-3">{children}</li>;
+                if (isReference && text.length < 40) {
+                  return <li className="list-none text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-2 mb-3 px-1 border-l-2 border-muted-foreground/20 ml-1">{children}</li>;
                 }
 
-                // If it's a quote (likely a verse)
-                if (text.startsWith('"') || text.length > 50) {
-                  return <li className="list-none bible-verse border-l-2 border-primary/20 pl-4 my-4 decoration-primary/10">{children}</li>;
+                // Verse detection: starts with quote, or long text in a list that isn't a reference/orig block
+                if (text.startsWith('"') || text.startsWith('“') || (text.length > 50 && !text.includes('**Original key words:**'))) {
+                  return (
+                    <li className="list-none bible-verse border-l-4 border-primary/20 bg-primary/5 pl-5 pr-3 py-4 my-6 rounded-r-xl shadow-sm transition-all hover:border-primary/40">
+                      {children}
+                    </li>
+                  );
                 }
 
-                return <li className="mb-2">{children}</li>;
+                return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50">{children}</li>;
               },
               strong({ children }) {
-                if (children === 'Original key words:') {
-                  return <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 mt-4">{children}</span>;
+                if (typeof children === 'string' && children.includes('Original key words:')) {
+                  return <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-6 pb-1 border-b border-muted-foreground/10">{children}</span>;
                 }
-                return <strong className="font-bold">{children}</strong>;
+                return <strong className="font-bold text-primary/90">{children}</strong>;
               },
               code(props: { children?: React.ReactNode; className?: string; [key: string]: unknown } | any) {
                 const { children, className, ...rest } = props;
                 const text = String(children);
                 
-                // Catch our special orig encoding
                 if (text.startsWith('orig|')) {
                   const parts = text.split('|');
                   return (
@@ -154,13 +160,13 @@ export function Message({ message }: { message: UIMessage }) {
                   );
                 }
                 
-                return <code className={`bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 ${className || ''}`} {...rest}>{children}</code>;
+                return <code className={`bg-black/10 dark:bg-white/10 rounded px-1.5 py-0.5 font-mono text-[13px] ${className || ''}`} {...rest}>{children}</code>;
               }
             }}
-
           >
             {processedContent}
           </ReactMarkdown>
+
         </div>
 
         {!isUser && (

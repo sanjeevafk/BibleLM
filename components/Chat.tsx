@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback, useLayoutEffect } from 'react';
 import { useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 import { Message } from './Message';
@@ -98,18 +98,46 @@ function ChatInner({
 
   const isLoading = status === 'submitted' || status === 'streaming';
 
-  // Auto scroll to bottom
-  useEffect(() => {
+  const shouldAutoScroll = useRef(true);
+
+  const scrollToBottom = useCallback((smooth = false) => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto',
+      });
     }
-  }, [messages, isLoading]);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      // If within 100px of bottom, enable auto-scroll
+      const atBottom = scrollHeight - scrollTop - clientHeight < 100;
+      shouldAutoScroll.current = atBottom;
+    }
+  }, []);
+
+  // Use useLayoutEffect to prevent flicker/jumps during renders
+  useLayoutEffect(() => {
+    if (shouldAutoScroll.current) {
+      scrollToBottom();
+    }
+  }, [messages, isLoading, scrollToBottom]);
+
+  // Initial scroll on mount
+  useEffect(() => {
+    scrollToBottom();
+  }, [scrollToBottom]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
 
+    // Force auto-scroll to bottom when user sends a message
+    shouldAutoScroll.current = true;
+    
     await sendMessage(
       { text: trimmed },
       {
@@ -120,6 +148,8 @@ function ChatInner({
       }
     );
     setInput('');
+    // Ensure we scroll after sending
+    setTimeout(() => scrollToBottom(true), 50);
   };
 
   const handleClearChat = () => {
@@ -194,7 +224,11 @@ function ChatInner({
 
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <ScrollArea 
+        className="flex-1 p-4" 
+        ref={scrollRef} 
+        onScroll={handleScroll}
+      >
         <div className="flex flex-col gap-2 pb-4">
           {messages.map((message) => (
             <Message key={message.id} message={message} />
