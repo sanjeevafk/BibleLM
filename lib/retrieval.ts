@@ -545,7 +545,11 @@ async function retrieveContextFromDb(
   const priorityRows = await fetchVersesByRefs(pool, prioritizedParsed, translation);
 
   const addUnique = (row: VerseContext) => {
-    if (!verses.some((v) => v.reference === row.reference)) {
+    const norm = row.reference.toUpperCase().trim();
+    const hasRef = verses.some((v) => v.reference.toUpperCase().trim() === norm);
+    const hasText = verses.some((v) => v.text.trim() === row.text.trim());
+    
+    if (!hasRef && !hasText) {
       verses.push(row);
     }
   };
@@ -703,7 +707,7 @@ async function retrieveContextViaApis(
       }
       
       const vText = await fetchVerseHelloAO(translation, ref.book, ref.chapter, ref.verse, ref.endVerse) 
-                    || await fetchVerseFallback(`${ref.book} ${ref.chapter}:${ref.verse}-${ref.endVerse || ref.verse}`, translation);
+                    || await fetchVerseFallback(`${ref.book} ${ref.chapter}:${ref.verse}${ref.endVerse ? '-' + ref.endVerse : ''}`, translation);
       
       if (vText) {
         verses.push({

@@ -99,6 +99,7 @@ export async function POST(req: Request) {
             { role: 'user', content: query }
           ],
           temperature: 0.1, // Strict factual responses
+          frequencyPenalty: 0.5, // Help prevent loops
         });
 
         return result.toUIMessageStreamResponse();

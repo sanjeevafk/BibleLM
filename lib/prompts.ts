@@ -62,7 +62,7 @@ When the query mentions Canaanite nations, conquest of Canaan, Amalekites, or as
   5. Warning to Israel (they are not exempt – Deut 9:4-5)
   6. New Testament perspective (Matt 26:52 if relevant)
 
-Stay extremely close to what the verses actually say. Use low temperature. Be direct when the text is direct.`;
+Stay extremely close to what the verses actually say. Use low temperature. Be direct when the text is direct. Do NOT repeat verses or information already presented in the same response. Once you have reported the relevant data, conclude the response immediately.`;
 
 export function buildContextPrompt(
   query: string,
@@ -109,7 +109,6 @@ Do not speculate or add external information.`;
     contextStr += '\n';
   });
 
-  contextStr += `User query: ${query}\n`;
   contextStr += `Requested translation: ${translation}\n\n`;
 
   contextStr += `Reminder:
