@@ -8,7 +8,7 @@ import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Moon, Settings, Sun, Trash2 } from 'lucide-react';
+import { Github, Moon, Settings, Sun, Trash2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -206,15 +206,21 @@ function ChatInner({
         </div>
 
 
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full hover:bg-muted/80">
-            {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" asChild className="rounded-full w-10 h-10 hover:bg-muted/80">
+            <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
+              <Github className="h-5 w-5" />
+            </a>
+          </Button>
+
+          <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full w-10 h-10 hover:bg-muted/80">
+            {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full hover:bg-muted/80">
-                <Settings className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="rounded-full w-10 h-10 hover:bg-muted/80">
+                <Settings className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72 mt-2">

@@ -1,41 +1,48 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useSyncExternalStore } from 'react';
+import { useState, useEffect, useSyncExternalStore } from "react";
 
-import { Chat } from '@/components/Chat';
-import { Button } from '@/components/ui/button';
-import { BookOpen, Sparkles, Languages, Search, ChevronRight, Moon, Sun } from 'lucide-react';
+import { Chat } from "@/components/Chat";
+import { Button } from "@/components/ui/button";
+import {
+  BookOpen,
+  Sparkles,
+  Languages,
+  Search,
+  ChevronRight,
+  Moon,
+  Sun,
+  Github,
+} from "lucide-react";
 
 export default function Home() {
   const [showChat, setShowChat] = useState(false);
-  
+
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
-    () => false
+    () => false,
   );
 
   const isDarkMode = useSyncExternalStore(
     (onStoreChange) => {
-      const mql = window.matchMedia('(prefers-color-scheme: dark)');
-      mql.addEventListener('change', onStoreChange);
-      return () => mql.removeEventListener('change', onStoreChange);
+      const mql = window.matchMedia("(prefers-color-scheme: dark)");
+      mql.addEventListener("change", onStoreChange);
+      return () => mql.removeEventListener("change", onStoreChange);
     },
-    () => window.matchMedia('(prefers-color-scheme: dark)').matches,
-    () => false
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+    () => false,
   );
 
   useEffect(() => {
     if (mounted) {
-      document.documentElement.classList.toggle('dark', isDarkMode);
+      document.documentElement.classList.toggle("dark", isDarkMode);
     }
   }, [isDarkMode, mounted]);
 
   const toggleDarkMode = () => {
-    document.documentElement.classList.toggle('dark');
+    document.documentElement.classList.toggle("dark");
   };
-
-
 
   if (showChat) {
     return (
@@ -47,17 +54,21 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center space-y-12 relative overflow-hidden">
-      {/* Theme Toggle */}
-      <div className="absolute top-6 right-6 z-50">
-        <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full">
-          {mounted ? (isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />) : <div className="h-5 w-5" />}
+      {/* Header Links */}
+      <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
+        <Button variant="ghost" size="icon" asChild className="rounded-full w-12 h-12">
+          <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
+            <Github className="h-6 w-6" />
+          </a>
+        </Button>
+        <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full w-12 h-12">
+          {mounted ? (isDarkMode ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />) : <div className="h-6 w-6" />}
         </Button>
       </div>
 
-
       {/* Background decoration */}
       <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-zinc-950 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] bg-size-[24px_24px] mask-[radial-gradient(ellipse_60%_60%_at_50%_50%,#000_70%,transparent_100%)]"></div>
-      
+
       {/* Glow effect */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] -z-10 animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] -z-10 animate-pulse"></div>
@@ -71,15 +82,15 @@ export default function Home() {
             BibleLM
           </h1>
         </div>
-        
+
         <p className="text-xl md:text-2xl text-muted-foreground font-light leading-relaxed max-w-2xl mx-auto">
-          Scripture-first study through semantic RAG, direct scriptural reporting, 
-          and original language word-level data.
+          Scripture-first study through semantic RAG, direct scriptural
+          reporting, and original language word-level data.
         </p>
 
         <div className="flex flex-wrap justify-center gap-4 pt-6">
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             onClick={() => setShowChat(true)}
             className="rounded-full px-10 h-14 text-lg font-semibold group relative overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
           >
@@ -98,26 +109,48 @@ export default function Home() {
             <Search className="w-6 h-6 text-primary" />
           </div>
           <h3 className="text-lg font-bold">Direct Quotes</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">Exact, neutral quotes from Scripture based on your inquiries, ensuring textual fidelity at all times.</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Exact, neutral quotes from Scripture based on your inquiries,
+            ensuring textual fidelity at all times.
+          </p>
         </div>
         <div className="group relative flex flex-col items-center p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
           <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
             <Languages className="w-6 h-6 text-primary" />
           </div>
           <h3 className="text-lg font-bold">Original Meanings</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">Unpack the richness of original Greek and Hebrew with Strong&apos;s data and word-level definitions.</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Unpack the richness of original Greek and Hebrew with Strong&apos;s
+            data and word-level definitions.
+          </p>
         </div>
         <div className="group relative flex flex-col items-center p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
           <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
             <Sparkles className="w-6 h-6 text-primary" />
           </div>
           <h3 className="text-lg font-bold">Thematic Retrieval</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">Ask complex questions and receive cross-referenced passages from the BSB and other authoritative translations.</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Ask complex questions and receive cross-referenced passages from the
+            BSB and other authoritative translations.
+          </p>
         </div>
       </div>
 
-      <footer className="pt-20 pb-8 text-sm text-muted-foreground/60 font-medium">
-        BibleLM &copy; {new Date().getFullYear()} &bull; Built for deeper understanding
+      <footer className="pt-20 pb-8 text-sm text-muted-foreground/60 font-medium flex flex-col items-center gap-4">
+        <div className="flex items-center gap-4">
+          <a 
+            href="https://github.com/voidcommit-afk/BibleLM" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+          >
+            <Github className="w-5 h-5" />
+            GitHub
+          </a>
+        </div>
+        <div>
+          BibleLM &copy; {new Date().getFullYear()} &bull; Built for deeper understanding
+        </div>
       </footer>
     </main>
   );
