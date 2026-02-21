@@ -661,8 +661,12 @@ async function seedStrongs(pool: Pool) {
 }
 
 async function ensureSchema(pool: Pool) {
+  await pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
   await pool.query(
     `ALTER TABLE verses ADD COLUMN IF NOT EXISTS translation TEXT NOT NULL DEFAULT 'BSB';`,
+  );
+  await pool.query(
+    `ALTER TABLE verses ADD COLUMN IF NOT EXISTS embedding vector(384);`,
   );
   await pool.query(
     `CREATE UNIQUE INDEX IF NOT EXISTS verses_unique

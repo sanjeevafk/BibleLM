@@ -101,6 +101,8 @@ async function updateEmbeddings(pool: Pool, rows: VerseRow[], embeddings: number
 }
 
 async function ensureVectorDimension(pool: Pool) {
+  await pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
+  await pool.query('ALTER TABLE verses ADD COLUMN IF NOT EXISTS embedding vector(384)');
   await pool.query('ALTER TABLE verses ALTER COLUMN embedding TYPE vector(384)');
 }
 

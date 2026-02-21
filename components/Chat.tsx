@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
-import { TranslationSelect } from './TranslationSelect';
 import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,8 +18,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type ChatInnerProps = {
-  translation: string;
-  onTranslationChange: (val: string) => void;
   customKey: string;
   onCustomKeyChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isDarkMode: boolean;
@@ -29,10 +26,6 @@ type ChatInnerProps = {
 };
 
 export function Chat() {
-  const [translation, setTranslation] = useState(() => {
-    if (typeof window === 'undefined') return 'WEB';
-    return localStorage.getItem('bible-translation') || 'WEB';
-  });
   const [customKey, setCustomKey] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem('groq-api-key') || '';
@@ -46,11 +39,6 @@ export function Chat() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
-
-  const onTranslationChange = (val: string) => {
-    setTranslation(val);
-    localStorage.setItem('bible-translation', val);
-  };
 
   const saveCustomKey = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCustomKey(e.target.value);
@@ -69,8 +57,6 @@ export function Chat() {
   return (
     <ChatInner
       key={resetKey}
-      translation={translation}
-      onTranslationChange={onTranslationChange}
       customKey={customKey}
       onCustomKeyChange={saveCustomKey}
       isDarkMode={isDarkMode}
@@ -81,8 +67,6 @@ export function Chat() {
 }
 
 function ChatInner({
-  translation,
-  onTranslationChange,
   customKey,
   onCustomKeyChange,
   isDarkMode,
@@ -91,6 +75,7 @@ function ChatInner({
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const translation = 'BSB';
   const initialMessages = useMemo<UIMessage[]>(
     () => [
       {
@@ -152,8 +137,6 @@ function ChatInner({
         </div>
 
         <div className="flex items-center gap-2">
-          <TranslationSelect value={translation} onChange={onTranslationChange} />
-          
           <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
             {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>

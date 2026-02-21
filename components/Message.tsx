@@ -30,12 +30,50 @@ export function Message({ message }: { message: UIMessage }) {
   };
 
   const preprocessContent = (text: string) => {
-    // Basic regex replacement. Convert `<orig ... />` XML block to markdown codeblock we can intercept.
+    // Convert `<orig ... />` XML block to markdown codeblock we can intercept.
     const rx = /<orig word="([^"]*)" translit="([^"]*)" strongs="([^"]*)" gloss="([^"]*)" \/>/g;
-    return text.replace(rx, (match, word, translit, strongs, gloss) => {
-      // Must return a properly escaped markdown code block
-      return '```orig|' + word + '|' + (translit||'') + '|' + strongs + '|' + (gloss||'') + '```';
+    const xmlProcessed = text.replace(rx, (match, word, translit, strongs, gloss) => {
+      return '```orig|' + word + '|' + (translit || '') + '|' + strongs + '|' + (gloss || '') + '```';
     });
+
+    // Convert plain markdown "Original key words" bullets into the same codeblock format.
+    const lines = xmlProcessed.split(/\r?\n/);
+    let inOriginalBlock = false;
+    const outLines = lines.map((line) => {
+      if (/^\s*\*\*Original key words:\*\*/i.test(line)) {
+        inOriginalBlock = true;
+        return line;
+      }
+
+      if (inOriginalBlock && line.trim() === '') {
+        inOriginalBlock = false;
+        return line;
+      }
+
+      if (!inOriginalBlock) return line;
+
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('- ')) return line;
+
+      const content = trimmed.slice(2).trim();
+      const match = content.match(/^(.+?)\s*\((.+)\)\s*$/);
+      if (!match) return line;
+
+      const word = match[1].trim();
+      const details = match[2];
+      const strongsMatch = details.match(/Strong's\s+([A-Z]?\d+)/i);
+      if (!strongsMatch) return line;
+
+      const strongs = strongsMatch[1];
+      const glossMatch = details.match(/-\s*(.+)$/);
+      const gloss = glossMatch ? glossMatch[1].trim() : '';
+      const beforeStrongs = details.split(/Strong's\s+[A-Z]?\d+/i)[0] || '';
+      const translit = beforeStrongs.replace(/[\s,]+$/g, '').trim();
+
+      return '```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '```';
+    });
+
+    return outLines.join('\n');
   };
 
   const processedContent = preprocessContent(messageText);
