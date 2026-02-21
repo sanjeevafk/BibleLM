@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
+import type { UIMessage } from 'ai';
 import { TranslationSelect } from './TranslationSelect';
 import { Message } from './Message';
 import { Button } from '@/components/ui/button';
@@ -28,25 +29,23 @@ type ChatInnerProps = {
 };
 
 export function Chat() {
-  const [translation, setTranslation] = useState('WEB');
-  const [customKey, setCustomKey] = useState('');
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [translation, setTranslation] = useState(() => {
+    if (typeof window === 'undefined') return 'WEB';
+    return localStorage.getItem('bible-translation') || 'WEB';
+  });
+  const [customKey, setCustomKey] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('groq-api-key') || '';
+  });
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
   const [resetKey, setResetKey] = useState(0);
 
   useEffect(() => {
-    // Load local storage
-    const savedTranslation = localStorage.getItem('bible-translation');
-    if (savedTranslation) setTranslation(savedTranslation);
-
-    const savedKey = localStorage.getItem('groq-api-key');
-    if (savedKey) setCustomKey(savedKey);
-
-    // Initial dark mode setup
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.documentElement.classList.add('dark');
-      setIsDarkMode(true);
-    }
-  }, []);
+    document.documentElement.classList.toggle('dark', isDarkMode);
+  }, [isDarkMode]);
 
   const onTranslationChange = (val: string) => {
     setTranslation(val);
@@ -92,14 +91,14 @@ function ChatInner({
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const initialMessages = useMemo(
+  const initialMessages = useMemo<UIMessage[]>(
     () => [
       {
         id: 'welcome',
-        role: 'assistant' as const,
+        role: 'assistant',
         parts: [
           {
-            type: 'text' as const,
+            type: 'text',
             text: 'Welcome to the Bible Librarian. I provide neutral, direct quotes of Scripture along with original Greek and Hebrew word meanings. Ask me anything, such as *"What does the Bible say about creation?"*',
           },
         ],
@@ -108,7 +107,7 @@ function ChatInner({
     []
   );
 
-  const { messages, sendMessage, status, error, clearError } = useChat({
+  const { messages, sendMessage, status, error, clearError } = useChat<UIMessage>({
     messages: initialMessages,
   });
 
