@@ -19,6 +19,248 @@ type CacheEntry<T> = { value: T; ts: number };
 const embeddingCache = new Map<string, CacheEntry<number[]>>();
 const contextCache = new Map<string, CacheEntry<VerseContext[]>>();
 
+/**
+ * Interface for Topic Guard configuration to ensure high-signal retrieval
+ * for sensitive or nuanced biblical topics.
+ */
+interface TopicGuard {
+  keywords: string[];
+  priority: VerseContext[];
+  excludePatterns: string[];
+  conditionalPriority?: (query: string) => VerseContext[];
+}
+
+/**
+ * Scalable configuration for topic-specific retrieval guards.
+ * Each block ensures core commandments/passages are prioritized while
+ * filtering out distracting or diluting context.
+ */
+const TOPIC_GUARDS: Record<string, TopicGuard> = {
+  murder: {
+    keywords: ['murder', 'kill', 'slay', 'take life', 'shed blood', 'homicide', 'killing'],
+    priority: [
+      { reference: 'EXO 20:13', text: 'You shall not murder.', translation: 'BSB', original: [] },
+      { reference: 'GEN 9:6', text: 'Whoever sheds the blood of man, by man shall his blood be shed; for in the image of God has He made man.', translation: 'BSB', original: [] },
+      { reference: 'NUM 35:16', text: 'But if anyone strikes another with an iron object so that death results, he is a murderer; the murderer must be put to death.', translation: 'BSB', original: [] },
+      { reference: 'NUM 35:17', text: 'Or if anyone strikes another with a stone in his hand that could cause death, and death results, he is a murderer; the murderer must be put to death.', translation: 'BSB', original: [] },
+      { reference: 'NUM 35:30', text: 'If anyone kills a person, the murderer must be put to death on the evidence of witnesses; but no one shall be put to death on the testimony of only one witness.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['refuge', 'cities of refuge', 'unintentional', 'accidentally', 'without premeditation', 'manslaughter', 'avenger of blood', 'flees']
+  },
+  lying: {
+    keywords: ['lying', 'false witness', 'lie', 'deceive', 'deception', 'deceit', 'liar', 'falsehood', 'perjury'],
+    priority: [
+      { reference: 'EXO 20:16', text: 'You shall not bear false witness against your neighbor.', translation: 'BSB', original: [] },
+      { reference: 'PRO 6:16-19', text: 'There are six things that the LORD hates, seven that are detestable to Him: haughty eyes, a lying tongue, hands that shed innocent blood, a heart that devises wicked schemes, feet that run swiftly to evil, a false witness who gives false testimony, and one who stirs up discord among brothers.', translation: 'BSB', original: [] },
+      { reference: 'EPH 4:25', text: 'Therefore each of you must put off falsehood and speak truthfully to his neighbor, for we are all members of one another.', translation: 'BSB', original: [] },
+      { reference: 'PRO 12:22', text: 'Lying lips are detestable to the LORD, but those who deal faithfully are His delight.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['rahab', 'midwives', 'shipphrah', 'puah', 'lying in wait']
+  },
+  theft: {
+    keywords: ['theft', 'steal', 'stealing', 'rob', 'robbery', 'thief', 'restitution'],
+    priority: [
+      { reference: 'EXO 20:15', text: 'You shall not steal.', translation: 'BSB', original: [] },
+      { reference: 'LEV 19:11', text: 'You must not steal. You must not lie or deceive one another.', translation: 'BSB', original: [] },
+      { reference: 'EXO 22:1', text: 'If a man steals an ox or a sheep and slaughters or sells it, he must repay five oxen for an ox and four sheep for a sheep.', translation: 'BSB', original: [] },
+      { reference: 'EXO 22:4', text: 'If what was stolen is actually found alive in his possession—whether ox or donkey or sheep—he must pay back double.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['property laws', 'boundary marker', 'restoring']
+  },
+  adultery: {
+    // Both adultery and idolatry are explicit sins with clear commandments in the Decalogue.
+    keywords: ['adultery', 'adulterous', 'adulterer', 'cheating', 'infidelity', 'lustful', 'unfaithful'],
+    priority: [
+      { reference: 'EXO 20:14', text: 'You shall not commit adultery.', translation: 'BSB', original: [] },
+      { reference: 'LEV 20:10', text: 'If a man commits adultery with another man’s wife—with the wife of his neighbor—both the adulterer and the adulteress must surely be put to death.', translation: 'BSB', original: [] },
+      { reference: 'MAT 5:27-28', text: 'You have heard that it was said, ‘Do not commit adultery.’ But I tell you that anyone who looks at a woman to lust after her has already committed adultery with her in his heart.', translation: 'BSB', original: [] },
+      { reference: 'HEB 13:4', text: 'Marriage should be honored by all and the marriage bed kept undefiled, for God will judge the sexually immoral and adulterers.', translation: 'BSB', original: [] },
+      { reference: 'PRO 6:32-33', text: 'He who commits adultery lacks judgment; whoever does so destroys himself. Wounds and dishonor will befall him, and his reproach will never be wiped away.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['except for sexual immorality', 'forgiven', 'restored', 'woman caught in adultery']
+  },
+  idolatry: {
+    // Commandment to worship God alone and avoid graven images.
+    keywords: ['idolatry', 'idols', 'idolater', 'graven image', 'false gods', 'worshiping gods', 'pagan worship'],
+    priority: [
+      { reference: 'EXO 20:3-5', text: 'You shall have no other gods before Me. You shall not make for yourself an idol in the form of anything in the heavens above, on the earth below, or in the waters beneath. You shall not bow down to them or worship them; for I, the LORD your God, am a jealous God, visiting the iniquity of the fathers on their children to the third and fourth generations of those who hate Me,', translation: 'BSB', original: [] },
+      { reference: 'DEU 5:7-9', text: 'You shall have no other gods before Me. You shall not make for yourself an idol in the form of anything in the heavens above, or on the earth beneath, or in the water under the earth. You shall not bow down to them or worship them; for I, the LORD your God, am a jealous God, visiting the iniquity of the fathers on their children to the third and fourth generations of those who hate Me,', translation: 'BSB', original: [] },
+      { reference: '1CO 10:14', text: 'Therefore, my beloved, flee from idolatry.', translation: 'BSB', original: [] },
+      { reference: 'EPH 5:5', text: 'For of this you can be sure: No immoral, impure, or greedy person (that is, an idolater), has any inheritance in the kingdom of Christ and of God.', translation: 'BSB', original: [] },
+      { reference: 'COL 3:5', text: 'Put to death, therefore, the components of your earthly nature: sexual immorality, impurity, lust, evil desires, and greed, which is idolatry.', translation: 'BSB', original: [] },
+      { reference: 'REV 21:8', text: 'But to the cowardly and unbelieving and abominable and murderers and sexually immoral and sorcerers and idolaters and all liars, their place will be in the lake that burns with fire and sulfur. This is the second death.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['metaphorical', 'judgment tool', 'using nations']
+  },
+  divorce: {
+    keywords: ['divorce', 'remarriage', 'separate', 'marital faithfulness', 'adultery'],
+    priority: [
+      { reference: 'MAL 2:16', text: '“For I hate divorce,” says the LORD, the God of Israel. “He who divorces his wife covers his garment with violence,” says the LORD of Hosts.', translation: 'BSB', original: [] },
+      { reference: 'MAT 19:6', text: 'So they are no longer two, but one flesh. Therefore what God has joined together, let man not separate.', translation: 'BSB', original: [] },
+      { reference: 'GEN 2:24', text: 'For this reason a man will leave his father and mother and be united to his wife, and they will become one flesh.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['hardness of heart'],
+    conditionalPriority: (query: string) => {
+      const q = query.toLowerCase();
+      if (q.includes('except for immorality') || q.includes('except for sexual immorality')) {
+        return [{ reference: 'MAT 19:9', text: 'And I say to you, whoever divorces his wife, except for sexual immorality, and marries another woman commits adultery.', translation: 'BSB', original: [] }];
+      }
+      return [];
+    }
+  },
+  feminism: {
+    // Covers gender roles, strong women, and equality
+    keywords: ['feminism', 'gender roles', 'women in ministry', 'women in bible', 'strong women', 'submission', 'headship', 'equality', 'female', 'wife', 'husbands', 'wives'],
+    priority: [
+      { reference: 'GAL 3:28', text: 'There is neither Jew nor Greek, slave nor free, male nor female, for you are all one in Christ Jesus.', translation: 'BSB', original: [] },
+      { reference: 'EPH 5:22', text: 'Wives, submit to your husbands as to the Lord.', translation: 'BSB', original: [] },
+      { reference: 'EPH 5:25', text: 'Husbands, love your wives, just as Christ loved the church and gave Himself up for her.', translation: 'BSB', original: [] },
+      { reference: 'COL 3:18', text: 'Wives, submit to your husbands, as is fitting in the Lord.', translation: 'BSB', original: [] },
+      { reference: 'COL 3:19', text: 'Husbands, love your wives and do not be harsh with them.', translation: 'BSB', original: [] },
+      { reference: 'GEN 2:24', text: 'For this reason a man will leave his father and mother and be united to his wife, and they will become one flesh.', translation: 'BSB', original: [] },
+      { reference: 'JDG 4:4', text: 'Now Deborah, a prophetess, the wife of Lappidoth, was judging Israel at that time.', translation: 'BSB', original: [] },
+      { reference: 'JDG 4:21', text: 'But as he lay sleeping from exhaustion, Heber\'s wife Jael took a tent peg, grabbed a hammer, and went silently to Sisera. She drove the peg through his temple and into the ground, and he died.', translation: 'BSB', original: [] },
+      { reference: 'RUT 3:11', text: 'And now do not be afraid, my daughter. I will do for you whatever you request, since all my fellow townspeople know that you are a woman of noble character.', translation: 'BSB', original: [] },
+      { reference: 'PRO 31:10', text: 'A wife of noble character, who can find? She is far more precious than rubies.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: [] // Stick to the biblical text, filtering of commentary is handled by source data trust
+  }
+};
+
+/**
+ * Curated topical lists for broad queries like "women in the bible".
+ * These provide a comprehensive, high-quality set of verses that 
+ * provide a structured "curated" experience for major themes.
+ */
+interface CuratedTopicalList {
+  keywords: string[];
+  verses: VerseContext[];
+}
+
+/**
+ * Scalable configuration for broad topical curated lists.
+ * To extend, simply add new keys like "men", "prophets", "kings", etc.
+ */
+const CURATED_TOPICAL_LISTS: Record<string, CuratedTopicalList> = {
+  women: {
+    keywords: ['women in bible', 'women in the bible', 'biblical women', 'heroic women', 'women of the bible', 'strong women bible'],
+    verses: [
+      { reference: 'LUK 1:26-28', text: 'In the sixth month, God sent the angel Gabriel to a town in Galilee called Nazareth, to a virgin pledged in marriage to a man named Joseph, of the house of David. The virgin’s name was Mary. The angel went to her and said, “Greetings, you who are highly favored! The Lord is with you.”', translation: 'BSB', original: [] },
+      { reference: 'LUK 1:46-49', text: 'Then Mary said: “My soul magnifies the Lord, and my spirit rejoices in God my Savior! For He has looked with favor on the humble state of His servant. From now on all generations will call me blessed. For the Mighty One has done great things for me. Holy is His name."', translation: 'BSB', original: [] },
+      { reference: 'JDG 4:4', text: 'Now Deborah, a prophetess, the wife of Lappidoth, was judging Israel at that time.', translation: 'BSB', original: [] },
+      { reference: 'JDG 5:7', text: 'Life in the villages ceased; it ended in Israel, until I, Deborah, arose, a mother in Israel.', translation: 'BSB', original: [] },
+      { reference: 'JDG 4:21', text: 'But as he lay sleeping from exhaustion, Heber’s wife Jael took a tent peg, grabbed a hammer, and went silently to Sisera. She drove the peg through his temple and into the ground, and he died.', translation: 'BSB', original: [] },
+      { reference: 'RUT 1:16-17', text: 'But Ruth replied: “Do not urge me to leave you or to turn from following you. For wherever you go, I will go, and wherever you live, I will live; your people will be my people, and your God will be my God. Where you die, I will die, and there I will be buried. May the LORD punish me, and ever so severely, if anything but death separates you and me.”', translation: 'BSB', original: [] },
+      { reference: 'EST 4:14', text: 'For if you remain silent at this time, relief and deliverance for the Jews will arise from another place, but you and your father’s house will perish. And who knows if perhaps you have come to the kingdom for such a time as this?”', translation: 'BSB', original: [] },
+      { reference: 'EST 4:16', text: '“Go and assemble all the Jews who can be found in Susa, and fast for me. Do not eat or drink for three days, night or day, and I and my maidens will fast as you do. After that, I will go to the king, even though it is against the law. And if I perish, I perish!”', translation: 'BSB', original: [] },
+      { reference: 'PRO 31:10', text: 'A wife of noble character, who can find? She is far more precious than rubies.', translation: 'BSB', original: [] },
+      { reference: 'PRO 31:25-26', text: 'Strength and honor are her clothing, and she can laugh at the days to come. She opens her mouth with wisdom, and faithful instruction is on her tongue.', translation: 'BSB', original: [] },
+      { reference: 'PRO 31:30', text: 'Charm is deceptive and beauty is fleeting, but a woman who fears the LORD is to be praised.', translation: 'BSB', original: [] },
+      { reference: 'HEB 11:11', text: 'By faith even Sarah herself received ability to conceive, even beyond the proper time of life, since she regarded Him faithful who had promised.', translation: 'BSB', original: [] },
+      { reference: '1SA 1:27-28', text: 'I prayed for this boy, and since the LORD has granted me what I asked of Him, I now dedicate the boy to the LORD. For as long as he lives, he is dedicated to the LORD.”', translation: 'BSB', original: [] },
+      { reference: '1SA 2:1-2', text: 'At that time Hannah prayed: “My heart rejoices in the LORD, in whom my horn is exalted. My mouth speaks boldly against my enemies, for I rejoice in Your salvation. There is no one holy like the LORD. Indeed, there is no one besides You! And there is no Rock like our God.', translation: 'BSB', original: [] },
+      { reference: 'GAL 3:28', text: 'There is neither Jew nor Greek, slave nor free, male nor female, for you are all one in Christ Jesus.', translation: 'BSB', original: [] },
+      { reference: 'EPH 5:22-25', text: 'Wives, submit to your husbands as to the Lord. For the husband is the head of the wife as Christ is the head of the church, His body, of which He is the Savior. Now as the church submits to Christ, so also wives should submit to their husbands in everything. Husbands, love your wives, just as Christ loved the church and gave Himself up for her', translation: 'BSB', original: [] },
+      { reference: 'EPH 5:33', text: 'Nevertheless, each one of you also must love his wife as he loves himself, and the wife must respect her husband.', translation: 'BSB', original: [] },
+      { reference: 'COL 3:18-19', text: 'Wives, submit to your husbands, as is fitting in the Lord. Husbands, love your wives and do not be harsh with them.', translation: 'BSB', original: [] }
+    ]
+  },
+  canaanite_conquest: {
+    keywords: [
+      'canaanite', 'amorite', 'hittite', 'perizzite', 'hivite', 'jebusite', 'amalekite', 'girgashite',
+      'conquest of canaan', 'destroy the canaanites', 'utterly destroy', 'devote to destruction', 'herem', 
+      'genocide', 'why did god kill the canaanites', 'why did god command to kill', 'god commanded genocide', 
+      'is the conquest genocide', 'god evil for killing canaanites', 'justify the destruction of canaan'
+    ],
+    verses: [
+      { reference: 'GEN 15:16', text: 'In the fourth generation your descendants will return here, for the iniquity of the Amorites is not yet complete.', translation: 'BSB', original: [] },
+      { reference: 'GEN 15:18-21', text: 'On that day the LORD made a covenant with Abram, saying, “To your descendants I have given this land—from the river of Egypt to the great River Euphrates— the land of the Kenites, Kenizzites, Kadmonites, Hittites, Perizzites, Rephaites, Amorites, Canaanites, Girgashites, and Jebusites.”', translation: 'BSB', original: [] },
+      { reference: 'LEV 18:24-30', text: 'Do not defile yourselves by any of these practices, for by all these things the nations I am driving out before you have defiled themselves. Even the land has become defiled, so I am punishing it for its sin, and the land will vomit out its inhabitants... For the men who were in the land before you committed all these abominations, and the land has become defiled. So if you defile the land, it will vomit you out as it spewed out the nations before you... You must keep My charge not to practice any of the abominable customs that were practiced before you...', translation: 'BSB', original: [] },
+      { reference: 'DEU 12:31', text: 'You must not worship the LORD your God in this way, because they practice for their gods every abomination which the LORD hates. They even burn their sons and daughters in the fire as sacrifices to their gods.', translation: 'BSB', original: [] },
+      { reference: 'DEU 18:9-12', text: 'When you enter the land that the LORD your God is giving you, do not imitate the detestable ways of the nations there. Let no one be found among you who sacrifices his son or daughter in the fire, practices divination or conjury, interprets omens, practices sorcery, casts spells, consults a medium or spiritist, or inquires of the dead. For whoever does these things is detestable to the LORD. And because of these detestable things, the LORD your God is driving out the nations before you.', translation: 'BSB', original: [] },
+      { reference: 'DEU 7:1-5', text: 'When the LORD your God brings you into the land that you are entering to possess, and He drives out before you many nations... then you must devote them to complete destruction. Make no treaty with them and show them no mercy. Do not intermarry with them... properly: tear down their altars, smash their sacred pillars, cut down their Asherah poles, and burn their idols in the fire.', translation: 'BSB', original: [] },
+      { reference: 'DEU 9:4-5', text: 'When the LORD your God has driven them out before you, do not say in your heart, “Because of my righteousness the LORD has brought me in to possess this land.” Rather, the LORD is driving out these nations before you because of their wickedness. It is not because of your righteousness or uprightness of heart... but it is because of their wickedness that the LORD your God is driving out these nations before you, to keep the promise He swore to your fathers, to Abraham, Isaac, and Jacob.', translation: 'BSB', original: [] },
+      { reference: 'DEU 20:16-18', text: 'However, in the cities of the nations that the LORD your God is giving you as an inheritance, you must not leave alive anything that breathes. For you must devote them to complete destruction... as the LORD your God has commanded you, so that they cannot teach you to do all the detestable things they do for their gods, and so cause you to sin against the LORD your God.', translation: 'BSB', original: [] },
+      { reference: 'JOS 6:17-21', text: 'Now the city and everything in it must be devoted to the LORD for destruction... So the people shouted, and the trumpets were blown... and the wall fell down flat, so that the people went up into the city... and they captured the city. Then they devoted to destruction everything in the city—man and woman, young and old, oxen, sheep, and donkeys—with the edge of the sword.', translation: 'BSB', original: [] },
+      { reference: '1SA 15:2-3', text: 'This is what the LORD of Hosts says: ‘I witnessed what the Amalekites did to the Israelites when they opposed them on their way up from Egypt. Now go and attack the Amalekites and devote to destruction all that belongs to them. Do not spare them, but put to death men and women, children and infants, oxen and sheep, camels and donkeys.’', translation: 'BSB', original: [] },
+      { reference: 'MAT 26:52', text: '“Put your sword back in its place,” Jesus said to him. “For all who draw the sword will die by the sword."', translation: 'BSB', original: [] }
+    ]
+  }
+};
+
+/**
+ * Checks if the query matches a curated topical list and returns it if so.
+ */
+function applyCuratedTopicalLists(query: string, verses: VerseContext[]): VerseContext[] {
+  const normalizedQuery = query.toLowerCase();
+  for (const [key, list] of Object.entries(CURATED_TOPICAL_LISTS)) {
+    if (list.keywords.some(k => normalizedQuery.includes(k))) {
+      // For curated lists, we often want to prioritize these above all else.
+      // Special logic for canaanite_conquest: replace or strongly prepend.
+      if (key === 'canaanite_conquest') {
+        return list.verses;
+      }
+      
+      const curatedRefs = list.verses.map(v => v.reference);
+      const filteredRetrieved = verses.filter(v => !curatedRefs.includes(v.reference));
+      return [...list.verses, ...filteredRetrieved];
+    }
+  }
+  return verses;
+}
+
+/**
+ * Applies topic guard logic across all configured topics.
+ * 1. Detects matching topics via keywords.
+ * 2. Collects priority verses to prepend (avoiding duplicates).
+ * 3. Filters out excluded patterns from the retrieved verses.
+ */
+function applyTopicGuards(query: string, verses: VerseContext[]): VerseContext[] {
+  const normalizedQuery = query.toLowerCase();
+  let priorityToPrepend: VerseContext[] = [];
+  let combinedExclusions: string[] = [];
+
+  for (const guard of Object.values(TOPIC_GUARDS)) {
+    if (guard.keywords.some(k => normalizedQuery.includes(k))) {
+      // Add regular priority verses
+      guard.priority.forEach(pv => {
+        if (!priorityToPrepend.some(v => v.reference === pv.reference)) {
+          priorityToPrepend.push(pv);
+        }
+      });
+
+      // Add conditional priority verses if applicable
+      if (guard.conditionalPriority) {
+        guard.conditionalPriority(query).forEach(pv => {
+          if (!priorityToPrepend.some(v => v.reference === pv.reference)) {
+            priorityToPrepend.push(pv);
+          }
+        });
+      }
+
+      // Collect exclusion patterns
+      combinedExclusions.push(...guard.excludePatterns);
+    }
+  }
+
+  if (priorityToPrepend.length === 0 && combinedExclusions.length === 0) {
+    return verses;
+  }
+
+  const priorityRefs = priorityToPrepend.map(p => p.reference);
+
+  // Filter out existing versions of priority refs and verses matching exclusion patterns
+  const filteredRetrieved = verses.filter(v => {
+    const isAlreadyPriority = priorityRefs.includes(v.reference);
+    const lowerText = v.text.toLowerCase();
+    const isExcluded = combinedExclusions.some(pattern => lowerText.includes(pattern));
+    return !isAlreadyPriority && !isExcluded;
+  });
+
+  return [...priorityToPrepend, ...filteredRetrieved];
+}
+
+
 function getCached<T>(cache: Map<string, CacheEntry<T>>, key: string, ttlMs: number): T | null {
   const entry = cache.get(key);
   if (!entry) return null;
@@ -294,9 +536,11 @@ async function retrieveContextFromDb(
     }
   }
 
-  attachIndexedOriginals(verses);
+  const guarded = applyTopicGuards(query, verses);
+  const finalVerses = applyCuratedTopicalLists(query, guarded);
+  attachIndexedOriginals(finalVerses);
 
-  return verses;
+  return finalVerses;
 }
 
 function attachIndexedOriginals(verses: VerseContext[]): void {
@@ -436,6 +680,11 @@ async function retrieveContextViaApis(
     const groq = createGroq({
       apiKey: groqApiKey,
     });
+    const isMurder = TOPIC_GUARDS.murder.keywords.some(k => query.toLowerCase().includes(k));
+    const murderContext = isMurder 
+      ? " Extract only direct verses about intentional murder or killing. Exclude anything about unintentional killing, accidental death, manslaughter, cities of refuge, or protection from avenger of blood." 
+      : "";
+
     const modelCandidates = ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama3-8b-8192', 'llama3-70b-8192'];
     let lastModelError: unknown;
     let text = '';
@@ -445,7 +694,7 @@ async function retrieveContextViaApis(
           model: groq(modelName),
           prompt:
             'Return up to 3 Bible references as lines in the format BOOK CH:VS (e.g., GEN 1:1). ' +
-            'Use 3-letter book codes. If none apply, return NONE.\nQuery: ' +
+            'Use 3-letter book codes. If none apply, return NONE.' + murderContext + '\nQuery: ' +
             JSON.stringify(query),
           temperature: 0.1,
         });
@@ -500,7 +749,9 @@ async function retrieveContextViaApis(
   }
 
   // 3. Enrichment Phase (add Strong's dictionary data)
-  return enrichOriginalLanguages(verses);
+  const guarded = applyTopicGuards(query, verses);
+  const finalVerses = applyCuratedTopicalLists(query, guarded);
+  return enrichOriginalLanguages(finalVerses);
 }
 
 // Enrich verses with Strongs info from the bundled dict or API
