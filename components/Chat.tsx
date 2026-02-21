@@ -130,45 +130,68 @@ function ChatInner({
   return (
     <div className="flex flex-col h-screen max-w-4xl mx-auto border-x bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b bg-card">
-        <div className="flex items-center gap-2">
-          <span className="font-serif text-xl font-bold">BibleLM</span>
-          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Beta</span>
+      <header className="flex items-center justify-between px-6 py-4 border-b bg-card/80 backdrop-blur-md sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary text-primary-foreground p-1.5 rounded-lg shadow-md ring-1 ring-primary-foreground/10 flex items-center justify-center">
+            <svg 
+              viewBox="0 0 24 24" 
+              fill="currentColor" 
+              className="h-5 w-5"
+            >
+              <path d="M13 3h-2v6H5v2h6v10h2V11h6V9h-6V3z" />
+            </svg>
+          </div>
+
+          <div className="flex flex-col">
+            <div className="flex items-baseline gap-1">
+              <span className="font-serif text-xl font-bold tracking-tight">BibleLM</span>
+              <span className="text-[10px] text-muted-foreground font-bold italic opacity-70 lowercase">in beta</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest leading-none">Scriptural Reporter</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
+
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full hover:bg-muted/80">
             {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="rounded-full hover:bg-muted/80">
                 <Settings className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Settings</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="p-2 space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  The Librarian currently operates on a free, rate-limited resource. To ensure uninterrupted service and deeper research capabilities, you may provide your own API key.
-                </p>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold">API Key (Stored Locally)</label>
+            <DropdownMenuContent align="end" className="w-72 mt-2">
+              <DropdownMenuLabel className="font-serif text-lg px-3 pt-3">Settings</DropdownMenuLabel>
+              <DropdownMenuSeparator className="mx-2" />
+              <div className="p-3 space-y-4">
+                <div className="space-y-1.5 text-xs text-muted-foreground leading-normal">
+                  <p>
+                    The Librarian currently operates on a free, rate-limited resource. 
+                  </p>
+                  <p>
+                    To ensure uninterrupted service and deeper research capabilities, you may provide your own API key.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">API Key (Stored Locally)</label>
                   <Input 
                     type="password" 
-                    placeholder="Enter your access key..." 
+                    placeholder="Enter Groq API key..." 
                     value={customKey} 
                     onChange={onCustomKeyChange}
-                    className="h-8 text-xs"
+                    className="h-10 text-sm rounded-lg"
                   />
+                  <p className="text-[10px] text-muted-foreground italic">Your key never leaves your browser.</p>
                 </div>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
+
 
       {/* Messages */}
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>

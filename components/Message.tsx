@@ -59,18 +59,28 @@ export function Message({ message }: { message: UIMessage }) {
       const match = content.match(/^(.+?)\s*\((.+)\)\s*$/);
       if (!match) return line;
 
-      const word = match[1].trim();
+      let word = match[1].trim();
+      // Strip potential brackets [word] -> word
+      if (word.startsWith('[') && word.endsWith(']')) {
+        word = word.slice(1, -1);
+      }
+      
       const details = match[2];
       const strongsMatch = details.match(/Strong's\s+([A-Z]?\d+)/i);
       if (!strongsMatch) return line;
 
       const strongs = strongsMatch[1];
       const glossMatch = details.match(/-\s*(.+)$/);
-      const gloss = glossMatch ? glossMatch[1].trim() : '';
+      let gloss = glossMatch ? glossMatch[1].trim() : '';
+      if (gloss.startsWith('[') && gloss.endsWith(']')) {
+        gloss = gloss.slice(1, -1);
+      }
+
       const beforeStrongs = details.split(/Strong's\s+[A-Z]?\d+/i)[0] || '';
       const translit = beforeStrongs.replace(/[\s,]+$/g, '').trim();
 
       return '```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '```';
+
     });
 
     return outLines.join('\n');
@@ -91,6 +101,42 @@ export function Message({ message }: { message: UIMessage }) {
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{
+              p({ children }) {
+                const text = React.Children.toArray(children).join('');
+                // If it's the citation/source line at the end
+                if (text.includes('All quotes from') && text.includes('OSHB')) {
+                  return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase">{children}</p>;
+                }
+                return <p className="mb-4 last:mb-0">{children}</p>;
+              },
+              li({ children }) {
+                const text = React.Children.toArray(children).join('');
+                
+                // Identify verses vs original words
+                const isOriginalWord = text.includes('orig|');
+                const isReference = /^[A-Z]{3}\s\d+:\d+/i.test(text);
+
+                if (isOriginalWord) {
+                  return <li className="list-none inline-block mr-1">{children}</li>;
+                }
+
+                if (isReference) {
+                  return <li className="list-none text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1 mb-3">{children}</li>;
+                }
+
+                // If it's a quote (likely a verse)
+                if (text.startsWith('"') || text.length > 50) {
+                  return <li className="list-none bible-verse border-l-2 border-primary/20 pl-4 my-4 decoration-primary/10">{children}</li>;
+                }
+
+                return <li className="mb-2">{children}</li>;
+              },
+              strong({ children }) {
+                if (children === 'Original key words:') {
+                  return <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 mt-4">{children}</span>;
+                }
+                return <strong className="font-bold">{children}</strong>;
+              },
               code(props: { children?: React.ReactNode; className?: string; [key: string]: unknown } | any) {
                 const { children, className, ...rest } = props;
                 const text = String(children);
@@ -111,6 +157,7 @@ export function Message({ message }: { message: UIMessage }) {
                 return <code className={`bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 ${className || ''}`} {...rest}>{children}</code>;
               }
             }}
+
           >
             {processedContent}
           </ReactMarkdown>

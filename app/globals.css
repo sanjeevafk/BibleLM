@@ -67,7 +67,26 @@
     font-family: "SBL Greek", "Galatia SIL", "Cardo", serif;
     font-size: 1.1em;
   }
+
+  /* Verse Typography */
+  .bible-verse {
+    font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    font-size: 1.05rem;
+    line-height: 1.6;
+    font-style: italic;
+    color: hsl(var(--foreground));
+  }
+
+  .verse-reference {
+    font-family: var(--font-geist-sans);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: hsl(var(--muted-foreground));
+  }
 }
+
 
 /* Typing indicator animation */
 .typing-dot {
