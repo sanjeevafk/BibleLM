@@ -322,13 +322,19 @@ async function loadBsbVerses(): Promise<VerseRow[]> {
   const verses: VerseRow[] = [];
 
   for (const row of rows) {
-    const verseRef = String(row['Verse'] || '').trim();
+    const verseRef = String(row['Verse'] || '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     const text = String(row['Berean Standard Bible'] || '').trim();
 
     if (!verseRef || !text) continue;
 
-    const match = verseRef.match(/^(.+?)\s+(\d+):(\d+)$/);
-    if (!match) continue;
+    const match = verseRef.match(/^(.+?)\s*(\d+):(\d+)$/);
+    if (!match) {
+      console.warn('Failed to parse verse reference:', verseRef);
+      continue;
+    }
 
     verses.push({
       book: normalizeBook(match[1]),
@@ -337,6 +343,10 @@ async function loadBsbVerses(): Promise<VerseRow[]> {
       text,
       translation: 'BSB'
     });
+  }
+
+  if (verses.length !== 31102) {
+    console.warn(`Warning: Expected 31102 verses, but parsed ${verses.length}.`);
   }
 
   return verses;
