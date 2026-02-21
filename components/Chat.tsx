@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState, useCallback, useLayoutEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback, useLayoutEffect, useSyncExternalStore } from 'react';
+
 import { useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 import { Message } from './Message';
@@ -26,33 +27,56 @@ type ChatInnerProps = {
 };
 
 export function Chat() {
-  const [customKey, setCustomKey] = useState(() => {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem('groq-api-key') || '';
-  });
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+
+  const customKey = useSyncExternalStore(
+    (onStoreChange: () => void) => {
+      window.addEventListener('storage', onStoreChange);
+      return () => window.removeEventListener('storage', onStoreChange);
+    },
+    () => (typeof window !== 'undefined' ? localStorage.getItem('groq-api-key') || '' : ''),
+    () => ''
+  );
+
+  const isDarkMode = useSyncExternalStore(
+    (onStoreChange: () => void) => {
+      const mql = window.matchMedia('(prefers-color-scheme: dark)');
+      mql.addEventListener('change', onStoreChange);
+      return () => mql.removeEventListener('change', onStoreChange);
+    },
+    () => (typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false),
+    () => false
+  );
+
   const [resetKey, setResetKey] = useState(0);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDarkMode);
-  }, [isDarkMode]);
+    if (mounted) {
+      document.documentElement.classList.toggle('dark', isDarkMode);
+    }
+  }, [isDarkMode, mounted]);
 
   const saveCustomKey = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomKey(e.target.value);
     localStorage.setItem('groq-api-key', e.target.value);
+    window.dispatchEvent(new Event('storage'));
   };
 
   const toggleDarkMode = () => {
-    const isDark = document.documentElement.classList.toggle('dark');
-    setIsDarkMode(isDark);
+    document.documentElement.classList.toggle('dark');
   };
 
   const resetChat = () => {
     setResetKey((prev) => prev + 1);
   };
+
+  if (!mounted) return null;
+
+
+
 
   return (
     <ChatInner

@@ -124,6 +124,52 @@ const TOPIC_GUARDS: Record<string, TopicGuard> = {
       { reference: 'PRO 31:10', text: 'A wife of noble character, who can find? She is far more precious than rubies.', translation: 'BSB', original: [] }
     ],
     excludePatterns: [] // Stick to the biblical text, filtering of commentary is handled by source data trust
+  },
+  homosexuality: {
+    // Direct prohibition topic — forces core verses and strong conclusion
+    // Excludes unrelated hypocrisy / genealogy / eunuch verses that previously polluted responses
+    keywords: ['homosexual', 'homosexuality', 'same sex', 'same-sex', 'gay', 'lesbian', 'men who have sex with men', 'arsenokoit', 'malakoi', 'lie with a man'],
+    priority: [
+      { reference: 'LEV 18:22', text: 'You must not lie with a man as with a woman; that is an abomination.', translation: 'BSB', original: [] },
+      { reference: 'LEV 20:13', text: 'If a man lies with a man as with a woman, they have both committed an abomination. They must surely be put to death; their blood is upon them.', translation: 'BSB', original: [] },
+      { reference: 'ROM 1:26-27', text: 'For this reason God gave them over to dishonorable passions. Even their women exchanged natural relations for unnatural ones. In the same way the men also abandoned natural relations with women and were inflamed with lust for one another. Men committed shameful acts with other men, and received in themselves the due penalty for their error.', translation: 'BSB', original: [] },
+      { reference: '1CO 6:9-11', text: 'Do you not know that the wicked will not inherit the kingdom of God? Do not be deceived: Neither the sexually immoral, nor idolaters, nor adulterers, nor men who have sex with men, nor thieves, nor the greedy, nor drunkards, nor slanderers, nor swindlers will inherit the kingdom of God. And that is what some of you were. But you were washed, you were sanctified, you were justified in the name of the Lord Jesus Christ and by the Spirit of our God.', translation: 'BSB', original: [] },
+      { reference: '1TI 1:9-10', text: 'We also know that the law is made not for the righteous but for lawbreakers and rebels, the ungodly and sinful, the unholy and irreligious, for those who kill their fathers or mothers, for murderers, for the sexually immoral, for those practicing homosexuality, for slave traders and liars and perjurers—and for whatever else is contrary to the sound doctrine.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: [
+      'pharisee', 'hypocrit', 'woe to you', 
+      'eunuch', 'genealogy', '1ch 6', 'scribe',
+      'daughter of zion', 'babylon', 'jer 50', 'mic 4'
+    ]
+  },
+  blasphemy: {
+    // Topic: Blasphemy - Ensures core prohibitions on misusing God's name and blasphemy against the Spirit are prioritized.
+    // This addresses the second commandment and the New Testament warning regarding the unforgivable sin.
+    // Excludes generic praise/worship context to remain focused on the direct violation.
+    keywords: ['blasphemy', 'blaspheme', 'take lords name in vain', 'curse god', 'speak against holy spirit', 'unforgivable sin'],
+    priority: [
+      { reference: 'EXO 20:7', text: 'You shall not take the name of the LORD your God in vain, for the LORD will not hold anyone guiltless who misuses his name.', translation: 'BSB', original: [] },
+      { reference: 'LEV 24:16', text: 'Anyone who blasphemes the name of the LORD is to be put to death. The entire assembly must stone them. Whether foreigner or native-born, when they blaspheme the Name they are to be put to death.', translation: 'BSB', original: [] },
+      { reference: 'MAT 12:31-32', text: 'And so I tell you, every kind of sin and slander can be forgiven, but blasphemy against the Spirit will not be forgiven. Anyone who speaks a word against the Son of Man will be forgiven, but anyone who speaks against the Holy Spirit will not be forgiven, either in this age or in the age to come.', translation: 'BSB', original: [] },
+      { reference: 'MAR 3:28-29', text: 'Truly I tell you, people can be forgiven all their sins and every slander they utter, but whoever blasphemes against the Holy Spirit will never be forgiven; they are guilty of an eternal sin.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['praise', 'worship', 'glorify']
+  },
+  sexual_immorality: {
+    // Topic: Porn / Sexual Immorality - Prioritizes direct prohibitions on lust, fornication, and illicit sexual behavior (porneia).
+    // Specifically triggers for "porn" and "lust" to provide the full biblical weight on the "adultery in the heart" concept.
+    // Excludes romantic or marital context (like Song of Solomon) to avoid diluting the prohibitive message.
+    keywords: ['porn', 'pornography', 'lust', 'fornication', 'sexual immorality', 'sexually immoral', 'porneia', 'masturbation', 'adultery in heart'],
+    priority: [
+      { reference: 'MAT 5:27-28', text: 'You have heard that it was said, ‘You shall not commit adultery.’ But I tell you that anyone who looks at a woman lustfully has already committed adultery with her in his heart.', translation: 'BSB', original: [] },
+      { reference: '1CO 6:18', text: 'Flee from sexual immorality. All other sins a person commits are outside the body, but whoever sins sexually, sins against their own body.', translation: 'BSB', original: [] },
+      { reference: 'EPH 5:3', text: 'But among you there must not be even a hint of sexual immorality, or of any kind of impurity, or of greed, because these are improper for God’s holy people.', translation: 'BSB', original: [] },
+      { reference: 'GAL 5:19', text: 'The acts of the flesh are obvious: sexual immorality, impurity and debauchery;', translation: 'BSB', original: [] },
+      { reference: 'COL 3:5', text: 'Put to death, therefore, whatever belongs to your earthly nature: sexual immorality, impurity, lust, evil desires and greed, which is idolatry.', translation: 'BSB', original: [] },
+      { reference: '1TH 4:3', text: 'It is God’s will that you should be sanctified: that you should avoid sexual immorality;', translation: 'BSB', original: [] },
+      { reference: 'HEB 13:4', text: 'Marriage should be honored by all, and the marriage bed kept pure, for God will judge the adulterer and all the sexually immoral.', translation: 'BSB', original: [] }
+    ],
+    excludePatterns: ['song of solomon', 'song of songs', 'romantic', 'marriage bed']
   }
 };
 

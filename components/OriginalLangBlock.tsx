@@ -9,7 +9,7 @@ export interface OriginalLangProps {
   gloss?: string;
 }
 
-export function OriginalLangBlock({ word, translit, strongs, gloss }: OriginalLangProps) {
+export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss }: OriginalLangProps) {
   const [showTooltip, setShowTooltip] = React.useState(false);
   
   // Determine if hebrew based on strongs code starting with H
@@ -62,6 +62,7 @@ export function OriginalLangBlock({ word, translit, strongs, gloss }: OriginalLa
       )}
     </div>
   );
-}
+});
+
 
 

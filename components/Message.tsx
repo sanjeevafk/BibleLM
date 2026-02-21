@@ -9,16 +9,26 @@ import { Button } from '@/components/ui/button';
 import type { UIMessage } from 'ai';
 
 function getMessageText(message: UIMessage): string {
-  const legacyContent = (message as { content?: unknown }).content;
-  if (typeof legacyContent === 'string') return legacyContent;
-  if (!Array.isArray(message.parts)) return '';
+  const m = message as any;
+  if (typeof m.content === 'string') return m.content;
+  if (typeof m.text === 'string') return m.text;
+  
+  if (Array.isArray(m.content)) {
+    return m.content
+      .map((part: any) => (typeof part === 'string' ? part : part.text || part.value || ''))
+      .join('');
+  }
 
-  return message.parts
-    .map((part) => (part.type === 'text' ? part.text : ''))
-    .join('');
+  if (Array.isArray(m.parts)) {
+    return m.parts
+      .map((part: any) => (part.text || part.value || (part.type === 'text' ? part.text : '')))
+      .join('');
+  }
+
+  return '';
 }
 
-export function Message({ message }: { message: UIMessage }) {
+export const Message = React.memo(function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
   const messageText = getMessageText(message);
@@ -29,68 +39,69 @@ export function Message({ message }: { message: UIMessage }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const preprocessContent = (text: string) => {
-    // Convert `<orig ... />` XML block to markdown codeblock we can intercept.
-    const rx = /<orig word="([^"]*)" translit="([^"]*)" strongs="([^"]*)" gloss="([^"]*)" \/>/g;
-    const xmlProcessed = text.replace(rx, (match, word, translit, strongs, gloss) => {
-      return '```orig|' + word + '|' + (translit || '') + '|' + strongs + '|' + (gloss || '') + '```';
-    });
+  const processedContent = React.useMemo(() => {
+    const preprocessContent = (text: string) => {
+      // Convert `<orig ... />` XML block to markdown codeblock we can intercept.
+      const rx = /<orig word="([^"]*)" translit="([^"]*)" strongs="([^"]*)" gloss="([^"]*)" \/>/g;
+      const xmlProcessed = text.replace(rx, (match, word, translit, strongs, gloss) => {
+        return '```orig|' + word + '|' + (translit || '') + '|' + strongs + '|' + (gloss || '') + '```';
+      });
 
-    const lines = xmlProcessed.split(/\r?\n/);
-    let inOriginalBlock = false;
-    
-    const outLines = lines.map((line) => {
-      const indentMatch = line.match(/^(\s*)/);
-      const indent = indentMatch ? indentMatch[1] : '';
-      const trimmedLine = line.trim();
-
-      if (/\*\*Original key words:\*\*/i.test(trimmedLine)) {
-        inOriginalBlock = true;
-        return line;
-      }
-
-      // If we encounter a new main bullet or empty line, we might be out of the local original block
-      // But we should only exit on empty line or a line that clearly starts a new verse "Full quote"
-      if (inOriginalBlock && (trimmedLine === '' || trimmedLine.startsWith('- "'))) {
-        inOriginalBlock = false;
-        return line;
-      }
-
-      if (!inOriginalBlock) return line;
-
-      // Handle both "- [word]" and nested "  - [word]"
-      if (!trimmedLine.startsWith('- ')) return line;
-
-      const content = trimmedLine.slice(2).trim();
-      const match = content.match(/^(.+?)\s*\((.+)\)\s*$/);
-      if (!match) return line;
-
-      let word = match[1].trim();
-      if (word.startsWith('[') && word.endsWith(']')) {
-        word = word.slice(1, -1);
-      }
+      const lines = xmlProcessed.split(/\r?\n/);
+      let inOriginalBlock = false;
       
-      const details = match[2];
-      const strongsMatch = details.match(/Strong's\s+([A-Z]?\d+)/i);
-      if (!strongsMatch) return line;
+      const outLines = lines.map((line) => {
+        const indentMatch = line.match(/^(\s*)/);
+        const indent = indentMatch ? indentMatch[1] : '';
+        const trimmedLine = line.trim();
 
-      const strongs = strongsMatch[1];
-      const glossMatch = details.match(/-\s*(.+)$/);
-      let gloss = glossMatch ? glossMatch[1].trim() : '';
-      if (gloss.startsWith('[') && gloss.endsWith(']')) {
-        gloss = gloss.slice(1, -1);
-      }
+        if (/\*\*Original key words:\*\*/i.test(trimmedLine)) {
+          inOriginalBlock = true;
+          return line;
+        }
 
-      const beforeStrongs = details.split(/Strong's\s+[A-Z]?\d+/i)[0] || '';
-      const translit = beforeStrongs.replace(/[\s,]+$/g, '').trim();
+        // If we encounter a new main bullet or empty line, we might be out of the local original block
+        // But we should only exit on empty line or a line that clearly starts a new verse "Full quote"
+        if (inOriginalBlock && (trimmedLine === '' || trimmedLine.startsWith('- "'))) {
+          inOriginalBlock = false;
+          return line;
+        }
 
-      return indent + '- ```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '```';
-    });
+        if (!inOriginalBlock) return line;
 
-    return outLines.join('\n');
-  };
+        // Handle both "- [word]" and nested "  - [word]"
+        if (!trimmedLine.startsWith('- ')) return line;
 
-  const processedContent = preprocessContent(messageText);
+        const content = trimmedLine.slice(2).trim();
+        const match = content.match(/^(.+?)\s*\((.+)\)\s*$/);
+        if (!match) return line;
+
+        let word = match[1].trim();
+        if (word.startsWith('[') && word.endsWith(']')) {
+          word = word.slice(1, -1);
+        }
+        
+        const details = match[2];
+        const strongsMatch = details.match(/Strong's\s+([A-Z]?\d+)/i);
+        if (!strongsMatch) return line;
+
+        const strongs = strongsMatch[1];
+        const glossMatch = details.match(/-\s*(.+)$/);
+        let gloss = glossMatch ? glossMatch[1].trim() : '';
+        if (gloss.startsWith('[') && gloss.endsWith(']')) {
+          gloss = gloss.slice(1, -1);
+        }
+
+        const beforeStrongs = details.split(/Strong's\s+[A-Z]?\d+/i)[0] || '';
+        const translit = beforeStrongs.replace(/[\s,]+$/g, '').trim();
+
+        return indent + '- ```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '```';
+      });
+
+      return outLines.join('\n');
+    };
+    return preprocessContent(messageText);
+  }, [messageText]);
 
   return (
     <div className={`flex w-full my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -106,14 +117,21 @@ export function Message({ message }: { message: UIMessage }) {
             remarkPlugins={[remarkGfm]}
             components={{
               p({ children }) {
-                const text = React.Children.toArray(children).join('');
+                // Safely extract text for the disclaimer check
+                const text = React.Children.toArray(children)
+                  .map(child => (typeof child === 'string' ? child : ''))
+                  .join('');
+                  
                 if (text.includes('All quotes from') && text.includes('OSHB')) {
                   return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase opacity-70">{children}</p>;
                 }
                 return <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>;
               },
               li({ children }) {
-                const text = React.Children.toArray(children).join('').trim();
+                const text = React.Children.toArray(children)
+                  .map(child => (typeof child === 'string' || typeof child === 'number' ? String(child) : ''))
+                  .join('')
+                  .trim();
                 
                 const isOriginalWord = text.includes('orig|');
                 // More robust reference detection: Look for 3-letter book code at start or within parentheses
@@ -139,7 +157,10 @@ export function Message({ message }: { message: UIMessage }) {
                 return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50">{children}</li>;
               },
               strong({ children }) {
-                if (typeof children === 'string' && children.includes('Original key words:')) {
+                const text = React.Children.toArray(children)
+                  .map(child => (typeof child === 'string' ? child : ''))
+                  .join('');
+                if (text.includes('Original key words:')) {
                   return <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-6 pb-1 border-b border-muted-foreground/10">{children}</span>;
                 }
                 return <strong className="font-bold text-primary/90">{children}</strong>;
@@ -183,4 +204,5 @@ export function Message({ message }: { message: UIMessage }) {
       </div>
     </div>
   );
-}
+});
+

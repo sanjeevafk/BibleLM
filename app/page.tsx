@@ -1,25 +1,41 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
+
 import { Chat } from '@/components/Chat';
 import { Button } from '@/components/ui/button';
 import { BookOpen, Sparkles, Languages, Search, ChevronRight, Moon, Sun } from 'lucide-react';
 
 export default function Home() {
   const [showChat, setShowChat] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+  
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+
+  const isDarkMode = useSyncExternalStore(
+    (onStoreChange) => {
+      const mql = window.matchMedia('(prefers-color-scheme: dark)');
+      mql.addEventListener('change', onStoreChange);
+      return () => mql.removeEventListener('change', onStoreChange);
+    },
+    () => window.matchMedia('(prefers-color-scheme: dark)').matches,
+    () => false
+  );
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDarkMode);
-  }, [isDarkMode]);
+    if (mounted) {
+      document.documentElement.classList.toggle('dark', isDarkMode);
+    }
+  }, [isDarkMode, mounted]);
 
   const toggleDarkMode = () => {
-    const isDark = document.documentElement.classList.toggle('dark');
-    setIsDarkMode(isDark);
+    document.documentElement.classList.toggle('dark');
   };
+
+
 
   if (showChat) {
     return (
@@ -34,9 +50,10 @@ export default function Home() {
       {/* Theme Toggle */}
       <div className="absolute top-6 right-6 z-50">
         <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full">
-          {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          {mounted ? (isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />) : <div className="h-5 w-5" />}
         </Button>
       </div>
+
 
       {/* Background decoration */}
       <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-zinc-950 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] bg-size-[24px_24px] mask-[radial-gradient(ellipse_60%_60%_at_50%_50%,#000_70%,transparent_100%)]"></div>
