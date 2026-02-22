@@ -14,7 +14,7 @@ Please read and internalize these before opening a PR or spending time on a feat
 2. **Zero-Cost Forever (Vercel Hobby + Groq Free Tier)**  
    - No paid vector stores (Pinecone, Weaviate, etc.).  
    - No heavy serverful databases beyond lightweight PostgreSQL (already used for embeddings & TSK seeding).  
-   - Prefer edge-compatible solutions: bundled JSON, in-memory vectors, Upstash Redis free tier, Hugging Face free inference, or build-time precomputation.  
+   - Prefer edge-compatible solutions: bundled JSON, in-memory vectors, Upstash Redis free tier, Hugging Face free inference, or build-time           precomputation.  
    - Latency matters — `/api/chat` **must** stay Edge runtime compatible.
 3. **Citation Discipline & Original-Language Fidelity**  
    - Always prefer direct verse lookup over LLM hallucination.  
@@ -100,26 +100,32 @@ Email the maintainer directly (find contact in README or profile).
 ## ❤️ Thank You
 Your help keeps BibleLM neutral, fast, and truly free.
 Even starring the repo or sharing it with people tired of biased Bible chatbots is a big contribution.
-Happy coding — and may your pull requests be merged speedily! ✝️
+Happy coding! May your pull requests be merged speedily! ✝️
 
 ## 💻 Development Workflow
 
 1. **Fork the repository** to your own GitHub account.
+
 2. **Clone your fork** locally.
+
 3. **Create a new branch** for your feature or bug fix:
    ```bash
    git checkout -b feature/your-feature-name
    ```
    Use fix/ for bug fixes, docs/ for documentation, and chore/ for maintenance tasks.
+
 4. Make your changes and ensure the app still runs seamlessly locally using npm run dev.
+
 5. Lint your code before committing:
-   ```bash
+
+```bash
    npm run lint
-   ```
+```
    Commit your changes using conventional commit messages:
-   ```bash
+
+```bash
    git commit -m "feat: add NASB translation support via helloao api"
-   ```
+```
    Push to your fork and submit a Pull Request to the main branch of the upstream repository.
 
 ## 🐛 Reporting Bugs

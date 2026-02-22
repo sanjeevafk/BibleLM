@@ -2,8 +2,8 @@
 
 **A zero-cost, edge-first, neutrality-enforced Bible chatbot** using Retrieval-Augmented Generation (RAG) to deliver **exact verse quotes**, **original-language (Hebrew/Greek) insights**, and **Treasury of Scripture Knowledge (TSK)** cross-references — without theological bias, modern commentary, or hallucinated content.
 
-Live demo: https://biblelm.vercel.app  
-License: MIT
+**Live demo**: https://biblelm.vercel.app  
+
 
 ## Core Philosophy
 
@@ -18,7 +18,7 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
 
 ### Tech Stack
 
-- **Framework** — Next.js 14+ (App Router, Server Actions, React Server Components)
+- **Framework** — Next.js 16+ (App Router, Server Actions, React Server Components)
 - **Styling** — Tailwind CSS + shadcn/ui (radix primitives)
 - **LLM Integration** — Vercel AI SDK (`@ai-sdk/groq`, `streamText`, `generateText`)
 - **Models** (Groq)  
@@ -151,8 +151,13 @@ Deploy → Edge Functions auto-handle /api/chat
 
 ## 🤝 Contributing
 
-See CONTRIBUTING.md
+See [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 High-impact areas: UI polish, build-time embeddings, Redis caching, more translations, eval suite, PWA/offline.
 
 May your forks stay faithful to the text. ✝️
+
+
+## License: 
+
+MIT
