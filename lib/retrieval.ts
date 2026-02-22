@@ -6,18 +6,15 @@ import { ensureDbReady, getDbPool } from './db';
 import bibleIndexData from '../data/bible-index.json';
 import strongsDictData from '../data/strongs-dict.json';
 
+import { redis } from './redis';
+
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
 const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
 
 const HF_EMBEDDING_MODEL = process.env.HF_EMBEDDING_MODEL || 'intfloat/multilingual-e5-small';
 const HF_ENDPOINT = `https://router.huggingface.co/hf-inference/models/${HF_EMBEDDING_MODEL}/pipeline/feature-extraction`;
 const VECTOR_LIMIT = 6;
-const EMBEDDING_CACHE_TTL_MS = 30 * 60 * 1000;
-const CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000;
-
-type CacheEntry<T> = { value: T; ts: number };
-const embeddingCache = new Map<string, CacheEntry<number[]>>();
-const contextCache = new Map<string, CacheEntry<VerseContext[]>>();
+const CACHE_TTL_SECONDS = 3600; // 1 hour persistent cache
 
 /**
  * Interface for Topic Guard configuration to ensure high-signal retrieval
@@ -307,18 +304,21 @@ function applyTopicGuards(query: string, verses: VerseContext[]): VerseContext[]
 }
 
 
-function getCached<T>(cache: Map<string, CacheEntry<T>>, key: string, ttlMs: number): T | null {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.ts > ttlMs) {
-    cache.delete(key);
+async function getCached<T>(key: string): Promise<T | null> {
+  try {
+    return await redis.get<T>(key);
+  } catch (error) {
+    console.warn(`Redis get failed for key ${key}:`, error);
     return null;
   }
-  return entry.value;
 }
 
-function setCached<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): void {
-  cache.set(key, { value, ts: Date.now() });
+async function setCached<T>(key: string, value: T, ttlSeconds: number = CACHE_TTL_SECONDS): Promise<void> {
+  try {
+    await redis.set(key, value, { ex: ttlSeconds });
+  } catch (error) {
+    console.warn(`Redis set failed for key ${key}:`, error);
+  }
 }
 
 function cloneVerses(verses: VerseContext[]): VerseContext[] {
@@ -353,8 +353,8 @@ function normalizeEmbedding(raw: unknown): number[] {
 }
 
 async function embedQuery(query: string): Promise<number[]> {
-  const cacheKey = `${HF_EMBEDDING_MODEL}::${query.trim().toLowerCase()}`;
-  const cached = getCached(embeddingCache, cacheKey, EMBEDDING_CACHE_TTL_MS);
+  const cacheKey = `embed:${HF_EMBEDDING_MODEL}:${query.trim().toLowerCase()}`;
+  const cached = await getCached<number[]>(cacheKey);
   if (cached) {
     return cached;
   }
@@ -387,7 +387,7 @@ async function embedQuery(query: string): Promise<number[]> {
     if (embedding.length !== 384) {
       throw new Error(`Embedding dimension mismatch; expected 384, got ${embedding.length}`);
     }
-    setCached(embeddingCache, cacheKey, embedding);
+    await setCached(cacheKey, embedding);
     return embedding;
   }
 
@@ -470,8 +470,8 @@ export async function retrieveContextForQuery(
   translation: string,
   apiKey?: string
 ): Promise<VerseContext[]> {
-  const cacheKey = `${translation}::${query.trim().toLowerCase()}`;
-  const cached = getCached(contextCache, cacheKey, CONTEXT_CACHE_TTL_MS);
+  const cacheKey = `context:${translation}:${query.trim().toLowerCase()}`;
+  const cached = await getCached<VerseContext[]>(cacheKey);
   if (cached) {
     return cloneVerses(cached);
   }
@@ -493,11 +493,13 @@ export async function retrieveContextForQuery(
     } else if (!usedDb) {
       console.warn('DB retrieval unavailable, falling back to API retrieval');
     }
-    return retrieveContextViaApis(query, translation, apiKey);
+    const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
+    await setCached(cacheKey, apiVerses);
+    return cloneVerses(apiVerses);
   }
 
   const enriched = await enrichOriginalLanguages(verses);
-  setCached(contextCache, cacheKey, enriched);
+  await setCached(cacheKey, enriched);
   return cloneVerses(enriched);
 }
 
