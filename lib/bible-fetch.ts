@@ -3,6 +3,7 @@ export type VerseContext = {
   translation: string;
   text: string;
   original: Array<{ word: string; strongs: string; gloss?: string }>;
+  isCrossReference?: boolean;
 };
 
 // HelloAO gives us books by these long codes or short abbreviations usually matching.

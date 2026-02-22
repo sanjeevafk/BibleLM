@@ -465,6 +465,77 @@ async function vectorSearchVerses(
   }));
 }
 
+/**
+ * Retrieves highly-voted cross-references (TSK) for the given primary verses.
+ * Limits to 3 total unique cross-references with more than 10 votes.
+ */
+async function getTskCrossReferences(
+  pool: Pool,
+  primaryVerses: VerseContext[],
+  translation: string
+): Promise<VerseContext[]> {
+  if (primaryVerses.length === 0) return [];
+
+  // 1. Extract book, chapter, verse from primary verses
+  const refs = primaryVerses.map((v) => {
+    const parts = v.reference.split(' ');
+    const book = parts[0];
+    const [chapter, verse] = parts[1].split(':').map((p) => Number.parseInt(p, 10));
+    return { book, chapter, verse };
+  }).filter(r => !isNaN(r.chapter) && !isNaN(r.verse));
+
+  if (refs.length === 0) return [];
+
+  // 2. Query cross_references for matches where votes > 10
+  const values: Array<string | number> = [];
+  const tuples: string[] = [];
+  refs.forEach((ref, index) => {
+    const base = index * 3;
+    tuples.push(`($${base + 1}::text, $${base + 2}::int, $${base + 3}::int)`);
+    values.push(ref.book, ref.chapter, ref.verse);
+  });
+
+  const query = `
+    SELECT target_book, target_chapter, target_verse, votes
+    FROM cross_references
+    WHERE (source_book, source_chapter, source_verse) IN (VALUES ${tuples.join(', ')})
+    AND votes > 10
+    ORDER BY votes DESC
+    LIMIT 3;
+  `;
+
+  const result = await pool.query<{
+    target_book: string;
+    target_chapter: number;
+    target_verse: number;
+    votes: number;
+  }>(query, values);
+
+  if (result.rows.length === 0) return [];
+
+  // 3. Deduplication: Skip if already in primaryVerses
+  const primaryRefs = new Set(primaryVerses.map((v) => v.reference.split('-')[0].trim()));
+  
+  const targetRefs = result.rows
+    .map((row) => ({
+      book: row.target_book,
+      chapter: row.target_chapter,
+      verse: row.target_verse
+    }))
+    .filter((ref) => {
+      const refStr = `${ref.book} ${ref.chapter}:${ref.verse}`;
+      return !primaryRefs.has(refStr);
+    });
+
+  if (targetRefs.length === 0) return [];
+
+  // 4. Fetch the actual text for these target verses
+  const crossRefVerses = await fetchVersesByRefs(pool, targetRefs, translation);
+  
+  // Mark as cross-references
+  return crossRefVerses.map((v) => ({ ...v, isCrossReference: true }));
+}
+
 export async function retrieveContextForQuery(
   query: string,
   translation: string,
@@ -589,7 +660,17 @@ async function retrieveContextFromDb(
   }
 
   const guarded = applyTopicGuards(query, verses);
-  const finalVerses = applyCuratedTopicalLists(query, guarded);
+  const coreVerses = applyCuratedTopicalLists(query, guarded);
+  
+  // TSK Cross-References (Anchor Retrieval)
+  let finalVerses = coreVerses;
+  try {
+    const tskVerses = await getTskCrossReferences(pool, coreVerses, translation);
+    finalVerses = [...coreVerses, ...tskVerses];
+  } catch (error) {
+    console.warn('TSK retrieval failed', error);
+  }
+
   attachIndexedOriginals(finalVerses);
 
   return finalVerses;

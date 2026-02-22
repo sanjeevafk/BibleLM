@@ -62,7 +62,10 @@ When the query mentions Canaanite nations, conquest of Canaan, Amalekites, or as
   5. Warning to Israel (they are not exempt – Deut 9:4-5)
   6. New Testament perspective (Matt 26:52 if relevant)
 
-Stay extremely close to what the verses actually say. Use low temperature. Be direct when the text is direct. Do NOT repeat verses or information already presented in the same response. Once you have reported the relevant data, conclude the response immediately.`;
+Stay extremely close to what the verses actually say. Use low temperature. Be direct when the text is direct. Do NOT repeat verses or information already presented in the same response. Once you have reported the relevant data, conclude the response immediately.
+
+## Supporting Cross-References (TSK)
+These verses are historically linked to the primary passages. Use them ONLY to clarify the meanings of words or themes in the primary context. Do not let them distract from the primary query.`;
 
 export function buildContextPrompt(
   query: string,
@@ -83,15 +86,17 @@ Respond: "No supporting passages found in the authoritative sources."
 Do not speculate or add external information.`;
   }
 
-  let contextStr = `Retrieved Verses Context:\n\n`;
+  const primaryVerses = verses.filter(v => !v.isCrossReference);
+  const supportingVerses = verses.filter(v => v.isCrossReference);
 
-  verses.forEach((v) => {
-    contextStr += `Reference: ${v.reference}\n`;
-    contextStr += `Text (${v.translation || translation}): ${v.text}\n`;
+  let contextStr = `Primary Biblical Context:\n\n`;
+
+  const renderVerse = (v: VerseContext) => {
+    let s = `Reference: ${v.reference}\n`;
+    s += `Text (${v.translation || translation}): ${v.text}\n`;
 
     if (v.original && v.original.length > 0) {
-      contextStr += `Original language data (use these words in plain markdown, no XML tags):\n`;
-      // Only show the strongest / most meaningful tags (filter out filler words)
+      s += `Original language data (use these words in plain markdown, no XML tags):\n`;
       const meaningful = v.original.filter(
         (o) => o.gloss && o.gloss.length > 2 && !['and', 'the', 'of', 'to'].includes(o.gloss.toLowerCase())
       ).slice(0, 6);
@@ -101,13 +106,26 @@ Do not speculate or add external information.`;
         const parts: string[] = [];
         if (transliteration) parts.push(transliteration);
         parts.push(`Strong's ${org.strongs} - ${org.gloss || ''}`);
-        contextStr += `- ${org.word} (${parts.join(', ')})\n`;
+        s += `- ${org.word} (${parts.join(', ')})\n`;
       });
     } else {
-      contextStr += `No original-language tagging available for this verse.\n`;
+      s += `No original-language tagging available for this verse.\n`;
     }
-    contextStr += '\n';
+    s += '\n';
+    return s;
+  };
+
+  primaryVerses.forEach((v) => {
+    contextStr += renderVerse(v);
   });
+
+  if (supportingVerses.length > 0) {
+    contextStr += `## Supporting Cross-References (TSK)\n\n`;
+    supportingVerses.forEach((v) => {
+      contextStr += renderVerse(v);
+    });
+    contextStr += `Instruction: These verses are historically linked to the primary passages. Use them to clarify the theological meaning or word usage of the primary text. Do not let them distract from the primary query.\n\n`;
+  }
 
   contextStr += `Requested translation: ${translation}\n\n`;
 
