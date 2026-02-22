@@ -15,6 +15,7 @@ const HF_EMBEDDING_MODEL = process.env.HF_EMBEDDING_MODEL || 'intfloat/multiling
 const HF_ENDPOINT = `https://router.huggingface.co/hf-inference/models/${HF_EMBEDDING_MODEL}/pipeline/feature-extraction`;
 const VECTOR_LIMIT = 6;
 const CACHE_TTL_SECONDS = 3600; // 1 hour persistent cache
+const CONTEXT_CACHE_VERSION = 'v2';
 
 /**
  * Interface for Topic Guard configuration to ensure high-signal retrieval
@@ -476,13 +477,22 @@ async function getTskCrossReferences(
 ): Promise<VerseContext[]> {
   if (primaryVerses.length === 0) return [];
 
+  const parseReferenceKey = (reference: string) => {
+    const match = reference.trim().match(/^([A-Z0-9]{3})\s+(\d+):(\d+)/i);
+    if (!match) return null;
+    return {
+      book: match[1].toUpperCase(),
+      chapter: Number.parseInt(match[2], 10),
+      verse: Number.parseInt(match[3], 10)
+    };
+  };
+
   // 1. Extract book, chapter, verse from primary verses
-  const refs = primaryVerses.map((v) => {
-    const parts = v.reference.split(' ');
-    const book = parts[0];
-    const [chapter, verse] = parts[1].split(':').map((p) => Number.parseInt(p, 10));
-    return { book, chapter, verse };
-  }).filter(r => !isNaN(r.chapter) && !isNaN(r.verse));
+  const refs = primaryVerses
+    .map((v) => parseReferenceKey(v.reference))
+    .filter((r): r is { book: string; chapter: number; verse: number } =>
+      Boolean(r && !isNaN(r.chapter) && !isNaN(r.verse))
+    );
 
   if (refs.length === 0) return [];
 
@@ -500,7 +510,7 @@ async function getTskCrossReferences(
     FROM cross_references
     WHERE (source_book, source_chapter, source_verse) IN (VALUES ${tuples.join(', ')})
     AND votes > 10
-    ORDER BY votes DESC
+    ORDER BY COALESCE(votes, 0) DESC
     LIMIT 3;
   `;
 
@@ -514,8 +524,9 @@ async function getTskCrossReferences(
   if (result.rows.length === 0) return [];
 
   // 3. Deduplication: Skip if already in primaryVerses
-  const primaryRefs = new Set(primaryVerses.map((v) => v.reference.split('-')[0].trim()));
-  
+  const primaryRefs = new Set(refs.map((ref) => `${ref.book} ${ref.chapter}:${ref.verse}`));
+  const seenTargets = new Set<string>();
+
   const targetRefs = result.rows
     .map((row) => ({
       book: row.target_book,
@@ -524,7 +535,11 @@ async function getTskCrossReferences(
     }))
     .filter((ref) => {
       const refStr = `${ref.book} ${ref.chapter}:${ref.verse}`;
-      return !primaryRefs.has(refStr);
+      if (primaryRefs.has(refStr) || seenTargets.has(refStr)) {
+        return false;
+      }
+      seenTargets.add(refStr);
+      return true;
     });
 
   if (targetRefs.length === 0) return [];
@@ -541,7 +556,7 @@ export async function retrieveContextForQuery(
   translation: string,
   apiKey?: string
 ): Promise<VerseContext[]> {
-  const cacheKey = `context:${translation}:${query.trim().toLowerCase()}`;
+  const cacheKey = `context:${CONTEXT_CACHE_VERSION}:${translation}:${query.trim().toLowerCase()}`;
   const cached = await getCached<VerseContext[]>(cacheKey);
   if (cached) {
     return cloneVerses(cached);
@@ -555,6 +570,7 @@ export async function retrieveContextForQuery(
     verses = await retrieveContextFromDb(query, translation);
     usedDb = true;
   } catch (error) {
+    console.error('DB Context Retrieval CRITICAL ERROR:', error);
     dbError = error;
   }
 
@@ -630,32 +646,27 @@ async function retrieveContextFromDb(
   priorityRows.forEach(addUnique);
   directRows.forEach(addUnique);
 
-  if (verses.length >= VECTOR_LIMIT) {
-    attachIndexedOriginals(verses);
-    return verses;
-  }
+  // If we have enough verses or it's a very short direct query, skip vector search
+  const skipVector = (verses.length >= VECTOR_LIMIT) || (verses.length > 0 && normalizedQuery.length <= 12);
 
-  if (verses.length > 0 && normalizedQuery.length <= 12) {
-    attachIndexedOriginals(verses);
-    return verses;
-  }
+  if (!skipVector) {
+    let embedding: number[] | null = null;
+    try {
+      embedding = await embedQuery(query);
+    } catch (error) {
+      console.warn('Query embedding failed; skipping vector search', error);
+    }
 
-  let embedding: number[] | null = null;
-  try {
-    embedding = await embedQuery(query);
-  } catch (error) {
-    console.warn('Query embedding failed; skipping vector search', error);
-  }
+    if (!embedding && verses.length === 0) {
+      throw new Error('Vector retrieval unavailable and no direct references found.');
+    }
 
-  if (!embedding && verses.length === 0) {
-    throw new Error('Vector retrieval unavailable and no direct references found.');
-  }
-
-  if (embedding) {
-    const limit = Math.max(VECTOR_LIMIT - verses.length, 0);
-    if (limit > 0) {
-      const vectorRows = await vectorSearchVerses(pool, embedding, translation, limit);
-      vectorRows.forEach(addUnique);
+    if (embedding) {
+      const limit = Math.max(VECTOR_LIMIT - verses.length, 0);
+      if (limit > 0) {
+        const vectorRows = await vectorSearchVerses(pool, embedding, translation, limit);
+        vectorRows.forEach(addUnique);
+      }
     }
   }
 

@@ -34,7 +34,8 @@ const GROQ_EMBEDDING_MODEL = process.env.GROQ_EMBEDDING_MODEL;
 const EMBEDDING_DIM = Number.parseInt(process.env.EMBEDDING_DIM || '', 10);
 
 const BSB_XLSX_PATH = process.env.BSB_XLSX_PATH || path.join(process.cwd(), 'bereanstandardbible.xlsx');
-const TSK_PATH = process.env.TSK_PATH || path.join(process.cwd(), 'cross_references.txt');
+const TSK_PATH =
+  process.env.TSK_PATH || path.join(process.cwd(), 'datasets', 'cross_references.txt');
 const STRONGS_GREEK_PATH =
   process.env.STRONGS_GREEK_PATH ||
   path.join(process.cwd(), 'strongs-master/greek/strongs-greek-dictionary.js');
