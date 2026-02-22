@@ -40,5 +40,5 @@ yarn-error.log*
 next-env.d.ts
 
 #local-files
-ARCHITECTURE_ANALYSIS.md
+project-docs/
 datasets/
