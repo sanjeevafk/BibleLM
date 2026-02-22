@@ -1,57 +1,154 @@
 # BibleLM
 
-<!-- ✅ File write permissions confirmed -->
+**A zero-cost, edge-first, neutrality-enforced Bible chatbot** using Retrieval-Augmented Generation (RAG) to deliver **exact verse quotes**, **original-language (Hebrew/Greek) insights**, and **Treasury of Scripture Knowledge (TSK)** cross-references — without theological bias, modern commentary, or hallucinated content.
 
-A minimalist, fast, neutral Bible chatbot web app that quotes real verses with original-language (Hebrew/Greek) data. Zero-cost deployment on Vercel Hobby + Groq free tier.
+Live demo: https://biblelm.vercel.app  
+License: MIT
 
-## Features
+## Core Philosophy
 
-- **Neutral, Scripture-First**: Responses quote exact verses without theological commentary.
-- **Original Languages**: Hebrew/Greek word breakdowns (transliteration, Strong's, gloss) for key words.
-- **Fast RAG**: Hybrid retrieval using reference parsing, Groq semantic hints, and a bundled verse index.
-- **Free Tier Optimized**: Uses Groq \`llama-3.1-8b-instant\` to maximize free tier rate limits (~14k TPM). Includes UI for bringing your own Groq API key to use \`70b\` models.
+- **Scripture-First & Absolute Neutrality** — Every response **must** quote real verses with chapter:verse citations. No interpretation, application, denominational slant, political framing, or moralizing allowed. The system prompt rigidly enforces this.
+- **Zero-Cost Operation** — Runs indefinitely on Vercel **Hobby** tier + Groq **free** tier (llama-3.1-8b-instant default; BYOK for 70B). No paid vector DBs, no heavy compute, no always-on servers.
+- **Speed & Reliability** — Common queries (<1 s) via bundled data + Edge Functions. Rare verses fallback gracefully.
+- **Original-Language Fidelity** — Hebrew (OSHB) / Greek (SBLGNT) word popups with Strong's number, transliteration, and gloss — no loose paraphrasing.
 
-## Setup
+## 🏗 System Architecture
 
-1. **Install dependencies**:
-   \`\`\`bash
-   npm install
-   \`\`\`
+Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; lightweight PostgreSQL used only for build-time seeding of embeddings & TSK.
 
-2. **Environment Variables**:
-   Create a \`.env.local\` file in the root directory and add your Groq API key:
-   \`\`\`
-   GROQ_API_KEY=gsk_your_key_here
-   \`\`\`
+### Tech Stack
 
-3. **Data Bundling (One-Time)**:
-   We bundle the Strong's dictionary and ~1000 common verses to ensure fast edge execution without a database.
-   \`\`\`bash
-   npm run build:data
-   \`\`\`
-   _(Note: The repo already includes a generated \`data\` folder, but you can run this to regenerate it)._
+- **Framework** — Next.js 14+ (App Router, Server Actions, React Server Components)
+- **Styling** — Tailwind CSS + shadcn/ui (radix primitives)
+- **LLM Integration** — Vercel AI SDK (`@ai-sdk/groq`, `streamText`, `generateText`)
+- **Models** (Groq)  
+  - Default: `llama-3.1-8b-instant` (~14k TPM free tier)  
+  - Optional BYOK: `llama-3.1-70b-versatile`, `llama3-8b-8192` fallback
+- **Retrieval** — Hybrid RAG (no vector DB at runtime):  
+  - Direct reference parsing (`John 3:16`, `Ex 21:22-25`)  
+  - Groq-powered semantic verse suggestion (cheap 8B re-ranking)  
+  - Bundled ~1,000 high-frequency verses + full Strong's dictionary (static JSON)  
+  - PostgreSQL (build-time only) for seeding embeddings & TSK cross-refs  
+  - Fallback: public free APIs (e.g. bolls.life, helloao.org) for full translations
+- **Caching** — Upstash Redis free tier (optional, planned) for query → verses + answer
+- **Data** — Public domain / open-license sources:  
+  - BSB (default translation)  
+  - Strong's Exhaustive Concordance  
+  - OSHB (Hebrew), SBLGNT (Greek) morphology via Macula / OpenScriptures  
+  - Treasury of Scripture Knowledge (TSK) cross-references
+- **Runtime** — Vercel Edge Functions (`/api/chat` must stay edge-compatible)
 
-4. **Run the dev server**:
-   \`\`\`bash
-   npm run dev
-   \`\`\`
-   Open [http://localhost:3000](http://localhost:3000)
+### Request Lifecycle (Detailed RAG Flow)
 
-## Test Queries (Controversial & Hard)
+1. **Client → `/api/chat` (POST, Edge)**  
+   Sends message history array (Vercel AI SDK format).
 
-To verify the neutrality and accuracy of the bot, try these queries:
+2. **Normalization**  
+   Extracts latest user query; handles multimodal / complex payloads.
 
-1. **Abortion**: "What does the Bible say about abortion?" _(Should quote Ps 139, Ex 21 without modern political commentary)._
-2. **Homosexuality**: "What is the biblical view of homosexuality?" _(Should quote Lev 18, Rom 1, 1 Cor 6)._
-3. **Divorce**: "Is divorce allowed?" _(Should quote Mal 2, Matt 5/19)._
-4. **Slavery**: "Does the Bible support slavery?" _(Should quote Eph 6, Ex 21, Philemon)._
-5. **Women in Ministry**: "Can women be pastors?" _(Should quote 1 Tim 2, Gal 3, Rom 16)._
-6. **Rare Verse Fallback**: "What does 1 Chronicles 4:9 say?" _(Should fallback to fetch API properly since it's not in the bundle)._
+3. **Reference Parsing**  
+   Uses regex + simple grammar to detect Bible refs → direct verse fetch if matched.
 
-## Deployment
+4. **Semantic Retrieval (Fallback / Vague Queries)**  
+   - Sends query to Groq 8B → suggests 3–8 relevant verse refs  
+   - Looks up in bundled index → if miss, hits translation API
 
-Deploy seamlessly to [Vercel](https://vercel.com/):
+5. **Context Assembly**  
+   - Fetches verse text (selected translation)  
+   - Attaches Hebrew/Greek morphology (Strong's-linked)  
+   - Injects TSK cross-refs (ranked by relevance)  
+   - Builds rigid context block
 
-1. Connect your GitHub repository.
-2. Add \`GROQ_API_KEY\` to your Environment Variables in the Vercel dashboard.
-3. Deploy! Vercel Edge Functions handle the `/api/chat` route for streaming.
+6. **Prompt Engineering**  
+   - System prompt (~800 tokens): enforces citation-only, bans commentary, requires exact quotes  
+   - Temperature = 0.1 (near-deterministic)  
+   - Frequency penalty = 0.5 (prevents loops)  
+   - Full history included (token-efficient truncation if needed)
+
+7. **Inference & Streaming**  
+   - `streamText` → Groq → `toUIMessageStreamResponse()`  
+   - UI shows typewriter effect instantly
+
+8. **Fallbacks**  
+   - Model retry cascade: 8B → 70B → older 8B  
+   - Rate-limit (429) → client-side "Lite mode" (verses + Strong's only)
+
+## 📦 Data Bundling & Optimization
+
+`npm run build:data` — one-time script that:
+
+- Downloads/parses TSV/Parquet from OpenScriptures, Macula, etc.
+- Generates:
+  - `strongs-dict.json` (~ O(1) lookups)
+  - `bible-index.json` (~1,000 common verses + metadata)
+  - Embedding vectors (Hugging Face free inference, stored in PG during build)
+  - TSK cross-ref map (verse → related verses)
+- Output committed to `data/` folder → shipped statically
+
+→ Edge runtime stays <2 MB per function, no cold starts, no DB latency at request time.
+
+## ✨ Key Features
+
+- **Neutral Citation Engine** — Forces exact verse quoting + refs
+- **Original-Language Tooltips** — Click any tagged word → Strong's #, translit, gloss popup
+- **TSK Cross-References** — Thematic links shown inline (non-intrusive)
+- **Translation Toggle** — BSB default; more public-domain options planned
+- **Free-Tier Friendly** — 8B default + BYOK field for 70B
+- **Controversy-Resistant** — Designed to handle divisive topics without editorializing
+
+## ⚡ Test Queries (Neutrality & Accuracy Smoke Tests)
+
+Verify behavior with these:
+
+1. "What does the Bible say about abortion?"  
+   → Expect Ps 139:13–16, Ex 21:22–25 (no politics)
+
+2. "What is the biblical view of homosexuality?"  
+   → Lev 18:22, 20:13; Rom 1:26–27; 1 Cor 6:9–11
+
+3. "Is divorce allowed in the Bible?"  
+   → Mal 2:16; Matt 5:31–32, 19:3–9
+
+4. "Does the Bible support slavery?"  
+   → Ex 21; Eph 6:5–9; Philemon (quotes only)
+
+5. "Can women be pastors according to Scripture?"  
+   → 1 Tim 2:11–15; Gal 3:28; Rom 16:1–7
+
+6. "Explain 1 Chronicles 4:9 in context"  
+   → Rare verse → should fallback to API fetch
+
+## 🛠 Development Setup
+
+```bash
+# 1. Clone & install
+git clone https://github.com/voidcommit-afk/BibleLM.git
+cd BibleLM
+npm install
+
+# 2. Env (optional for full power)
+cp .env.example .env.local
+# Add GROQ_API_KEY=...
+
+# 3. Build data bundles (one-time or regenerate)
+npm run build:data
+
+# 4. Dev server (Edge + streaming)
+npm run dev
+# → http://localhost:3000
+```
+Lint + format:
+```bash
+npm run lint    # ESLint
+npm run format  # Prettier
+```
+🚀 Deployment (Vercel – Zero Config)
+
+Fork or connect repo to Vercel
+Add GROQ_API_KEY (optional) in Environment Variables
+Deploy → Edge Functions auto-handle /api/chat
+
+🤝 Contributing
+See CONTRIBUTING.md
+High-impact areas: UI polish, build-time embeddings, Redis caching, more translations, eval suite, PWA/offline.
+May your forks stay faithful to the text. ✝️
