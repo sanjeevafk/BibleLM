@@ -36,6 +36,7 @@ These are the most valuable ways to help right now:
    - Robust Upstash Redis caching (query hash → verses + answer)  
 - **Translation & Data Expansion**  
    - Add more free/public-domain translations (toggleable)  
+
 ## 💻 Development Setup
 
 ```bash
@@ -69,7 +70,7 @@ Example:
 git commit -m "feat: precompute verse embeddings at build time"
 ```
 
-📝 Submitting Changes
+## 📝 Submitting Changes
 
 - Create a branch: `git checkout -b feat/add-more-bundled-translations`
 - Make focused, incremental commits
@@ -82,7 +83,7 @@ git commit -m "feat: precompute verse embeddings at build time"
 
 Small, high-quality PRs are reviewed fastest.
 
-🐞 Reporting Bugs
+## 🐞 Reporting Bugs
 Open an Issue with:
 
 - Exact prompt that failed
@@ -92,11 +93,11 @@ Open an Issue with:
 
 Especially valuable: cases where neutrality breaks or verses are hallucinated.
 
-🔐 Security & Prompt Injection
+## 🔐 Security & Prompt Injection
 Do not open public issues for prompt-injection vulnerabilities or ways to bypass the system prompt.
 Email the maintainer directly (find contact in README or profile).
 
-❤️ Thank You
+## ❤️ Thank You
 Your help keeps BibleLM neutral, fast, and truly free.
 Even starring the repo or sharing it with people tired of biased Bible chatbots is a big contribution.
 Happy coding — and may your pull requests be merged speedily! ✝️
@@ -121,12 +122,14 @@ Happy coding — and may your pull requests be merged speedily! ✝️
    ```
    Push to your fork and submit a Pull Request to the main branch of the upstream repository.
 
-🐛 Reporting Bugs
+## 🐛 Reporting Bugs
+
 If you find a bug (especially instances where the LLM breaks neutrality or hallucinates verses), please open an Issue with the following information:
 
 - The exact user prompt that caused the issue.
 - The expected behavior vs. the actual behavior.
 - The translation selected and the model used (if BYOK was enabled).
 
-🔒 Security
+## 🔒 Security
+
 If you discover a security vulnerability (such as a prompt injection flaw that allows users to bypass the system prompt instructions), please do not open a public issue. Email the maintainers directly.

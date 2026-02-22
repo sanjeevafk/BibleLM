@@ -142,13 +142,17 @@ Lint + format:
 npm run lint    # ESLint
 npm run format  # Prettier
 ```
-🚀 Deployment (Vercel – Zero Config)
+
+## 🚀 Deployment (Vercel – Zero Config)
 
 Fork or connect repo to Vercel
 Add GROQ_API_KEY (optional) in Environment Variables
 Deploy → Edge Functions auto-handle /api/chat
 
-🤝 Contributing
+## 🤝 Contributing
+
 See CONTRIBUTING.md
+
 High-impact areas: UI polish, build-time embeddings, Redis caching, more translations, eval suite, PWA/offline.
+
 May your forks stay faithful to the text. ✝️
