@@ -42,18 +42,23 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
   const processedContent = React.useMemo(() => {
     const preprocessContent = (text: string) => {
       // Convert `<orig ... />` XML block to markdown codeblock we can intercept.
-      const rx = /<orig word="([^"]*)" translit="([^"]*)" strongs="([^"]*)" gloss="([^"]*)" \/>/g;
-      const xmlProcessed = text.replace(rx, (match, word, translit, strongs, gloss) => {
-        return '```orig|' + word + '|' + (translit || '') + '|' + strongs + '|' + (gloss || '') + '```';
+      const rx = /<orig word="([^"]*)" translit="([^"]*)" strongs="([^"]*)" gloss="([^"]*)"(?: morph="([^"]*)")? \/>/g;
+      const xmlProcessed = text.replace(rx, (match, word, translit, strongs, gloss, morph) => {
+        return '```orig|' + word + '|' + (translit || '') + '|' + strongs + '|' + (gloss || '') + '|' + (morph || '') + '|```';
       });
 
       const lines = xmlProcessed.split(/\r?\n/);
       let inOriginalBlock = false;
+      let currentRef = '';
       
       const outLines = lines.map((line) => {
         const indentMatch = line.match(/^(\s*)/);
         const indent = indentMatch ? indentMatch[1] : '';
         const trimmedLine = line.trim();
+        const refMatch = trimmedLine.match(/([A-Z0-9]{3})\s+(\d+):(\d+)/i);
+        if (refMatch) {
+          currentRef = `${refMatch[1].toUpperCase()} ${refMatch[2]}:${refMatch[3]}`;
+        }
 
         if (/\*\*Original key words:\*\*/i.test(trimmedLine)) {
           inOriginalBlock = true;
@@ -86,16 +91,23 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
         if (!strongsMatch) return line;
 
         const strongs = strongsMatch[1];
+        const morphMatch = details.match(/Morph:\s*([A-Za-z0-9/]+)/i);
         const glossMatch = details.match(/-\s*(.+)$/);
         let gloss = glossMatch ? glossMatch[1].trim() : '';
         if (gloss.startsWith('[') && gloss.endsWith(']')) {
           gloss = gloss.slice(1, -1);
         }
+        if (morphMatch) {
+          gloss = gloss.replace(/Morph:.*$/i, '').trim();
+        }
+        gloss = gloss.replace(/[,;]\s*$/g, '').trim();
 
         const beforeStrongs = details.split(/Strong's\s+[A-Z]?\d+/i)[0] || '';
         const translit = beforeStrongs.replace(/[\s,]+$/g, '').trim();
 
-        return indent + '- ```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '```';
+        const morph = morphMatch ? morphMatch[1] : '';
+        const refPart = morph ? '' : (currentRef || '');
+        return indent + '- ```orig|' + word + '|' + translit + '|' + strongs + '|' + gloss + '|' + morph + '|' + refPart + '```';
       });
 
       return outLines.join('\n');
@@ -177,6 +189,8 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
                       translit={parts[2]} 
                       strongs={parts[3]} 
                       gloss={parts[4]} 
+                      morph={parts[5]} 
+                      ref={parts[6]} 
                     />
                   );
                 }
@@ -205,4 +219,3 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     </div>
   );
 });
-

@@ -1,6 +1,7 @@
 // prompts.ts
 
 import { VerseContext } from './bible-fetch';   // adjust path if needed
+import { decodeMorph } from './morph-utils';
 
 export const SYSTEM_PROMPT = `You are a precise Bible reference librarian. Your task is to report what the biblical text actually says — without modern reinterpretation, without denominational bias, and without unnecessary softening.
 
@@ -11,7 +12,7 @@ Core rules — you MUST obey all of them:
 3. Do NOT include any XML tags (such as <orig ... />) in your visible response text.
    Instead, after each quoted verse, include a plain markdown block:
    **Original key words:**
-   - [Hebrew/Greek word] ([transliteration], Strong's [strongs] - [gloss])
+   - [Hebrew/Greek word] ([transliteration], Strong's [strongs] - [gloss], Morph: [morph code if provided])
 4. Structure every response in this exact order:
 
    • One short summary sentence (or two at most). If the topic concerns one of the Ten Commandments (e.g., theft, murder, adultery), explicitly state that it violates the Ten Commandments God gave to the Israelites. Do NOT simply repeat the text of the commandment (e.g., do not say "You shall not steal").
@@ -103,9 +104,15 @@ Do not speculate or add external information.`;
 
       meaningful.forEach((org) => {
         const transliteration = (org as { transliteration?: string }).transliteration;
+        const morph = (org as { morph?: string }).morph;
         const parts: string[] = [];
         if (transliteration) parts.push(transliteration);
         parts.push(`Strong's ${org.strongs} - ${org.gloss || ''}`);
+        if (morph) {
+          const decoded = decodeMorph(morph);
+          const morphDetail = decoded ? `${decoded.code} (${decoded.description})` : morph;
+          parts.push(`Morph: ${morphDetail}`);
+        }
         s += `- ${org.word} (${parts.join(', ')})\n`;
       });
     } else {

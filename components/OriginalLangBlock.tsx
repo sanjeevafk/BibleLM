@@ -1,21 +1,59 @@
 'use client';
 
 import React from 'react';
+import { decodeMorph } from '@/lib/morph-utils';
+import { getMorphForVerse } from '@/lib/morphhb-client';
 
 export interface OriginalLangProps {
   word: string;
   translit?: string;
   strongs: string;
   gloss?: string;
+  morph?: string;
+  ref?: string;
 }
 
-export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss }: OriginalLangProps) {
+export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss, morph, ref }: OriginalLangProps) {
   const [showTooltip, setShowTooltip] = React.useState(false);
+  const [showGrammar, setShowGrammar] = React.useState(false);
+  const [resolvedMorph, setResolvedMorph] = React.useState<string | undefined>(morph);
+  const [attemptedFetch, setAttemptedFetch] = React.useState(false);
   
   // Determine if hebrew based on strongs code starting with H
   const isHebrew = strongs.startsWith('H');
   const langClass = isHebrew ? 'hebrew-text' : 'greek-text';
   const bollsLink = `https://bolls.life/dictionary/${isHebrew ? 'BDBT' : 'BDBT'}/${strongs}`;
+  const canFetchMorph = Boolean(isHebrew && ref && !morphValue);
+  const morphValue = resolvedMorph ?? morph;
+  const decodedMorph = morphValue ? decodeMorph(morphValue) : null;
+
+  React.useEffect(() => {
+    setResolvedMorph(morph);
+  }, [morph]);
+
+  React.useEffect(() => {
+    if (!canFetchMorph || attemptedFetch || morphValue) return;
+    setAttemptedFetch(true);
+
+    const normalizeHebrew = (input: string) =>
+      input.replace(/[\u0591-\u05C7]/g, '').replace(/[^\u0590-\u05FF]/g, '');
+
+    getMorphForVerse(ref as string)
+      .then((words) => {
+        if (!words) return;
+        const normWord = normalizeHebrew(word);
+        const exact = words.find((w) => w.s === strongs && normalizeHebrew(w.t) === normWord);
+        const byStrongs = words.find((w) => w.s === strongs);
+        const byWord = words.find((w) => normalizeHebrew(w.t) === normWord);
+        const match = exact || byStrongs || byWord;
+        if (match?.m) {
+          setResolvedMorph(match.m);
+        }
+      })
+      .catch(() => {
+        // Silent: fallback to existing data
+      });
+  }, [attemptedFetch, canFetchMorph, morphValue, ref, strongs, word]);
   
   return (
     <div 
@@ -46,6 +84,18 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
         >
           {strongs}
         </a>
+        {(morphValue || canFetchMorph) && (
+          <button
+            type="button"
+            className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowGrammar((prev) => !prev);
+            }}
+          >
+            Grammar
+          </button>
+        )}
       </div>
 
       {showTooltip && gloss && (
@@ -60,9 +110,19 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-popover" />
         </div>
       )}
+
+      {showGrammar && morphValue && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-56 p-3 bg-popover text-popover-foreground text-[11px] rounded-xl border shadow-xl z-50 animate-in fade-in zoom-in-95 duration-200">
+          <div className="font-bold mb-1 border-b pb-1 flex justify-between items-center uppercase tracking-wide">
+            <span>Grammar</span>
+            <span className="text-[9px] text-muted-foreground font-mono">{morphValue}</span>
+          </div>
+          <div className="leading-relaxed">
+            {decodedMorph ? decodedMorph.description : 'Morphology code unavailable'}
+          </div>
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-popover" />
+        </div>
+      )}
     </div>
   );
 });
-
-
-
