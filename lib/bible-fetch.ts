@@ -2,7 +2,7 @@ export type VerseContext = {
   reference: string;
   translation: string;
   text: string;
-  original: Array<{ word: string; strongs: string; gloss?: string }>;
+  original: Array<{ word: string; strongs: string; gloss?: string; morph?: string; transliteration?: string }>;
   isCrossReference?: boolean;
 };
 

@@ -7,6 +7,7 @@ import bibleIndexData from '../data/bible-index.json';
 import strongsDictData from '../data/strongs-dict.json';
 
 import { redis } from './redis';
+import { getMorphhbWords } from './morphhb';
 
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
 const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
@@ -16,6 +17,12 @@ const HF_ENDPOINT = `https://router.huggingface.co/hf-inference/models/${HF_EMBE
 const VECTOR_LIMIT = 6;
 const CACHE_TTL_SECONDS = 3600; // 1 hour persistent cache
 const CONTEXT_CACHE_VERSION = 'v2';
+const OT_BOOKS = new Set([
+  'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI',
+  '1CH', '2CH', 'EZR', 'NEH', 'EST', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER',
+  'LAM', 'EZK', 'DAN', 'HOS', 'JOL', 'AMO', 'OBA', 'JON', 'MIC', 'NAM', 'HAB', 'ZEP',
+  'HAG', 'ZEC', 'MAL'
+]);
 
 /**
  * Interface for Topic Guard configuration to ensure high-signal retrieval
@@ -900,24 +907,47 @@ async function retrieveContextViaApis(
 
 // Enrich verses with Strongs info from the bundled dict or API
 async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseContext[]> {
+  const hydrateOriginals = async (originals: VerseContext['original']) => {
+    for (const orig of originals) {
+      const dictEntry = STRONGS_DICT[orig.strongs];
+      if (dictEntry) {
+        orig.gloss = dictEntry.short_definition || dictEntry.definition;
+        orig.transliteration = dictEntry.transliteration;
+      } else {
+        const fetched = await fetchStrongsDefinition(orig.strongs);
+        if (fetched) {
+          orig.gloss = String(fetched.short_definition || fetched.definition || '');
+          orig.transliteration = String(fetched.transliteration || '');
+        }
+      }
+    }
+  };
+
   for (const verse of verses) {
     if (verse.original && verse.original.length > 0) {
       // It came from the static index so it has { word, strongs }. Need to add gloss.
-      for (const orig of verse.original) {
-        const dictEntry = STRONGS_DICT[orig.strongs];
-        if (dictEntry) {
-          orig.gloss = dictEntry.short_definition || dictEntry.definition;
-          (orig as {transliteration?: string}).transliteration = dictEntry.transliteration;
-        } else {
-          // rare occurence, try API fetch
-          const fetched = await fetchStrongsDefinition(orig.strongs);
-          if (fetched) {
-            orig.gloss = String(fetched.short_definition || fetched.definition || '');
-            (orig as {transliteration?: string}).transliteration = String(fetched.transliteration || '');
+      await hydrateOriginals(verse.original);
+    } else {
+      // Try MorphHB local data first for OT verses
+      const [bookRaw, cvRaw] = verse.reference.split(' ');
+      if (bookRaw && cvRaw && OT_BOOKS.has(bookRaw)) {
+        const [chapterRaw, verseRaw] = cvRaw.split(':');
+        const chapterNum = Number.parseInt(chapterRaw, 10);
+        const verseNum = Number.parseInt(verseRaw, 10);
+        if (!Number.isNaN(chapterNum) && !Number.isNaN(verseNum)) {
+          const morphWords = await getMorphhbWords(bookRaw, chapterNum, verseNum);
+          if (morphWords && morphWords.length > 0) {
+            verse.original = morphWords.map((w) => ({
+              word: w.t,
+              strongs: w.s,
+              morph: w.m
+            }));
+            await hydrateOriginals(verse.original);
+            continue;
           }
         }
       }
-    } else {
+
       // We don't have the bolls tagged index for this verse. 
       // Because we didn't bundle it and it's fetched raw from HelloAO.
       // In this case, we would either hit bolls.life /get-chapter to get the tagged text
@@ -925,7 +955,7 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
       // However, that is extremely inaccurate. 
       // Correct approach: hit bolls.life for the tagged verse if missing!
       try {
-        const isOT = ['GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI', '1CH', '2CH', 'EZR', 'NEH', 'EST', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER', 'LAM', 'EZK', 'DAN', 'HOS', 'JOL', 'AMO', 'OBA', 'JON', 'MIC', 'NAM', 'HAB', 'ZEP', 'HAG', 'ZEC', 'MAL'].includes(verse.reference.split(' ')[0]);
+        const isOT = OT_BOOKS.has(verse.reference.split(' ')[0]);
         const trans = isOT ? 'WLC' : 'TR';
         const [book, cv] = verse.reference.split(' ');
         const [chapter, vNumStr] = cv.split(':');
@@ -938,13 +968,7 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
            const matchV = chapterData.find((v: { verse: number, text: string }) => v.verse === parseInt(vNumStr, 10));
            if (matchV) {
              const tags = parseOriginalTags(matchV.text);
-             for (const tag of tags) {
-               const dictEntry = STRONGS_DICT[tag.strongs] || await fetchStrongsDefinition(tag.strongs);
-               if (dictEntry) {
-                 tag.gloss = String(dictEntry.short_definition || dictEntry.definition || '');
-                 (tag as {transliteration?: string}).transliteration = String(dictEntry.transliteration || '');
-               }
-             }
+             await hydrateOriginals(tags);
              verse.original = tags;
            }
         }

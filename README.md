@@ -81,6 +81,7 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
 - Generates:
   - `strongs-dict.json` (~ O(1) lookups)
   - `bible-index.json` (~1,000 common verses + metadata)
+  - MorphHB data split per book (~40 JSON files, pre-compressed for performance & caching)
   - Embedding vectors (Hugging Face free inference, stored in PG during build)
   - TSK cross-ref map (verse → related verses)
 - Output committed to `data/` folder → shipped statically
