@@ -148,6 +148,18 @@ function ensureDir(dir: string) {
 function main() {
   ensureDir(OUTPUT_DIR);
 
+  const sourceExists = fs.existsSync(SOURCE_DIR);
+  const indexPath = path.join(process.cwd(), 'data', 'morphhb-index.json');
+  const hasIndex = fs.existsSync(indexPath);
+
+  if (!sourceExists) {
+    if (hasIndex && fs.existsSync(HASH_PATH)) {
+      console.log('MorphHB source not present; using committed outputs.');
+      return;
+    }
+    throw new Error(`MorphHB source not found at ${SOURCE_DIR}. Commit data/morphhb outputs or provide sources.`);
+  }
+
   const files = fs.readdirSync(SOURCE_DIR)
     .filter((file) => file.endsWith('.xml'))
     .filter((file) => file !== 'VerseMap.xml')
@@ -161,9 +173,6 @@ function main() {
     const brPath = path.join(OUTPUT_DIR, `${mapped}.json.br`);
     return fs.existsSync(gzPath) && fs.existsSync(brPath);
   });
-  const indexPath = path.join(process.cwd(), 'data', 'morphhb-index.json');
-  const hasIndex = fs.existsSync(indexPath);
-
   const hash = crypto.createHash('sha256');
   for (const file of files) {
     const filePath = path.join(SOURCE_DIR, file);
