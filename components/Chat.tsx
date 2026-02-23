@@ -182,11 +182,11 @@ function ChatInner({
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto border-x bg-background">
+    <div className="flex flex-col h-screen w-full max-w-4xl mx-auto md:border-x bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b bg-card/80 backdrop-blur-md sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary text-primary-foreground p-1.5 rounded-lg shadow-md ring-1 ring-primary-foreground/10 flex items-center justify-center">
+      <header className="flex items-center justify-between px-3 sm:px-4 md:px-6 py-3 md:py-4 border-b bg-card/80 backdrop-blur-md sticky top-0 z-10">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="bg-primary text-primary-foreground p-1.5 rounded-lg shadow-md ring-1 ring-primary-foreground/10 flex items-center justify-center shrink-0">
             <svg 
               viewBox="0 0 24 24" 
               fill="currentColor" 
@@ -196,17 +196,17 @@ function ChatInner({
             </svg>
           </div>
 
-          <div className="flex flex-col">
-            <div className="flex items-baseline gap-1">
-              <span className="font-serif text-xl font-bold tracking-tight">BibleLM</span>
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-baseline gap-1 min-w-0">
+              <span className="font-serif text-lg sm:text-xl font-bold tracking-tight">BibleLM</span>
               <span className="text-[10px] text-muted-foreground font-bold italic opacity-70 lowercase">in beta</span>
             </div>
-            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest leading-none">Scriptural Reporter</span>
+            <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-widest leading-none">Scriptural Reporter</span>
           </div>
         </div>
 
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <Button variant="ghost" size="icon" asChild className="rounded-full w-10 h-10 hover:bg-muted/80">
             <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
               <Github className="h-5 w-5" />
@@ -255,7 +255,7 @@ function ChatInner({
 
       {/* Messages */}
       <ScrollArea 
-        className="flex-1 p-4" 
+        className="flex-1 p-3 sm:p-4" 
         ref={scrollRef} 
         onScroll={handleScroll}
       >
@@ -281,7 +281,7 @@ function ChatInner({
       </ScrollArea>
 
       {/* Input Form */}
-      <div className="p-4 bg-background border-t">
+      <div className="p-3 sm:p-4 bg-background border-t">
         <form 
           onSubmit={handleSubmit}
           className="relative max-w-3xl mx-auto flex items-center shadow-sm"
@@ -291,19 +291,20 @@ function ChatInner({
             onChange={(event) => setInput(event.target.value)}
             placeholder="Ask a question..."
             disabled={isLoading}
-            className="pr-12 py-6 rounded-full"
+            className="pr-12 py-5 sm:py-6 rounded-full text-sm sm:text-base"
           />
           <Button 
             type="submit" 
             disabled={isLoading || !input.trim()}
             size="icon"
-            className="absolute right-1.5 rounded-full"
+            aria-label="Send message"
+            className="absolute right-1.5 rounded-full h-9 w-9 sm:h-10 sm:w-10"
           >
             ✓
           </Button>
         </form>
-        <div className="text-center text-xs text-muted-foreground mt-2">
-          The Librarian provides direct scriptural reports via semantic RAG, primarily using the BSB translation. Verifying references is recommended.
+        <div className="text-center text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
+          BibleLM delivers exact Scripture quotes and original-language insights (Hebrew/Greek morphology, clause/poetic structure, alignments) using hybrid RAG retrieval. Default: Berean Study Bible (BSB). Cross-check references with your own Bible for full context.
         </div>
       </div>
     </div>

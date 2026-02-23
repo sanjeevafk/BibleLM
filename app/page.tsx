@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useEffect, useSyncExternalStore } from "react";
-
-import { Chat } from "@/components/Chat";
+import { useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BookOpen,
@@ -13,11 +11,10 @@ import {
   Moon,
   Sun,
   Github,
+  Layers,
 } from "lucide-react";
 
 export default function Home() {
-  const [showChat, setShowChat] = useState(false);
-
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -44,16 +41,8 @@ export default function Home() {
     document.documentElement.classList.toggle("dark");
   };
 
-  if (showChat) {
-    return (
-      <main className="min-h-screen bg-background">
-        <Chat />
-      </main>
-    );
-  }
-
   return (
-    <main className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center space-y-12 relative overflow-hidden">
+    <main className="min-h-screen bg-background flex flex-col items-center justify-start p-4 md:p-6 pt-16 md:pt-20 pb-20 md:pb-24 text-center space-y-12 md:space-y-16 relative overflow-hidden">
       {/* Header Links */}
       <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild className="rounded-full w-12 h-12">
@@ -73,70 +62,141 @@ export default function Home() {
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] -z-10 animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] -z-10 animate-pulse"></div>
 
-      <div className="max-w-4xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
+      <div className="max-w-4xl space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
         <div className="flex flex-col items-center gap-6">
           <div className="p-3 bg-primary/10 rounded-2xl ring-1 ring-primary/20 shadow-xl shadow-primary/5">
             <BookOpen className="w-10 h-10 text-primary" />
           </div>
-          <h1 className="text-6xl md:text-7xl font-serif font-black tracking-tighter bg-linear-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-serif font-black tracking-tighter bg-linear-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
             BibleLM
           </h1>
+          <p className="text-base sm:text-lg md:text-xl font-semibold tracking-wide text-primary/90">
+            The Scripture-First Bible Chatbot
+          </p>
+          <p className="text-sm sm:text-base text-foreground/70">Made for His Glory ✝️</p>
         </div>
 
-        <p className="text-xl md:text-2xl text-muted-foreground font-light leading-relaxed max-w-2xl mx-auto">
-          Scripture-first study through semantic RAG, direct scriptural
-          reporting, and original language word-level data.
+        <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground font-light leading-relaxed max-w-3xl mx-auto">
+          Zero-cost. Edge-fast. Uncompromisingly neutral.
+        </p>
+
+        <p className="text-base sm:text-lg md:text-xl text-foreground/80 leading-relaxed max-w-3xl mx-auto">
+          Ask anything. Get <span className="font-semibold text-foreground">exact verse quotes</span>,
+          <span className="font-semibold text-foreground"> original Hebrew/Greek insights</span>, and
+          <span className="font-semibold text-foreground"> cross-references</span>, with no commentary,
+          no softening, no modern spin.
         </p>
 
         <div className="flex flex-wrap justify-center gap-4 pt-6">
           <Button
             size="lg"
-            onClick={() => setShowChat(true)}
-            className="rounded-full px-10 h-14 text-lg font-semibold group relative overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
+            asChild
+            className="rounded-full px-10 h-14 text-base sm:text-lg font-semibold group relative overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
           >
-            <span className="relative z-10 flex items-center gap-2">
-              Begin Research
-              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </span>
-            <div className="absolute inset-0 bg-linear-to-r from-primary to-primary/80 group-hover:opacity-90 transition-opacity"></div>
+            <a href="/chat">
+              <span className="relative z-10 flex items-center gap-2">
+                Try it now → Start Chatting
+                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </span>
+              <div className="absolute inset-0 bg-linear-to-r from-primary to-primary/80 group-hover:opacity-90 transition-opacity"></div>
+            </a>
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full pt-20 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-300 ease-out">
-        <div className="group relative flex flex-col items-center p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
-          <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
-            <Search className="w-6 h-6 text-primary" />
+      <section className="max-w-5xl w-full space-y-6 pt-6 md:pt-10 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-300 ease-out">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">Core Strengths</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+            <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
+              <Search className="w-6 h-6 text-primary" />
+            </div>
+            <h3 className="text-lg font-bold">Exact Citations Only</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Every answer quotes real verses with chapter:verse refs. No invented content.
+            </p>
           </div>
-          <h3 className="text-lg font-bold">Direct Quotes</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Exact, neutral quotes from Scripture based on your inquiries,
-            ensuring textual fidelity at all times.
-          </p>
-        </div>
-        <div className="group relative flex flex-col items-center p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
-          <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
-            <Languages className="w-6 h-6 text-primary" />
+          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+            <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
+              <Languages className="w-6 h-6 text-primary" />
+            </div>
+            <h3 className="text-lg font-bold">Mandatory Original-Language Depth</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Every relevant word shows Strong&apos;s number, transliteration, gloss, plus advanced layers:
+              Clause segmentation & boundaries • Poetic parallelism & structure • BHS ↔ WLC alignments • Extended glosses & features
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Powered by MorphHB + OpenHebrewBible subset
+            </p>
           </div>
-          <h3 className="text-lg font-bold">Original Meanings</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Unpack the richness of original Greek and Hebrew with Strong&apos;s
-            data and word-level definitions.
-          </p>
-        </div>
-        <div className="group relative flex flex-col items-center p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
-          <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
-            <Sparkles className="w-6 h-6 text-primary" />
+          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+            <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
+              <Layers className="w-6 h-6 text-primary" />
+            </div>
+            <h3 className="text-lg font-bold">Hybrid Retrieval (True RAG)</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Combines direct reference parsing, semantic verse suggestion (Groq 8B), ~1k bundled high-frequency verses,
+              TSK cross-references, and public API fallbacks. Low temperature (0.1) for factualness.
+            </p>
           </div>
-          <h3 className="text-lg font-bold">Thematic Retrieval</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Ask complex questions and receive cross-referenced passages from the
-            BSB and other authoritative translations.
-          </p>
+          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+            <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
+              <BookOpen className="w-6 h-6 text-primary" />
+            </div>
+            <h3 className="text-lg font-bold">Neutrality Enforced</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Rigid system prompt bans interpretation, application, or bias. Handles controversial topics with raw text + guards (no dilution).
+            </p>
+          </div>
+          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+            <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
+              <Sparkles className="w-6 h-6 text-primary" />
+            </div>
+            <h3 className="text-lg font-bold">Zero-Cost Forever</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Vercel Hobby + Groq free tier + Upstash Redis (planned) + static bundles. Optional BYOK for larger models.
+            </p>
+          </div>
+          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+            <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
+              <Search className="w-6 h-6 text-primary" />
+            </div>
+            <h3 className="text-lg font-bold">Fast & Private</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Edge runtime, no user accounts, no tracking.
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <footer className="pt-20 pb-8 text-sm text-muted-foreground/60 font-medium flex flex-col items-center gap-4">
+      <section className="max-w-4xl w-full space-y-4 md:space-y-6 pt-2 md:pt-4">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">How It Works</h2>
+        <ol className="space-y-3 text-sm sm:text-base md:text-lg text-foreground/80">
+          <li>Ask a question (e.g., &quot;What does the Bible say about divorce?&quot; or &quot;Break down John 1:1 in Greek&quot;).</li>
+          <li>Get direct quotes + cross-refs + clickable original-language tooltips.</li>
+          <li>No fluff, just Scripture speaking for itself.</li>
+        </ol>
+      </section>
+
+      <section className="max-w-4xl w-full space-y-4 md:space-y-6 pt-2 md:pt-4">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">Current Sources</h2>
+        <ul className="space-y-2 text-sm sm:text-base md:text-lg text-foreground/80">
+          <li><span className="font-semibold">Default Translation:</span> Berean Study Bible (BSB)</li>
+          <li><span className="font-semibold">Original Languages:</span> OpenScriptures MorphHB, OpenHebrewBible layers (CC BY-NC 4.0), Strong&apos;s Concordance</li>
+          <li><span className="font-semibold">Cross-References:</span> Treasury of Scripture Knowledge (TSK)</li>
+          <li><span className="font-semibold">Fallbacks:</span> Public free APIs (bolls.life, etc.)</li>
+        </ul>
+      </section>
+
+      <section className="max-w-4xl w-full space-y-4 md:space-y-6 pt-2 md:pt-4">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">Why BibleLM Stands Out</h2>
+        <p className="text-sm sm:text-base md:text-lg text-foreground/80 leading-relaxed">
+          Most Bible AIs add commentary, balance, or &quot;helpful&quot; interpretation. BibleLM refuses to.
+          It stays true to the text, prioritizes original languages, and lets Scripture speak without editorial voice.
+        </p>
+      </section>
+
+      <footer className="pt-12 md:pt-16 pb-8 text-sm text-muted-foreground/70 font-medium flex flex-col items-center gap-4">
         <div className="flex items-center gap-4">
           <a 
             href="https://github.com/voidcommit-afk/BibleLM" 
@@ -149,7 +209,10 @@ export default function Home() {
           </a>
         </div>
         <div>
-          BibleLM &copy; {new Date().getFullYear()} &bull; Built for deeper understanding
+          MIT Licensed &bull; Built for truth-seekers &bull; Actively evolving (OpenHebrewBible just added!)
+        </div>
+        <div>
+          BibleLM &copy; {new Date().getFullYear()}
         </div>
       </footer>
     </main>
