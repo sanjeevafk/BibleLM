@@ -118,6 +118,9 @@ Do not speculate or add external information.`;
     } else {
       s += `No original-language tagging available for this verse.\n`;
     }
+    if (v.openHebrew) {
+      s += `OpenHebrewBible layers: ${v.openHebrew}\n`;
+    }
     s += '\n';
     return s;
   };

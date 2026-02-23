@@ -82,11 +82,16 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
   - `strongs-dict.json` (~ O(1) lookups)
   - `bible-index.json` (~1,000 common verses + metadata)
   - MorphHB data split per book (~40 JSON files, pre-compressed for performance & caching)
+  - OpenHebrewBible subset (clause segmentation, poetic division, BHS-WLC alignments, extended glosses) — CC BY-NC 4.0 (attribution required)
   - Embedding vectors (Hugging Face free inference, stored in PG during build)
   - TSK cross-ref map (verse → related verses)
 - Output committed to `data/` folder → shipped statically
 
 → Edge runtime stays <2 MB per function, no cold starts, no DB latency at request time.
+
+## OpenHebrewBible Subset
+
+OpenHebrewBible subset (clause segmentation, poetic division, BHS-WLC alignments, extended glosses) — processed from eliranwong/OpenHebrewBible — CC BY-NC 4.0 — attribution required.
 
 ## ✨ Key Features
 

@@ -8,6 +8,7 @@ import strongsDictData from '../data/strongs-dict.json';
 
 import { redis } from './redis';
 import { getMorphhbWords } from './morphhb';
+import { getOpenHebrewBibleLayers, OpenHebrewVerseLayers } from './openhebrewbible';
 
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
 const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
@@ -923,8 +924,38 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
     }
   };
 
+  const formatOpenHebrewLayers = (layers: OpenHebrewVerseLayers): string => {
+    const parts: string[] = [];
+    if (layers.clauses?.words?.length) {
+      const clauseIds = Array.from(new Set(layers.clauses.words.map((w) => w.c).filter(Boolean)));
+      if (clauseIds.length > 0) {
+        parts.push(`Clauses: ${clauseIds.join(', ')}`);
+      }
+    }
+    if (layers.poetic?.paragraph?.length) {
+      parts.push(`Paragraph break at word(s) ${layers.poetic.paragraph.join(', ')}`);
+    }
+    if (layers.poetic?.poetic?.length) {
+      parts.push(`Poetic line break at word(s) ${layers.poetic.poetic.join(', ')}`);
+    }
+    if (layers.alignments?.length) {
+      parts.push(`Alignments: ${layers.alignments.length} word pairs`);
+    }
+    if (layers.gloss?.length) {
+      const glossSamples = layers.gloss
+        .filter((w) => w.g && w.g.length > 2)
+        .slice(0, 3)
+        .map((w) => `${w.w}=${w.g}`);
+      if (glossSamples.length > 0) {
+        parts.push(`Glosses: ${glossSamples.join('; ')}`);
+      }
+    }
+    return parts.join(' | ');
+  };
+
   for (const verse of verses) {
-    if (verse.original && verse.original.length > 0) {
+    let hasOriginals = verse.original && verse.original.length > 0;
+    if (hasOriginals) {
       // It came from the static index so it has { word, strongs }. Need to add gloss.
       await hydrateOriginals(verse.original);
     } else {
@@ -943,11 +974,13 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
               morph: w.m
             }));
             await hydrateOriginals(verse.original);
-            continue;
+            hasOriginals = true;
           }
         }
       }
+    }
 
+    if (!hasOriginals) {
       // We don't have the bolls tagged index for this verse. 
       // Because we didn't bundle it and it's fetched raw from HelloAO.
       // In this case, we would either hit bolls.life /get-chapter to get the tagged text
@@ -974,6 +1007,21 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
         }
       } catch (err) {
         console.warn('Failed to fetch tagged fallback for', verse.reference, err);
+      }
+    }
+
+    if (verse.reference) {
+      const [bookRaw, cvRaw] = verse.reference.split(' ');
+      if (bookRaw && cvRaw && OT_BOOKS.has(bookRaw)) {
+        const [chapterRaw, verseRaw] = cvRaw.split(':');
+        const chapterNum = Number.parseInt(chapterRaw, 10);
+        const verseNum = Number.parseInt(verseRaw, 10);
+        if (!Number.isNaN(chapterNum) && !Number.isNaN(verseNum)) {
+          const layers = await getOpenHebrewBibleLayers(bookRaw, chapterNum, verseNum);
+          if (layers) {
+            verse.openHebrew = formatOpenHebrewLayers(layers);
+          }
+        }
       }
     }
   }

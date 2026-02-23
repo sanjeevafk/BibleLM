@@ -4,6 +4,7 @@ export type VerseContext = {
   text: string;
   original: Array<{ word: string; strongs: string; gloss?: string; morph?: string; transliteration?: string }>;
   isCrossReference?: boolean;
+  openHebrew?: string;
 };
 
 // HelloAO gives us books by these long codes or short abbreviations usually matching.
