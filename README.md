@@ -73,6 +73,15 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
    - Model retry cascade: 8B → 70B → older 8B  
    - Rate-limit (429) → client-side "Lite mode" (verses + Strong's only)
 
+## Fallback Models & Rate Limits
+
+Groq’s free tier is subject to TPM (tokens-per-minute) limits, so long contexts or spikes can trip rate limiting. BibleLM now falls back automatically in this order:
+
+- Groq: `llama-3.1-8b-instant` (primary)
+- Groq: `llama-3.3-70b-versatile` (secondary)
+- Hugging Face Inference: `meta-llama/Meta-Llama-3.1-8B-Instruct` (reuses `HF_TOKEN`)
+- Final: raw verses + original-language notes only
+
 ## 📦 Data Bundling & Optimization
 
 `npm run build:data` — one-time script that:
@@ -93,7 +102,7 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
 
 BibleLM uses Upstash Redis to cache full chat responses (verses + context + final answer). This dramatically reduces Groq usage and latency on repeat devotional-style questions; an 80–90% cache hit rate is expected once common queries are warmed.
 
-Upstash's free tier allows 10k commands/day, which is typically enough for Hobby usage. To enable caching, create a free Upstash Redis database and copy the REST URL and token into `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in your environment.
+Upstash's free tier includes 500K commands/month (plus 256 MB storage and one free database), which is typically enough for Hobby usage. To enable caching, create a free Upstash Redis database and copy the REST URL and token into `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in your environment.
 
 ## OpenHebrewBible Subset
 

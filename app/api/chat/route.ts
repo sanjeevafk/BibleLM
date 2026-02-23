@@ -1,11 +1,104 @@
-import { createGroq } from '@ai-sdk/groq';
-import { convertToModelMessages, simulateReadableStream, streamText } from 'ai';
-import { MockLanguageModelV3 } from 'ai/test';
+import { simulateReadableStream, streamText } from 'ai';
+import type { UIMessage } from 'ai';
 import { retrieveContextForQuery } from '@/lib/retrieval';
 import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
 import { getCachedResponse, setCachedResponse } from '@/lib/cache';
+import { generateWithFallback } from '@/lib/llm-fallback';
 
 // export const runtime = 'edge';
+
+const PRIMARY_MODEL = 'llama-3.1-8b-instant';
+const PRIMARY_MODEL_USED = `groq:${PRIMARY_MODEL}`;
+const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+const HF_FALLBACK_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
+const CACHE_MODEL_CANDIDATES = [
+  PRIMARY_MODEL_USED,
+  `groq:${GROQ_FALLBACK_MODEL}`,
+  `hf:${HF_FALLBACK_MODEL}`,
+  'context-only',
+];
+
+function normalizeModelId(modelUsed: string | undefined): string {
+  if (!modelUsed) return PRIMARY_MODEL_USED;
+  if (modelUsed.includes(':') || modelUsed === 'context-only') return modelUsed;
+  if (modelUsed === PRIMARY_MODEL || modelUsed === GROQ_FALLBACK_MODEL) {
+    return `groq:${modelUsed}`;
+  }
+  if (modelUsed === HF_FALLBACK_MODEL) {
+    return `hf:${modelUsed}`;
+  }
+  return modelUsed;
+}
+
+function getMessageText(message: UIMessage | undefined): string {
+  if (!message) return '';
+  const msg = message as any;
+
+  if (typeof msg.content === 'string') return msg.content;
+  if (typeof msg.text === 'string') return msg.text;
+
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .map((part: any) => (typeof part === 'string' ? part : part.text || part.value || ''))
+      .join('');
+  }
+
+  if (Array.isArray(msg.parts)) {
+    return msg.parts
+      .map((part: any) => part.text || part.value || (part.type === 'text' ? part.text : ''))
+      .join('');
+  }
+
+  return '';
+}
+
+function buildPrompt(
+  finalPrompt: string,
+  history: Array<{ role: 'system' | 'assistant' | 'user'; content: string }>,
+  query: string
+): string {
+  const historyLines = history
+    .filter((message) => message.role !== 'system')
+    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
+    .join('\n');
+
+  if (historyLines.trim()) {
+    return `${finalPrompt}\n\nConversation so far:\n${historyLines}\n\nUser: ${query}`;
+  }
+
+  return `${finalPrompt}\n\nUser: ${query}`;
+}
+
+async function streamTextFromContent(text: string, messages: Array<{ role: string; content: string }>) {
+  const cachedStreamModel = {
+    specificationVersion: 'v3',
+    provider: 'cache',
+    modelId: 'cache',
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: { unified: 'stop', raw: undefined },
+            usage: {
+              inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+              outputTokens: { total: text.length, text: text.length, reasoning: 0 },
+            },
+          },
+        ],
+      }),
+    }),
+  };
+
+  return streamText({
+    model: cachedStreamModel as any,
+    messages,
+  });
+}
 
 export async function POST(req: Request) {
   try {
@@ -49,14 +142,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const groq = createGroq({
-      apiKey,
-    });
-
-    const modelCandidates = customApiKey
-      ? ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192', 'llama3-8b-8192']
-      : ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama3-8b-8192', 'llama3-70b-8192'];
-    
     // Get the latest user message
     let lastUserIndex = -1;
     let lastUserMessage: { role?: string; content?: unknown } | undefined;
@@ -78,103 +163,114 @@ export async function POST(req: Request) {
     }
 
     const requestedTranslation = translation || 'BSB';
-    const cacheModel = modelCandidates[0];
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
     const modelHistory = history.map((message) => ({
       role: message.role,
       content: message.content
     }));
 
-    const cached = await getCachedResponse({
-      query,
-      translation: requestedTranslation,
-      model: cacheModel,
-      userKey: customApiKey
-    });
-
-    if (cached?.response) {
-      console.info('[cache] hit', { query, translation: requestedTranslation, model: cacheModel });
-
-      const cachedResult = await streamText({
-        model: new MockLanguageModelV3({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-start', id: 'text-1' },
-                { type: 'text-delta', id: 'text-1', delta: cached.response },
-                { type: 'text-end', id: 'text-1' },
-                {
-                  type: 'finish',
-                  finishReason: { unified: 'stop', raw: undefined },
-                  logprobs: undefined,
-                  usage: {
-                    inputTokens: { total: 0, noCache: 0 },
-                    outputTokens: { total: cached.response.length, text: cached.response.length },
-                  },
-                },
-              ],
-            }),
-          }),
-        }) as any,
-        messages: [
-          { role: 'system', content: cached.finalPrompt },
-          ...modelHistory,
-          { role: 'user', content: query }
-        ],
+    let cached = null as Awaited<ReturnType<typeof getCachedResponse>>;
+    let cachedModelKey: string | null = null;
+    for (const modelKey of CACHE_MODEL_CANDIDATES) {
+      cached = await getCachedResponse({
+        query,
+        translation: requestedTranslation,
+        model: modelKey,
+        userKey: customApiKey
       });
-
-      return cachedResult.toUIMessageStreamResponse();
+      if (cached?.response) {
+        cachedModelKey = modelKey;
+        break;
+      }
     }
 
-    console.info('[cache] miss', { query, translation: requestedTranslation, model: cacheModel });
-    
+    if (cached?.response) {
+      console.info('[cache] hit', {
+        query,
+        translation: requestedTranslation,
+        model: cachedModelKey || PRIMARY_MODEL_USED
+      });
+      const cachedModelUsed = normalizeModelId(cached.modelUsed);
+      const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
+      const finalFallback = cachedModelUsed === 'context-only';
+
+      const cachedResult = await streamTextFromContent(cached.response, [
+        { role: 'system', content: cached.finalPrompt },
+        ...modelHistory,
+        { role: 'user', content: query }
+      ]);
+
+      return cachedResult.toUIMessageStreamResponse({
+        headers: fallbackUsed ? { 'x-model-used': cachedModelUsed } : undefined,
+        messageMetadata: ({ part }) => {
+          if (part.type === 'start' || part.type === 'finish') {
+            return { modelUsed: cachedModelUsed, fallbackUsed, finalFallback } as any;
+          }
+          return undefined;
+        },
+      });
+    }
+
+    console.info('[cache] miss', { query, translation: requestedTranslation });
+
     // RAG Retrieval
     const verses = await retrieveContextForQuery(query, requestedTranslation, apiKey);
-    
+
     // Build context-aware prompt
     const finalPrompt = buildContextPrompt(query, verses, requestedTranslation);
     const context = finalPrompt.startsWith(SYSTEM_PROMPT)
       ? finalPrompt.slice(SYSTEM_PROMPT.length).trim()
       : finalPrompt;
-    
-    let lastModelError: unknown;
-    for (const modelName of modelCandidates) {
-      try {
-        const result = await streamText({
-          model: groq(modelName) as any,
-          messages: [
-            { role: 'system', content: finalPrompt },
-            ...modelHistory,
-            { role: 'user', content: query }
-          ],
-          temperature: 0.1, // Strict factual responses
-          frequencyPenalty: 0.5, // Help prevent loops
-          onFinish: async ({ text }) => {
-            await setCachedResponse(
-              {
-                query,
-                translation: requestedTranslation,
-                model: cacheModel,
-                userKey: customApiKey
-              },
-              {
-                verses,
-                context,
-                finalPrompt,
-                response: text
-              }
-            );
+
+    const prompt = buildPrompt(finalPrompt, modelHistory, query);
+
+    const generation = await generateWithFallback(prompt, {
+      maxTokens: 2048,
+      temperature: 0.1,
+      apiKey,
+    } as any);
+
+    const normalizedModelUsed = normalizeModelId(generation.modelUsed);
+    const fallbackUsed = normalizedModelUsed !== PRIMARY_MODEL_USED;
+    const finalFallback = generation.finalFallback === true;
+
+    const responseInit = {
+      headers: fallbackUsed ? { 'x-model-used': normalizedModelUsed } : undefined,
+      messageMetadata: ({ part }: { part: { type: string } }) => {
+        if (part.type === 'start' || part.type === 'finish') {
+          return { modelUsed: normalizedModelUsed, fallbackUsed, finalFallback } as any;
+        }
+        return undefined;
+      },
+      onFinish: async ({ responseMessage, isAborted }: { responseMessage: UIMessage; isAborted: boolean }) => {
+        if (isAborted) return;
+        const text = getMessageText(responseMessage);
+        if (!text) return;
+        await setCachedResponse(
+          {
+            query,
+            translation: requestedTranslation,
+            model: normalizedModelUsed,
+            userKey: customApiKey
           },
-        });
-
-        return result.toUIMessageStreamResponse();
-      } catch (err) {
-        lastModelError = err;
-        console.warn(`Groq model failed: ${modelName}`, err);
+          {
+            verses,
+            context,
+            finalPrompt,
+            response: text,
+            modelUsed: normalizedModelUsed
+          }
+        );
       }
-    }
+    };
 
-    throw lastModelError;
+    const fallbackResult = await streamTextFromContent(generation.content, [
+      { role: 'system', content: finalPrompt },
+      ...modelHistory,
+      { role: 'user', content: query }
+    ]);
+
+    return fallbackResult.toUIMessageStreamResponse(responseInit);
   } catch (e: unknown) {
     console.error('API Error:', e);
     const error = e as Error;
@@ -184,7 +280,7 @@ export async function POST(req: Request) {
         error: 'Rate limit exceeded. The shared resource is currently overloaded. Please wait a moment or provide your own API key in the settings.' 
       }), { status: 429, headers: { 'Content-Type': 'application/json' } });
     }
-    
+
     return new Response(JSON.stringify({ 
       error: 'An unexpected error occurred while processing your request.' 
     }), { status: 500, headers: { 'Content-Type': 'application/json' } });

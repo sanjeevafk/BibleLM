@@ -16,6 +16,7 @@ export type CachedChatResponse = {
   context: string;
   finalPrompt: string;
   response: string;
+  modelUsed?: string;
 };
 
 type CacheKeyInput = {
@@ -38,10 +39,12 @@ export async function getCachedResponse(input: CacheKeyInput): Promise<CachedCha
   const cacheKey = buildCacheKey(input);
 
   try {
-    const cached = await redis.get<string>(cacheKey);
+    const cached = await redis.get<CachedChatResponse | string>(cacheKey);
     if (!cached) return null;
-
-    return JSON.parse(cached) as CachedChatResponse;
+    if (typeof cached === 'string') {
+      return JSON.parse(cached) as CachedChatResponse;
+    }
+    return cached;
   } catch (error) {
     console.warn('[cache] Redis get failed; continuing without cache.', error);
     return null;
@@ -59,7 +62,7 @@ export async function setCachedResponse(
   const cacheKey = buildCacheKey(input);
 
   try {
-    await redis.set(cacheKey, JSON.stringify(value), { ex: CACHE_TTL_SECONDS });
+    await redis.set(cacheKey, value, { ex: CACHE_TTL_SECONDS });
   } catch (error) {
     console.warn('[cache] Redis set failed; continuing without cache.', error);
   }
