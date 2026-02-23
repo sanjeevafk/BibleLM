@@ -80,6 +80,7 @@ Groq’s free tier is subject to TPM (tokens-per-minute) limits, so long context
 - Groq: `llama-3.1-8b-instant` (primary)
 - Groq: `llama-3.3-70b-versatile` (secondary)
 - Hugging Face Inference: `meta-llama/Meta-Llama-3.1-8B-Instruct` (reuses `HF_TOKEN`)
+- Google Gemini: `gemini-2.5-flash` (optional `GEMINI_API_KEY`)
 - Final: raw verses + original-language notes only
 
 ## 📦 Data Bundling & Optimization

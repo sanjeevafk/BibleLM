@@ -1,5 +1,6 @@
 import { createGroq } from '@ai-sdk/groq';
 import { generateText } from 'ai';
+import { GoogleGenAI } from '@google/genai';
 import { InferenceClient } from '@huggingface/inference';
 
 type FallbackOptions = {
@@ -15,6 +16,7 @@ export type FallbackResult =
 const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
 const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.1;
 const DEFAULT_FREQUENCY_PENALTY = 0.5;
@@ -191,6 +193,28 @@ export async function generateWithFallback(
       throw new Error('HF inference returned empty output');
     } catch (error) {
       logModelFailure(`hf:${HF_MODEL}`, error);
+    }
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const result = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          temperature,
+          maxOutputTokens: maxTokens,
+        },
+      });
+      const geminiText = result.text?.trim();
+      if (geminiText) {
+        return { type: 'content', content: geminiText, modelUsed: `gemini:${GEMINI_MODEL}` };
+      }
+      throw new Error('Gemini returned empty output');
+    } catch (error) {
+      logModelFailure(`gemini:${GEMINI_MODEL}`, error);
     }
   }
 

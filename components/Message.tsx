@@ -32,6 +32,11 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
   const messageText = getMessageText(message);
+  const metadata = (message as any).metadata as
+    | { modelUsed?: string; fallbackUsed?: boolean; finalFallback?: boolean }
+    | undefined;
+  const fallbackUsed = !isUser && Boolean(metadata?.fallbackUsed && metadata?.modelUsed);
+  const finalFallback = !isUser && Boolean(metadata?.finalFallback);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(messageText);
@@ -124,6 +129,16 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
             : 'bg-muted text-foreground border rounded-bl-sm shadow-sm'
         }`}
       >
+        {!isUser && (fallbackUsed || finalFallback) && (
+          <div className="mb-2 rounded-md border border-muted/60 bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+            {fallbackUsed && metadata?.modelUsed ? (
+              <div>Using fallback model: {metadata.modelUsed}</div>
+            ) : null}
+            {finalFallback ? (
+              <div>All providers unavailable. Showing raw verses and original-language notes instead.</div>
+            ) : null}
+          </div>
+        )}
         <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed overflow-x-visible">
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}

@@ -11,10 +11,12 @@ const PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const PRIMARY_MODEL_USED = `groq:${PRIMARY_MODEL}`;
 const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
 const HF_FALLBACK_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const CACHE_MODEL_CANDIDATES = [
   PRIMARY_MODEL_USED,
   `groq:${GROQ_FALLBACK_MODEL}`,
   `hf:${HF_FALLBACK_MODEL}`,
+  `gemini:${GEMINI_MODEL}`,
   'context-only',
 ];
 
@@ -26,6 +28,9 @@ function normalizeModelId(modelUsed: string | undefined): string {
   }
   if (modelUsed === HF_FALLBACK_MODEL) {
     return `hf:${modelUsed}`;
+  }
+  if (modelUsed === GEMINI_MODEL) {
+    return `gemini:${modelUsed}`;
   }
   return modelUsed;
 }
@@ -96,7 +101,7 @@ async function streamTextFromContent(text: string, messages: Array<{ role: strin
 
   return streamText({
     model: cachedStreamModel as any,
-    messages,
+    messages: messages as any,
   });
 }
 
@@ -198,7 +203,7 @@ export async function POST(req: Request) {
         { role: 'system', content: cached.finalPrompt },
         ...modelHistory,
         { role: 'user', content: query }
-      ]);
+      ] as Array<{ role: string; content: string }>);
 
       return cachedResult.toUIMessageStreamResponse({
         headers: fallbackUsed ? { 'x-model-used': cachedModelUsed } : undefined,
@@ -232,7 +237,7 @@ export async function POST(req: Request) {
 
     const normalizedModelUsed = normalizeModelId(generation.modelUsed);
     const fallbackUsed = normalizedModelUsed !== PRIMARY_MODEL_USED;
-    const finalFallback = generation.finalFallback === true;
+    const finalFallback = generation.finalFallback === true || normalizedModelUsed === 'context-only';
 
     const responseInit = {
       headers: fallbackUsed ? { 'x-model-used': normalizedModelUsed } : undefined,
@@ -268,7 +273,7 @@ export async function POST(req: Request) {
       { role: 'system', content: finalPrompt },
       ...modelHistory,
       { role: 'user', content: query }
-    ]);
+    ] as Array<{ role: string; content: string }>);
 
     return fallbackResult.toUIMessageStreamResponse(responseInit);
   } catch (e: unknown) {
