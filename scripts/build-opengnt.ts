@@ -244,7 +244,11 @@ async function main() {
       console.log('OpenGNT source not present; using committed outputs.');
       return;
     }
-    throw new Error(`OpenGNT source not found at ${SOURCE_DIR}. Commit data/opengnt outputs or provide sources.`);
+    console.warn(
+      `OpenGNT source not found at ${SOURCE_DIR}. ` +
+        'Skipping generation; commit data/opengnt outputs or provide sources.'
+    );
+    return;
   }
 
   const requiredZips = [

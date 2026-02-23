@@ -468,7 +468,11 @@ async function main() {
       console.log('Translations source not present; using committed outputs.');
       return;
     }
-    throw new Error(`Translations source not found at ${SOURCE_DIR}. Commit data/translations outputs or provide sources.`);
+    console.warn(
+      `Translations source not found at ${SOURCE_DIR}. ` +
+        'Skipping generation; commit data/translations outputs or provide sources.'
+    );
+    return;
   }
 
   const hash = crypto.createHash('sha256');
