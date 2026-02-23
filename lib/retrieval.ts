@@ -9,6 +9,8 @@ import strongsDictData from '../data/strongs-dict.json';
 import { redis } from './redis';
 import { getMorphhbWords } from './morphhb';
 import { getOpenHebrewBibleLayers, OpenHebrewVerseLayers } from './openhebrewbible';
+import { getOpenGNTLayers, OpenGntVerseLayers } from './opengnt';
+import { getTranslationVerse } from './translations';
 
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
 const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
@@ -24,6 +26,12 @@ const OT_BOOKS = new Set([
   'LAM', 'EZK', 'DAN', 'HOS', 'JOL', 'AMO', 'OBA', 'JON', 'MIC', 'NAM', 'HAB', 'ZEP',
   'HAG', 'ZEC', 'MAL'
 ]);
+const NT_BOOKS = new Set([
+  'MAT', 'MRK', 'LUK', 'JHN', 'ACT', 'ROM', '1CO', '2CO', 'GAL', 'EPH',
+  'PHP', 'COL', '1TH', '2TH', '1TI', '2TI', 'TIT', 'PHM', 'HEB', 'JAS',
+  '1PE', '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV'
+]);
+const LOCAL_TRANSLATIONS = new Set(['KJV', 'WEB', 'ASV']);
 
 /**
  * Interface for Topic Guard configuration to ensure high-signal retrieval
@@ -337,6 +345,22 @@ function cloneVerses(verses: VerseContext[]): VerseContext[] {
   }));
 }
 
+async function applyTranslationOverride(verses: VerseContext[], translation: string): Promise<VerseContext[]> {
+  if (!LOCAL_TRANSLATIONS.has(translation)) {
+    return verses;
+  }
+
+  for (const verse of verses) {
+    const text = await getTranslationVerse(verse.reference, translation);
+    if (text) {
+      verse.text = text;
+      verse.translation = translation;
+    }
+  }
+
+  return verses;
+}
+
 function meanPool(vectors: number[][]): number[] {
   if (vectors.length === 0) {
     return [];
@@ -573,9 +597,10 @@ export async function retrieveContextForQuery(
   let verses: VerseContext[] = [];
   let usedDb = false;
   let dbError: unknown;
+  const dbTranslation = LOCAL_TRANSLATIONS.has(translation) ? 'BSB' : translation;
 
   try {
-    verses = await retrieveContextFromDb(query, translation);
+    verses = await retrieveContextFromDb(query, dbTranslation);
     usedDb = true;
   } catch (error) {
     console.error('DB Context Retrieval CRITICAL ERROR:', error);
@@ -589,13 +614,15 @@ export async function retrieveContextForQuery(
       console.warn('DB retrieval unavailable, falling back to API retrieval');
     }
     const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
-    await setCached(cacheKey, apiVerses);
-    return cloneVerses(apiVerses);
+    const translated = await applyTranslationOverride(apiVerses, translation);
+    await setCached(cacheKey, translated);
+    return cloneVerses(translated);
   }
 
   const enriched = await enrichOriginalLanguages(verses);
-  await setCached(cacheKey, enriched);
-  return cloneVerses(enriched);
+  const translated = await applyTranslationOverride(enriched, translation);
+  await setCached(cacheKey, translated);
+  return cloneVerses(translated);
 }
 
 async function retrieveContextFromDb(
@@ -711,6 +738,7 @@ async function retrieveContextViaApis(
 ): Promise<VerseContext[]> {
   const verses: VerseContext[] = [];
   const normalizedQuery = query.toLowerCase();
+  const canUseIndex = translation === 'WEB' || LOCAL_TRANSLATIONS.has(translation);
 
   const tenCommandments: VerseContext[] = [
     { reference: 'EXO 20:3', text: 'Thou shalt have no other gods before me.', translation: 'ASV', original: [] },
@@ -799,21 +827,35 @@ async function retrieveContextViaApis(
     // Attempt rapid direct fetch for parsed references
     for (const ref of directRefs) {
       const refKey = `${ref.book} ${ref.chapter}:${ref.verse}`;
+      const refStr = `${ref.book} ${ref.chapter}:${ref.verse}${ref.endVerse ? '-' + ref.endVerse : ''}`;
       if (verses.some((v) => v.reference.startsWith(refKey))) {
         continue;
       }
       const dbMatch = BIBLE_INDEX[`${ref.book} ${ref.chapter}:${ref.verse}`];
-      if (dbMatch) {
-         verses.push(dbMatch);
-         continue;
+      if (dbMatch && canUseIndex) {
+        verses.push(cloneVerses([dbMatch])[0]);
+        continue;
+      }
+
+      if (LOCAL_TRANSLATIONS.has(translation)) {
+        const localText = await getTranslationVerse(refStr, translation);
+        if (localText) {
+          verses.push({
+            reference: refStr,
+            translation,
+            text: localText,
+            original: []
+          });
+          continue;
+        }
       }
       
       const vText = await fetchVerseHelloAO(translation, ref.book, ref.chapter, ref.verse, ref.endVerse) 
-                    || await fetchVerseFallback(`${ref.book} ${ref.chapter}:${ref.verse}${ref.endVerse ? '-' + ref.endVerse : ''}`, translation);
+                    || await fetchVerseFallback(refStr, translation);
       
       if (vText) {
         verses.push({
-          reference: `${ref.book} ${ref.chapter}:${ref.verse}${ref.endVerse ? '-' + ref.endVerse : ''}`,
+          reference: refStr,
           translation: translation,
           text: vText,
           original: [] // Filled in enrichment phase
@@ -880,8 +922,11 @@ async function retrieveContextViaApis(
       if (verses.some(v => v.reference.startsWith(refStr))) continue;
 
       // Try bundled index first
-      if (BIBLE_INDEX[refStr]) {
-        verses.push({...BIBLE_INDEX[refStr], translation: 'WEB'}); // Index text is WEB
+      const indexed = BIBLE_INDEX[refStr];
+      if (indexed && canUseIndex) {
+        const cloned = cloneVerses([indexed])[0];
+        cloned.translation = 'WEB'; // Index text is WEB
+        verses.push(cloned);
         continue;
       }
 
@@ -949,6 +994,42 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
       if (glossSamples.length > 0) {
         parts.push(`Glosses: ${glossSamples.join('; ')}`);
       }
+    }
+    return parts.join(' | ');
+  };
+
+  const formatOpenGntLayers = (layers: OpenGntVerseLayers): string => {
+    const parts: string[] = [];
+    if (layers.morphology?.length) {
+      const morphSamples = layers.morphology.slice(0, 4).map((w) => {
+        const tags = [w.s, w.r].filter(Boolean).join(' ');
+        return tags ? `${w.w} (${tags})` : w.w;
+      });
+      if (morphSamples.length > 0) {
+        parts.push(`Greek morphology: ${morphSamples.join('; ')}`);
+      }
+    }
+    if (layers.interlinear?.length) {
+      const interlinearSamples = layers.interlinear
+        .filter((w) => w.i)
+        .slice(0, 4)
+        .map((w) => `${w.w}=${w.i}`);
+      if (interlinearSamples.length > 0) {
+        parts.push(`Interlinear: ${interlinearSamples.join('; ')}`);
+      }
+    }
+    if (layers.clauses?.ids?.length) {
+      let clauseText = layers.clauses.ids.join(', ');
+      if (layers.clauses.meta) {
+        const previews = layers.clauses.ids
+          .map((id) => layers.clauses?.meta?.[id]?.st)
+          .filter(Boolean)
+          .slice(0, 2);
+        if (previews.length > 0) {
+          clauseText += ` (${previews.join(' | ')})`;
+        }
+      }
+      parts.push(`Clause: ${clauseText}`);
     }
     return parts.join(' | ');
   };
@@ -1021,6 +1102,12 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
           if (layers) {
             verse.openHebrew = formatOpenHebrewLayers(layers);
           }
+        }
+      }
+      if (bookRaw && cvRaw && NT_BOOKS.has(bookRaw)) {
+        const layers = await getOpenGNTLayers(verse.reference);
+        if (layers) {
+          verse.openGnt = formatOpenGntLayers(layers);
         }
       }
     }

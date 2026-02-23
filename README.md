@@ -109,12 +109,27 @@ Upstash's free tier includes 500K commands/month (plus 256 MB storage and one fr
 
 OpenHebrewBible subset (clause segmentation, poetic division, BHS-WLC alignments, extended glosses) — processed from eliranwong/OpenHebrewBible — CC BY-NC 4.0 — attribution required.
 
+## Translations
+
+BibleLM ships a public-domain translation toggle alongside the default BSB:
+
+- **BSB** (default)
+- **KJV**, **WEB**, **ASV** — public domain, sourced from scrollmapper CSV exports
+
+Select the translation in the chat UI; the choice is persisted in `localStorage` and in `?trans=KJV` for shareable links.
+
+## OpenGNT Greek NT Layers
+
+Greek New Testament layers (morphology, interlinear glosses, clause tagging) are built from OpenGNT sources and exposed per-verse when the reference is in the NT.
+
+**License:** OpenGNT is CC BY-NC 4.0 — attribution required.
+
 ## ✨ Key Features
 
 - **Neutral Citation Engine** — Forces exact verse quoting + refs
 - **Original-Language Tooltips** — Click any tagged word → Strong's #, translit, gloss popup
 - **TSK Cross-References** — Thematic links shown inline (non-intrusive)
-- **Translation Toggle** — BSB default; more public-domain options planned
+- **Translation Toggle** — BSB default; KJV/WEB/ASV available
 - **Free-Tier Friendly** — 8B default + BYOK field for 70B
 - **Controversy-Resistant** — Designed to handle divisive topics without editorializing
 

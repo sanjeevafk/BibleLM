@@ -5,22 +5,17 @@ export type VerseContext = {
   original: Array<{ word: string; strongs: string; gloss?: string; morph?: string; transliteration?: string }>;
   isCrossReference?: boolean;
   openHebrew?: string;
+  openGnt?: string;
 };
 
 // HelloAO gives us books by these long codes or short abbreviations usually matching.
 export async function fetchTranslations() {
-  try {
-    const res = await fetch('https://bible.helloao.org/api/available_translations.json');
-    if (!res.ok) throw new Error('Failed to fetch translations');
-    const data = await res.json();
-    return data.translations || [];
-  } catch (error) {
-    console.warn('Could not fetch helloao translations, falling back to defaults', error);
-    return [
-      { shortName: 'WEB', name: 'World English Bible' },
-      { shortName: 'KJV', name: 'King James Version' },
-    ];
-  }
+  return [
+    { shortName: 'BSB', name: 'Berean Study Bible' },
+    { shortName: 'KJV', name: 'King James Version' },
+    { shortName: 'WEB', name: 'World English Bible' },
+    { shortName: 'ASV', name: 'American Standard Version' }
+  ];
 }
 
 // Format: /api/{translation}/{book}/{chapter}.json

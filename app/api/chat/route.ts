@@ -35,6 +35,13 @@ function normalizeModelId(modelUsed: string | undefined): string {
   return modelUsed;
 }
 
+function normalizeTranslation(input: string | null | undefined): string {
+  if (!input) return 'BSB';
+  const upper = input.trim().toUpperCase();
+  if (['BSB', 'KJV', 'WEB', 'ASV'].includes(upper)) return upper;
+  return 'BSB';
+}
+
 function getMessageText(message: UIMessage | undefined): string {
   if (!message) return '';
   const msg = message as any;
@@ -108,6 +115,18 @@ async function streamTextFromContent(text: string, messages: Array<{ role: strin
 export async function POST(req: Request) {
   try {
     const { messages, translation, customApiKey } = await req.json();
+    const baseUrl =
+      req.headers.get('origin') ||
+      (() => {
+        const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+        if (host) {
+          const proto = req.headers.get('x-forwarded-proto') || 'http';
+          return `${proto}://${host}`;
+        }
+        return 'http://localhost';
+      })();
+    const url = new URL(req.url, baseUrl);
+    const queryTranslation = url.searchParams.get('trans');
 
     const rawMessages = Array.isArray(messages) ? messages : [];
     const normalizedMessages = rawMessages
@@ -167,7 +186,9 @@ export async function POST(req: Request) {
       return new Response('Missing user query', { status: 400 });
     }
 
-    const requestedTranslation = translation || 'BSB';
+    const rawTranslation =
+      typeof translation === 'string' && translation.trim() ? translation : queryTranslation;
+    const requestedTranslation = normalizeTranslation(rawTranslation);
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
     const modelHistory = history.map((message) => ({
       role: message.role,

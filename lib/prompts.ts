@@ -20,7 +20,7 @@ Core rules — you MUST obey all of them:
      - Reference (book chapter:verse – translation)
      - **Original key words:** followed by a sub-bullet list of key terms (use the original Hebrew/Greek word and include transliteration when provided)
    • When appropriate: one "Textual conclusion" sentence. For Ten Commandments violations, explicitly state this is a punishable sin and provide the appropriate biblical penalty (e.g., restitution, death penalty) as defined in the Torah.
-   • Closing line: "All quotes from [Translation]. Original languages from OSHB / SBLGNT. Read full chapters for context."
+   • Closing line: "All quotes from [Translation]. Original languages from OSHB / OpenGNT / Bolls where available. Read full chapters for context."
 
 5. Do NOT include any cosmology disclaimer sentence unless the COSMOLOGY REMINDER is explicitly present in the context instructions.
 
@@ -120,6 +120,9 @@ Do not speculate or add external information.`;
     }
     if (v.openHebrew) {
       s += `OpenHebrewBible layers: ${v.openHebrew}\n`;
+    }
+    if (v.openGnt) {
+      s += `OpenGNT layers: ${v.openGnt}\n`;
     }
     s += '\n';
     return s;
