@@ -1,7 +1,9 @@
 import { createGroq } from '@ai-sdk/groq';
-import { convertToModelMessages, streamText } from 'ai';
+import { convertToModelMessages, simulateReadableStream, streamText } from 'ai';
+import { MockLanguageModelV3 } from 'ai/test';
 import { retrieveContextForQuery } from '@/lib/retrieval';
-import { buildContextPrompt } from '@/lib/prompts';
+import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
+import { getCachedResponse, setCachedResponse } from '@/lib/cache';
 
 // export const runtime = 'edge';
 
@@ -74,19 +76,66 @@ export async function POST(req: Request) {
     if (!query) {
       return new Response('Missing user query', { status: 400 });
     }
-    
-    // RAG Retrieval
-    const verses = await retrieveContextForQuery(query, translation || 'BSB', apiKey);
-    
-    // Build context-aware prompt
-    const systemPrompt = buildContextPrompt(query, verses, translation || 'BSB');
 
-    // Remove the last message from history since we are injecting it via the system prompt context
+    const requestedTranslation = translation || 'BSB';
+    const cacheModel = modelCandidates[0];
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
     const modelHistory = history.map((message) => ({
       role: message.role,
       content: message.content
     }));
+
+    const cached = await getCachedResponse({
+      query,
+      translation: requestedTranslation,
+      model: cacheModel,
+      userKey: customApiKey
+    });
+
+    if (cached?.response) {
+      console.info('[cache] hit', { query, translation: requestedTranslation, model: cacheModel });
+
+      const cachedResult = await streamText({
+        model: new MockLanguageModelV3({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: cached.response },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: { unified: 'stop', raw: undefined },
+                  logprobs: undefined,
+                  usage: {
+                    inputTokens: { total: 0, noCache: 0 },
+                    outputTokens: { total: cached.response.length, text: cached.response.length },
+                  },
+                },
+              ],
+            }),
+          }),
+        }) as any,
+        messages: [
+          { role: 'system', content: cached.finalPrompt },
+          ...modelHistory,
+          { role: 'user', content: query }
+        ],
+      });
+
+      return cachedResult.toUIMessageStreamResponse();
+    }
+
+    console.info('[cache] miss', { query, translation: requestedTranslation, model: cacheModel });
+    
+    // RAG Retrieval
+    const verses = await retrieveContextForQuery(query, requestedTranslation, apiKey);
+    
+    // Build context-aware prompt
+    const finalPrompt = buildContextPrompt(query, verses, requestedTranslation);
+    const context = finalPrompt.startsWith(SYSTEM_PROMPT)
+      ? finalPrompt.slice(SYSTEM_PROMPT.length).trim()
+      : finalPrompt;
     
     let lastModelError: unknown;
     for (const modelName of modelCandidates) {
@@ -94,12 +143,28 @@ export async function POST(req: Request) {
         const result = await streamText({
           model: groq(modelName) as any,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: finalPrompt },
             ...modelHistory,
             { role: 'user', content: query }
           ],
           temperature: 0.1, // Strict factual responses
           frequencyPenalty: 0.5, // Help prevent loops
+          onFinish: async ({ text }) => {
+            await setCachedResponse(
+              {
+                query,
+                translation: requestedTranslation,
+                model: cacheModel,
+                userKey: customApiKey
+              },
+              {
+                verses,
+                context,
+                finalPrompt,
+                response: text
+              }
+            );
+          },
         });
 
         return result.toUIMessageStreamResponse();

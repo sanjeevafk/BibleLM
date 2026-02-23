@@ -30,7 +30,7 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
   - Bundled ~1,000 high-frequency verses + full Strong's dictionary (static JSON)  
   - PostgreSQL (build-time only) for seeding embeddings & TSK cross-refs  
   - Fallback: public free APIs (e.g. bolls.life, helloao.org) for full translations
-- **Caching** — Upstash Redis free tier (optional, planned) for query → verses + answer
+- **Caching** — Upstash Redis (optional) for query → verses + answer (72h TTL)
 - **Data** — Public domain / open-license sources:  
   - BSB (default translation)  
   - Strong's Exhaustive Concordance  
@@ -88,6 +88,12 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
 - Output committed to `data/` folder → shipped statically
 
 → Edge runtime stays <2 MB per function, no cold starts, no DB latency at request time.
+
+## Caching
+
+BibleLM uses Upstash Redis to cache full chat responses (verses + context + final answer). This dramatically reduces Groq usage and latency on repeat devotional-style questions; an 80–90% cache hit rate is expected once common queries are warmed.
+
+Upstash's free tier allows 10k commands/day, which is typically enough for Hobby usage. To enable caching, create a free Upstash Redis database and copy the REST URL and token into `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in your environment.
 
 ## OpenHebrewBible Subset
 
