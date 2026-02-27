@@ -27,7 +27,7 @@ type CacheKeyInput = {
 };
 
 function buildCacheKey({ query, translation, model, userKey }: CacheKeyInput): string {
-  const input = `${query}${translation}${model}${userKey || ''}`;
+  const input = `${query}\u0000${translation}\u0000${model}\u0000${userKey || ''}`;
   return crypto.createHash('sha256').update(input).digest('hex');
 }
 

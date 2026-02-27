@@ -24,8 +24,17 @@ const Popover = ({ children }: { children: React.ReactNode }) => {
       if (triggerRef.current?.contains(target)) return;
       setOpen(false);
     };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [open]);
 
   return (
@@ -44,16 +53,40 @@ const PopoverTrigger = ({ asChild, children, ...props }: PopoverTriggerProps) =>
     props.onClick?.(event);
     ctx.setOpen(!ctx.open);
   };
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    props.onKeyDown?.(event);
+    if (event.defaultPrevented) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      ctx.setOpen(!ctx.open);
+    }
+    if (event.key === "Escape") {
+      ctx.setOpen(false);
+    }
+  };
 
   if (asChild && React.isValidElement(children)) {
     return React.cloneElement(children as React.ReactElement, {
       onClick: handleClick,
+      onKeyDown: handleKeyDown,
       ref: ctx.triggerRef,
+      role: (children as React.ReactElement).props.role || "button",
+      tabIndex: (children as React.ReactElement).props.tabIndex ?? 0,
+      "aria-haspopup": "dialog",
+      "aria-expanded": ctx.open,
     });
   }
 
   return (
-    <button type="button" onClick={handleClick} ref={ctx.triggerRef as React.RefObject<HTMLButtonElement>} {...props}>
+    <button
+      type="button"
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      ref={ctx.triggerRef as React.RefObject<HTMLButtonElement>}
+      aria-haspopup="dialog"
+      aria-expanded={ctx.open}
+      {...props}
+    >
       {children}
     </button>
   );
@@ -73,6 +106,8 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
 
     return (
       <div
+        role="dialog"
+        aria-modal="false"
         ref={(node) => {
           ctx.contentRef.current = node;
           if (typeof ref === "function") ref(node);

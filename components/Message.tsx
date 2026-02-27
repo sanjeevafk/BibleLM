@@ -68,9 +68,19 @@ function parseVerseBlocks(content: string): {
   let i = 0;
   let inVerseSection = false;
 
+  const isVerseStartLine = (value: string) => {
+    const trimmed = value.trimStart();
+    const lower = trimmed.toLowerCase();
+    if (!trimmed.startsWith('- ')) return false;
+    if (lower.startsWith('- reference') || lower.startsWith('- **original key words') || lower.startsWith('- original key words')) {
+      return false;
+    }
+    return true;
+  };
+
   while (i < lines.length) {
     const line = lines[i];
-    const isVerseStart = /^-\s*[“"]/.test(line);
+    const isVerseStart = isVerseStartLine(line);
     if (!isVerseStart) {
       if (!inVerseSection) {
         preambleLines.push(line);
@@ -87,7 +97,7 @@ function parseVerseBlocks(content: string): {
 
     while (i < lines.length) {
       const next = lines[i];
-      if (/^-\s*[“"]/.test(next)) {
+      if (isVerseStartLine(next)) {
         break;
       }
       if (!next.trim()) {

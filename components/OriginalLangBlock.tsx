@@ -21,6 +21,7 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
   // Determine if hebrew based on strongs code starting with H
   const isHebrew = strongs.startsWith('H');
   const langClass = isHebrew ? 'hebrew-text' : 'greek-text';
+  const bollsLink = `https://bolls.life/dictionary/${isHebrew ? 'BDBT' : 'BDBT'}/${strongs}`;
   const morphValue = resolvedMorph ?? morph;
   const canFetchMorph = Boolean(isHebrew && ref && !morphValue);
   const decodedMorph = morphValue ? decodeMorph(morphValue) : null;
@@ -56,16 +57,24 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <span
-          className={`${langClass} cursor-pointer underline underline-offset-4 decoration-dotted font-semibold text-primary/90`}
+        <button
+          type="button"
+          className={`${langClass} cursor-pointer underline underline-offset-4 decoration-dotted font-semibold text-primary/90 bg-transparent border-0 p-0 appearance-none`}
         >
           {word}
-        </span>
+        </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-2 text-xs">
         <div className="flex items-center justify-between">
           <span className={`${langClass} text-sm font-bold`}>{word}</span>
-          <span className="text-[10px] font-mono text-muted-foreground">{strongs}</span>
+          <a
+            href={bollsLink}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[10px] font-mono text-muted-foreground underline underline-offset-2"
+          >
+            {strongs}
+          </a>
         </div>
         {translit && (
           <div className="text-[11px] text-muted-foreground italic">{translit}</div>
@@ -78,7 +87,11 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
         )}
         <div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Strong's</div>
-          <div className="font-mono">{strongs}</div>
+          <div className="font-mono">
+            <a href={bollsLink} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+              {strongs}
+            </a>
+          </div>
         </div>
         {morphValue && (
           <div>
