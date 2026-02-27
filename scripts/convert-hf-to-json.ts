@@ -119,10 +119,7 @@ async function fetchBibleIndex() {
       if (webData.chapter && webData.chapter.content) {
         for (const item of webData.chapter.content) {
           if (item.type === "verse") {
-            const verseText = item.content
-              .map((c: any) => (typeof c === "string" ? c : ""))
-              .join("")
-              .trim();
+            const verseText = normalizeWebText(flattenWebContent(item.content));
             const ref = `${book} ${chapter}:${item.number}`;
 
             // Try to find matching original verse
@@ -226,6 +223,30 @@ function bkbToBollsPath(bookCode: string, chapter: number): string {
     REV: 66,
   };
   return `${map[bookCode]}/${chapter}`;
+}
+
+function flattenWebContent(node: any): string {
+  if (node === null || node === undefined) return "";
+  if (typeof node === "string") return node;
+  if (Array.isArray(node)) return node.map(flattenWebContent).join("");
+  if (typeof node === "object") {
+    if (typeof node.text === "string") return node.text;
+    if (typeof node.content === "string") return node.content;
+    if (Array.isArray(node.content))
+      return node.content.map(flattenWebContent).join("");
+    if (Array.isArray(node.children))
+      return node.children.map(flattenWebContent).join("");
+  }
+  return "";
+}
+
+function normalizeWebText(text: string): string {
+  return text
+    .replace(/<q>/g, "")
+    .replace(/<\/q>/g, "")
+    .replace(/<[/]?span[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Extracts Strong's tags from text like "בְּרֵאשִׁ֖ית<S>H7225</S> בָּרָ֣א<S>H1254</S>"
