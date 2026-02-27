@@ -7,6 +7,7 @@ import { OriginalLangBlock } from './OriginalLangBlock';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { UIMessage } from 'ai';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 function getMessageText(message: UIMessage): string {
   const m = message as any;
@@ -26,6 +27,111 @@ function getMessageText(message: UIMessage): string {
   }
 
   return '';
+}
+
+type VerseBlock = {
+  id: string;
+  reference: string | null;
+  shortQuote: string;
+  markdown: string;
+};
+
+function extractReference(lines: string[]): string | null {
+  const joined = lines.join(' ');
+  const match = joined.match(/([1-3]?[A-Z]{2,3}\s+\d+:\d+(?:[-–]\d+)?)/);
+  if (!match) return null;
+  return match[1].replace('–', '-');
+}
+
+function stripOuterQuotes(text: string): string {
+  const trimmed = text.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith('“') && trimmed.endsWith('”'))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function shortenQuote(text: string, max = 90): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max).trimEnd()}…`;
+}
+
+function parseVerseBlocks(content: string): {
+  preamble: string;
+  blocks: VerseBlock[];
+  postamble: string;
+} {
+  const lines = content.split(/\r?\n/);
+  const preambleLines: string[] = [];
+  const postambleLines: string[] = [];
+  const blocks: VerseBlock[] = [];
+  let i = 0;
+  let inVerseSection = false;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const isVerseStart = /^-\s*[“"]/.test(line);
+    if (!isVerseStart) {
+      if (!inVerseSection) {
+        preambleLines.push(line);
+      } else {
+        postambleLines.push(line);
+      }
+      i += 1;
+      continue;
+    }
+
+    inVerseSection = true;
+    const blockLines: string[] = [line];
+    i += 1;
+
+    while (i < lines.length) {
+      const next = lines[i];
+      if (/^-\s*[“"]/.test(next)) {
+        break;
+      }
+      if (!next.trim()) {
+        blockLines.push(next);
+        i += 1;
+        continue;
+      }
+      if (/^\S/.test(next) && !next.startsWith('- ') && !next.startsWith('* ')) {
+        break;
+      }
+      blockLines.push(next);
+      i += 1;
+    }
+
+    const quoteLine = blockLines[0].replace(/^-+\s*/, '').trim();
+    const cleanedQuote = stripOuterQuotes(quoteLine);
+    const blockReference = extractReference(blockLines);
+    const markdownLines = [...blockLines];
+    markdownLines[0] = quoteLine;
+
+    blocks.push({
+      id: `${blockReference || 'verse'}-${blocks.length + 1}`,
+      reference: blockReference,
+      shortQuote: shortenQuote(cleanedQuote),
+      markdown: markdownLines.join('\n').trim(),
+    });
+
+    if (
+      i < lines.length &&
+      lines[i] &&
+      /^\S/.test(lines[i]) &&
+      !lines[i].startsWith('- ') &&
+      !lines[i].startsWith('* ')
+    ) {
+      postambleLines.push(...lines.slice(i));
+      break;
+    }
+  }
+
+  return {
+    preamble: preambleLines.join('\n').trim(),
+    blocks,
+    postamble: postambleLines.join('\n').trim(),
+  };
 }
 
 export const Message = React.memo(function Message({ message }: { message: UIMessage }) {
@@ -120,6 +226,72 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     return preprocessContent(messageText);
   }, [messageText]);
 
+  const { preamble, blocks, postamble } = React.useMemo(
+    () => parseVerseBlocks(processedContent),
+    [processedContent]
+  );
+
+  const markdownComponents = {
+    p({ children }: { children: React.ReactNode }) {
+      const text = React.Children.toArray(children)
+        .map(child => (typeof child === 'string' ? child : ''))
+        .join('');
+        
+      if (text.includes('All quotes from') && text.includes('OSHB')) {
+        return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase opacity-70">{children}</p>;
+      }
+      return <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>;
+    },
+    li({ children }: { children: React.ReactNode }) {
+      const text = React.Children.toArray(children)
+        .map(child => (typeof child === 'string' || typeof child === 'number' ? String(child) : ''))
+        .join('')
+        .trim();
+      
+      const isOriginalWord = text.includes('orig|');
+      const isReference = /([A-Z0-9]{3})\s\d+:\d+/i.test(text);
+
+      if (isOriginalWord) {
+        return <li className="list-none inline-flex flex-wrap gap-1 my-1">{children}</li>;
+      }
+
+      if (isReference && text.length < 50) {
+        return <li className="list-none text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-2 mb-3 px-1 border-l-2 border-muted-foreground/20 ml-1">{children}</li>;
+      }
+
+      return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50">{children}</li>;
+    },
+    strong({ children }: { children: React.ReactNode }) {
+      const text = React.Children.toArray(children)
+        .map(child => (typeof child === 'string' ? child : ''))
+        .join('');
+      if (text.includes('Original key words:')) {
+        return <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-6 pb-1 border-b border-muted-foreground/10">{children}</span>;
+      }
+      return <strong className="font-bold text-primary/90">{children}</strong>;
+    },
+    code(props: { children?: React.ReactNode; className?: string; [key: string]: unknown } | any) {
+      const { children, className, ...rest } = props;
+      const text = String(children);
+      
+      if (text.startsWith('orig|')) {
+        const parts = text.split('|');
+        return (
+          <OriginalLangBlock 
+            word={parts[1]} 
+            translit={parts[2]} 
+            strongs={parts[3]} 
+            gloss={parts[4]} 
+            morph={parts[5]} 
+            ref={parts[6]} 
+          />
+        );
+      }
+      
+      return <code className={`bg-black/10 dark:bg-white/10 rounded px-1.5 py-0.5 font-mono text-[13px] ${className || ''}`} {...rest}>{children}</code>;
+    }
+  } as const;
+
   return (
     <div className={`flex w-full my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div 
@@ -139,84 +311,52 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
             ) : null}
           </div>
         )}
-        <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed overflow-x-visible">
-          <ReactMarkdown 
-            remarkPlugins={[remarkGfm]}
-            components={{
-              p({ children }) {
-                // Safely extract text for the disclaimer check
-                const text = React.Children.toArray(children)
-                  .map(child => (typeof child === 'string' ? child : ''))
-                  .join('');
-                  
-                if (text.includes('All quotes from') && text.includes('OSHB')) {
-                  return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase opacity-70">{children}</p>;
-                }
-                return <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>;
-              },
-              li({ children }) {
-                const text = React.Children.toArray(children)
-                  .map(child => (typeof child === 'string' || typeof child === 'number' ? String(child) : ''))
-                  .join('')
-                  .trim();
-                
-                const isOriginalWord = text.includes('orig|');
-                // More robust reference detection: Look for 3-letter book code at start or within parentheses
-                const isReference = /([A-Z0-9]{3})\s\d+:\d+/i.test(text);
+        <div className="text-sm leading-relaxed overflow-x-visible">
+          {preamble && (
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {preamble}
+              </ReactMarkdown>
+            </div>
+          )}
 
-                if (isOriginalWord) {
-                  return <li className="list-none inline-block mr-1 my-1">{children}</li>;
-                }
+          {blocks.length > 0 && (
+            <div className="my-4 not-prose">
+              {preamble && <hr className="my-4 border-muted/40" />}
+              <Accordion type="multiple" className="space-y-3">
+                {blocks.map((block) => (
+                  <AccordionItem key={block.id} value={block.id}>
+                    <AccordionTrigger className="px-1">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {block.reference || 'Verse'}
+                        </span>
+                        <span className="text-sm font-medium text-foreground">
+                          “{block.shortQuote}”
+                        </span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-1 border-t border-muted/30">
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          {block.markdown}
+                        </ReactMarkdown>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+              {postamble && <hr className="my-4 border-muted/40" />}
+            </div>
+          )}
 
-                if (isReference && text.length < 40) {
-                  return <li className="list-none text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-2 mb-3 px-1 border-l-2 border-muted-foreground/20 ml-1">{children}</li>;
-                }
-
-                // Verse detection: starts with quote, or long text in a list that isn't a reference/orig block
-                if (text.startsWith('"') || text.startsWith('“') || (text.length > 50 && !text.includes('**Original key words:**'))) {
-                  return (
-                    <li className="list-none bible-verse border-l-4 border-primary/20 bg-primary/5 pl-5 pr-3 py-4 my-6 rounded-r-xl shadow-sm transition-all hover:border-primary/40">
-                      {children}
-                    </li>
-                  );
-                }
-
-                return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50">{children}</li>;
-              },
-              strong({ children }) {
-                const text = React.Children.toArray(children)
-                  .map(child => (typeof child === 'string' ? child : ''))
-                  .join('');
-                if (text.includes('Original key words:')) {
-                  return <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-6 pb-1 border-b border-muted-foreground/10">{children}</span>;
-                }
-                return <strong className="font-bold text-primary/90">{children}</strong>;
-              },
-              code(props: { children?: React.ReactNode; className?: string; [key: string]: unknown } | any) {
-                const { children, className, ...rest } = props;
-                const text = String(children);
-                
-                if (text.startsWith('orig|')) {
-                  const parts = text.split('|');
-                  return (
-                    <OriginalLangBlock 
-                      word={parts[1]} 
-                      translit={parts[2]} 
-                      strongs={parts[3]} 
-                      gloss={parts[4]} 
-                      morph={parts[5]} 
-                      ref={parts[6]} 
-                    />
-                  );
-                }
-                
-                return <code className={`bg-black/10 dark:bg-white/10 rounded px-1.5 py-0.5 font-mono text-[13px] ${className || ''}`} {...rest}>{children}</code>;
-              }
-            }}
-          >
-            {processedContent}
-          </ReactMarkdown>
-
+          {postamble && (
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {postamble}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
 
         {!isUser && (

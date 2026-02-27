@@ -394,6 +394,9 @@ function ChatInner({
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
           BibleLM delivers exact Scripture quotes and original-language insights (Hebrew/Greek morphology, clause/poetic structure, alignments) using hybrid RAG retrieval. Translation: {translation}. Cross-check references with your own Bible for full context.
         </div>
+        <div className="text-center text-[10px] text-muted-foreground/80 mt-1 leading-relaxed">
+          OpenHebrewBible layers (clause segmentation, poetic division, alignments, extended glosses) – CC BY-NC 4.0 – eliranwong/OpenHebrewBible
+        </div>
       </div>
     </div>
   );

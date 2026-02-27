@@ -14,7 +14,7 @@ const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_RE
 export type CachedChatResponse = {
   verses: VerseContext[];
   context: string;
-  finalPrompt: string;
+  prompt: string;
   response: string;
   modelUsed?: string;
 };
@@ -27,9 +27,11 @@ type CacheKeyInput = {
 };
 
 function buildCacheKey({ query, translation, model, userKey }: CacheKeyInput): string {
-  const input = `${query}|${translation}|${model}|${userKey || ''}`;
+  const input = `${query}${translation}${model}${userKey || ''}`;
   return crypto.createHash('sha256').update(input).digest('hex');
 }
+
+export { buildCacheKey };
 
 export async function getCachedResponse(input: CacheKeyInput): Promise<CachedChatResponse | null> {
   if (!redis) {
@@ -44,7 +46,7 @@ export async function getCachedResponse(input: CacheKeyInput): Promise<CachedCha
     if (typeof cached === 'string') {
       return JSON.parse(cached) as CachedChatResponse;
     }
-    return cached;
+    return cached as CachedChatResponse;
   } catch (error) {
     console.warn('[cache] Redis get failed; continuing without cache.', error);
     return null;
@@ -62,7 +64,7 @@ export async function setCachedResponse(
   const cacheKey = buildCacheKey(input);
 
   try {
-    await redis.set(cacheKey, value, { ex: CACHE_TTL_SECONDS });
+    await redis.set(cacheKey, JSON.stringify(value), { ex: CACHE_TTL_SECONDS });
   } catch (error) {
     console.warn('[cache] Redis set failed; continuing without cache.', error);
   }

@@ -16,13 +16,19 @@ export type FallbackResult =
 const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
 const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.1;
 const DEFAULT_FREQUENCY_PENALTY = 0.5;
 
 function logModelFailure(model: string, error: unknown) {
-  console.warn(`[llm-fallback] model failed: ${model}`, error);
+  const message = String((error as { message?: string })?.message || error || '');
+  const label = /429|rate limit/i.test(message)
+    ? 'rate-limit'
+    : /timeout|timed out|etimedout|abort/i.test(message)
+      ? 'timeout'
+      : 'error';
+  console.warn(`[llm-fallback] ${label}: ${model}`, error);
 }
 
 function extractTranslation(prompt: string): string | undefined {
@@ -93,7 +99,7 @@ function buildContextOnlyContent(prompt: string): string {
   const verses = parseVersesFromPrompt(prompt);
   const lines: string[] = [];
 
-  lines.push('AI inference temporarily limited – showing Scripture context only.');
+  lines.push('AI inference limited – raw Scripture only.');
   lines.push('');
 
   if (verses.length === 0) {
