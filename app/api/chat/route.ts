@@ -11,7 +11,7 @@ const PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const PRIMARY_MODEL_USED = `groq:${PRIMARY_MODEL}`;
 const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
 const HF_FALLBACK_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 const CACHE_MODEL_CANDIDATES = [
   PRIMARY_MODEL_USED,
   `groq:${GROQ_FALLBACK_MODEL}`,
