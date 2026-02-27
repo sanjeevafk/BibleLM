@@ -42,5 +42,3 @@ next-env.d.ts
 #local-files
 project-docs/
 datasets/
-data/opengnt
-data/opengnt-index.json

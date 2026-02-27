@@ -192,6 +192,7 @@ export async function POST(req: Request) {
     const rawTranslation =
       typeof translation === 'string' && translation.trim() ? translation : queryTranslation;
     const requestedTranslation = normalizeTranslation(rawTranslation);
+    console.log('Using translation:', requestedTranslation);
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
     const modelHistory = history.map((message) => ({
       role: message.role,
@@ -222,7 +223,7 @@ export async function POST(req: Request) {
     }
 
     if (cached?.response) {
-      console.log('Cache hit:', cachedKey);
+      console.log('Cache HIT – returning stored response', cachedKey);
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
       const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
       const finalFallback = cachedModelUsed === 'context-only';
@@ -250,7 +251,7 @@ export async function POST(req: Request) {
       model: PRIMARY_MODEL_USED,
       userKey: customApiKey
     });
-    console.log('Cache miss:', missKey);
+    console.log('Cache MISS – proceeding to LLM', missKey);
 
     // RAG Retrieval
     const verses = await retrieveContextForQuery(query, requestedTranslation, apiKey);

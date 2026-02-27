@@ -99,7 +99,7 @@ function buildContextOnlyContent(prompt: string): string {
   const verses = parseVersesFromPrompt(prompt);
   const lines: string[] = [];
 
-  lines.push('AI inference limited – raw Scripture only.');
+  lines.push('AI inference temporarily limited – showing Scripture context only.');
   lines.push('');
 
   if (verses.length === 0) {
