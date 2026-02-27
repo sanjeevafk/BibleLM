@@ -974,18 +974,23 @@ export async function retrieveContextForQuery(
   const directRefs = extractDirectReferences(query)
     .map((ref) => `${ref.book} ${ref.chapter}:${ref.verse}`);
   const orderedIds: string[] = [];
+  const seenIds = new Set<string>();
   for (const verseId of [...directRefs, ...hybridResults.map((result) => result.verseId)]) {
     const key = verseId.trim().toUpperCase();
-    if (!orderedIds.includes(key)) {
-      orderedIds.push(key);
-    }
+    if (seenIds.has(key)) continue;
+    seenIds.add(key);
+    orderedIds.push(key);
   }
   const limitedIds = orderedIds.slice(0, topK);
 
   let verses = await fetchVersesByIds(limitedIds, translation);
-  if (verses.length === 0) {
-    const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
-    verses = apiVerses;
+  if (verses.length < Math.min(limitedIds.length, topK)) {
+    try {
+      const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
+      verses = [...verses, ...apiVerses];
+    } catch (error) {
+      console.warn('API retrieval failed; continuing with available verses', error);
+    }
   }
 
   attachIndexedOriginals(verses);
