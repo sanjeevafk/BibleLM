@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
 import { createGroq } from '@ai-sdk/groq';
+import Fuse from 'fuse.js';
 import { Pool } from 'pg';
 import { fetchVerseHelloAO, fetchVerseFallback, fetchStrongsDefinition, VerseContext } from './bible-fetch';
 import { ensureDbReady, getDbPool } from './db';
@@ -10,6 +11,7 @@ import { redis } from './redis';
 import { getMorphhbWords } from './morphhb';
 import { getOpenHebrewBibleLayers, OpenHebrewVerseLayers } from './openhebrewbible';
 import { getOpenGNTLayers, OpenGntVerseLayers } from './opengnt';
+import { classifyAndExpand, type QueryDomain } from './query-utils';
 import { getTranslationVerse } from './translations';
 
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
@@ -32,6 +34,76 @@ const NT_BOOKS = new Set([
   '1PE', '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV'
 ]);
 const LOCAL_TRANSLATIONS = new Set(['KJV', 'WEB', 'ASV']);
+
+type VerseResult = VerseContext & { verseId: string };
+type VerseGenre = 'law' | 'historical' | 'poetic' | 'prophetic' | 'gospel' | 'epistle' | 'apocalyptic';
+type VerseMetadata = {
+  verseId: string;
+  testament: 'OT' | 'NT';
+  genre: VerseGenre;
+  themeTags: string[];
+};
+
+type LexicalDoc = {
+  verseId: string;
+  reference: string;
+  text: string;
+  translation: string;
+  original: VerseContext['original'];
+};
+
+const LEXICAL_DOCS: LexicalDoc[] = Object.values(BIBLE_INDEX).map((verse) => ({
+  verseId: verse.reference,
+  reference: verse.reference,
+  text: verse.text,
+  translation: verse.translation,
+  original: verse.original ? verse.original.map((orig) => ({ ...orig })) : []
+}));
+
+let lexicalFuse: Fuse<LexicalDoc> | null = null;
+let verseMetadataCache: Map<string, VerseMetadata> | null = null;
+let verseMetadataPromise: Promise<Map<string, VerseMetadata>> | null = null;
+
+function getLexicalFuse(): Fuse<LexicalDoc> {
+  if (!lexicalFuse) {
+    lexicalFuse = new Fuse(LEXICAL_DOCS, {
+      keys: ['text'],
+      includeScore: true,
+      threshold: 0.4,
+      minMatchCharLength: 3,
+      ignoreLocation: true
+    });
+  }
+  return lexicalFuse;
+}
+
+async function getVerseMetadata(): Promise<Map<string, VerseMetadata>> {
+  if (verseMetadataCache) return verseMetadataCache;
+  if (verseMetadataPromise) return verseMetadataPromise;
+  verseMetadataPromise = (async () => {
+    try {
+      const module = await import('../data/verse-metadata.json');
+      const data = (module.default ?? module) as VerseMetadata[];
+      const map = new Map<string, VerseMetadata>();
+      if (Array.isArray(data)) {
+        for (const entry of data) {
+          if (entry?.verseId) {
+            map.set(entry.verseId, entry);
+          }
+        }
+      }
+      verseMetadataCache = map;
+      return map;
+    } catch (error) {
+      console.warn('Verse metadata unavailable; boosting skipped', error);
+      verseMetadataCache = new Map();
+      return verseMetadataCache;
+    } finally {
+      verseMetadataPromise = null;
+    }
+  })();
+  return verseMetadataPromise;
+}
 
 /**
  * Interface for Topic Guard configuration to ensure high-signal retrieval
@@ -374,6 +446,18 @@ function dedupeVerses(verses: VerseContext[]): VerseContext[] {
   return deduped;
 }
 
+function dedupeByVerseId(verses: VerseContext[]): VerseContext[] {
+  const seen = new Set<string>();
+  const deduped: VerseContext[] = [];
+  for (const verse of verses) {
+    const key = verse.reference.trim().toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(verse);
+  }
+  return deduped;
+}
+
 function mergeLayerText(a?: string, b?: string): string | undefined {
   if (!a) return b;
   if (!b) return a;
@@ -585,6 +669,152 @@ async function vectorSearchVerses(
   }));
 }
 
+type RankedVerse = {
+  verseId: string;
+  verse: VerseContext;
+  rankLexical?: number;
+  rankSemantic?: number;
+  score: number;
+};
+
+const RRF_K = 60;
+const HYBRID_CANDIDATE_LIMIT = 30;
+const DEFAULT_HYBRID_TOPK = 12;
+const MAX_HYBRID_TOPK = 15;
+
+function clampTopK(topK?: number): number {
+  const desired = Number.isFinite(topK) ? Math.floor(topK as number) : DEFAULT_HYBRID_TOPK;
+  return Math.min(Math.max(desired, 1), MAX_HYBRID_TOPK);
+}
+
+async function semanticSearch(
+  query: string,
+  limit: number
+): Promise<Array<{ verseId: string; verse: VerseContext; rank: number }>> {
+  if (limit <= 0) return [];
+  let embedding: number[] | null = null;
+  try {
+    embedding = await embedQuery(query);
+  } catch (error) {
+    console.warn('Query embedding failed; semantic search skipped', error);
+    return [];
+  }
+
+  try {
+    await ensureDbReady();
+    const pool = getDbPool();
+    const rows = await vectorSearchVerses(pool, embedding, 'BSB', limit);
+    return rows.map((verse, index) => ({
+      verseId: verse.reference,
+      verse: {
+        ...verse,
+        original: verse.original ? verse.original.map((orig) => ({ ...orig })) : []
+      },
+      rank: index + 1
+    }));
+  } catch (error) {
+    console.warn('Semantic vector search failed', error);
+    return [];
+  }
+}
+
+function cloneLexicalVerse(doc: LexicalDoc): VerseContext {
+  return {
+    reference: doc.reference,
+    translation: doc.translation,
+    text: doc.text,
+    original: doc.original ? doc.original.map((orig) => ({ ...orig })) : []
+  };
+}
+
+async function applyMetadataBoosts(scored: RankedVerse[], domain: QueryDomain): Promise<RankedVerse[]> {
+  if (domain === 'general' || scored.length === 0) return scored;
+
+  const metadata = await getVerseMetadata();
+  if (metadata.size === 0) return scored;
+
+  return scored.map((hit) => {
+    const meta = metadata.get(hit.verseId);
+    if (!meta) return hit;
+
+    let multiplier = 1;
+    if (domain === 'messianic') {
+      if (meta.genre === 'prophetic') multiplier *= 1.3;
+      if (meta.testament === 'OT') multiplier *= 1.15;
+      if (meta.themeTags.includes('messianic')) multiplier *= 1.4;
+    } else if (domain === 'covenants') {
+      if (meta.genre === 'law') multiplier *= 1.2;
+      if (meta.genre === 'epistle') multiplier *= 1.15;
+    } else if (domain === 'eschatology') {
+      if (meta.genre === 'apocalyptic') multiplier *= 1.3;
+      if (meta.genre === 'prophetic') multiplier *= 1.2;
+    }
+
+    if (multiplier === 1) return hit;
+    return { ...hit, score: hit.score * multiplier };
+  });
+}
+
+async function hybridSearch(query: string, options?: { topK?: number }): Promise<VerseResult[]>;
+async function hybridSearch(
+  query: string,
+  options?: { topK?: number; domain?: QueryDomain }
+): Promise<VerseResult[]> {
+  const topK = clampTopK(options?.topK);
+
+  const fuse = getLexicalFuse();
+  const lexicalHits = fuse.search(query, { limit: HYBRID_CANDIDATE_LIMIT });
+  const lexicalRanks = new Map<string, number>();
+  const verseById = new Map<string, VerseContext>();
+
+  lexicalHits.forEach((hit, index) => {
+    const verseId = hit.item.verseId;
+    if (!lexicalRanks.has(verseId)) {
+      lexicalRanks.set(verseId, index + 1);
+    }
+    if (!verseById.has(verseId)) {
+      verseById.set(verseId, cloneLexicalVerse(hit.item));
+    }
+  });
+
+  const semanticHits = await semanticSearch(query, HYBRID_CANDIDATE_LIMIT);
+  const semanticRanks = new Map<string, number>();
+  for (const hit of semanticHits) {
+    semanticRanks.set(hit.verseId, hit.rank);
+    verseById.set(hit.verseId, hit.verse);
+  }
+
+  const scored: RankedVerse[] = [];
+  for (const [verseId, verse] of verseById.entries()) {
+    const rankLexical = lexicalRanks.get(verseId);
+    const rankSemantic = semanticRanks.get(verseId);
+    let score = 0;
+    if (typeof rankLexical === 'number') {
+      score += 1 / (RRF_K + rankLexical);
+    }
+    if (typeof rankSemantic === 'number') {
+      score += 1 / (RRF_K + rankSemantic);
+    }
+    scored.push({
+      verseId,
+      verse,
+      rankLexical,
+      rankSemantic,
+      score
+    });
+  }
+
+  if (scored.length === 0) return [];
+
+  const boosted = options?.domain ? await applyMetadataBoosts(scored, options.domain) : scored;
+  boosted.sort((a, b) => b.score - a.score);
+
+  return boosted.slice(0, topK).map((hit) => ({
+    ...hit.verse,
+    verseId: hit.verseId
+  }));
+}
+
 /**
  * Retrieves highly-voted cross-references (TSK) for the given primary verses.
  * Limits to 3 total unique cross-references with more than 10 votes.
@@ -678,40 +908,19 @@ export async function retrieveContextForQuery(
   const cacheKey = `context:${CONTEXT_CACHE_VERSION}:${translation}:${query.trim().toLowerCase()}`;
   const cached = await getCached<VerseContext[]>(cacheKey);
   if (cached) {
-    return cloneVerses(normalizeVerses(cached));
+    return cloneVerses(dedupeByVerseId(cached));
   }
 
-  let verses: VerseContext[] = [];
-  let usedDb = false;
-  let dbError: unknown;
-  const dbTranslation = LOCAL_TRANSLATIONS.has(translation) ? 'BSB' : translation;
+  const { domain, expandedQuery } = classifyAndExpand(query);
+  const hybridResults = await hybridSearch(expandedQuery, { topK: DEFAULT_HYBRID_TOPK, domain });
+  const verses = hybridResults.map(({ verseId, ...verse }) => verse);
 
-  try {
-    verses = await retrieveContextFromDb(query, dbTranslation);
-    usedDb = true;
-  } catch (error) {
-    console.error('DB Context Retrieval CRITICAL ERROR:', error);
-    dbError = error;
-  }
-
-  if (!usedDb) {
-    if (dbError) {
-      console.warn('DB retrieval failed, falling back to API retrieval', dbError);
-    } else if (!usedDb) {
-      console.warn('DB retrieval unavailable, falling back to API retrieval');
-    }
-    const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
-    const translated = await applyTranslationOverride(apiVerses, translation);
-    const normalized = normalizeVerses(translated);
-    await setCached(cacheKey, normalized);
-    return cloneVerses(normalized);
-  }
-
+  attachIndexedOriginals(verses);
   const enriched = await enrichOriginalLanguages(verses);
   const translated = await applyTranslationOverride(enriched, translation);
-  const normalized = normalizeVerses(translated);
-  await setCached(cacheKey, normalized);
-  return cloneVerses(normalized);
+  const deduped = dedupeByVerseId(translated);
+  await setCached(cacheKey, deduped);
+  return cloneVerses(deduped);
 }
 
 async function retrieveContextFromDb(
