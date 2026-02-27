@@ -4,6 +4,7 @@ import { retrieveContextForQuery } from '@/lib/retrieval';
 import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
 import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache';
 import { generateWithFallback } from '@/lib/llm-fallback';
+import { validateDataIntegrity } from '@/lib/validate-data';
 
 // export const runtime = 'edge';
 
@@ -19,6 +20,7 @@ const CACHE_MODEL_CANDIDATES = [
   `gemini:${GEMINI_MODEL}`,
   'context-only',
 ];
+const dataValidationPromise = validateDataIntegrity();
 
 function normalizeModelId(modelUsed: string | undefined): string {
   if (!modelUsed) return PRIMARY_MODEL_USED;
@@ -114,6 +116,7 @@ async function streamTextFromContent(text: string, messages: Array<{ role: strin
 
 export async function POST(req: Request) {
   try {
+    await dataValidationPromise;
     const { messages, translation, customApiKey } = await req.json();
     const baseUrl =
       req.headers.get('origin') ||
