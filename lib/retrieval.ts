@@ -35,7 +35,7 @@ const NT_BOOKS = new Set([
 ]);
 const LOCAL_TRANSLATIONS = new Set(['KJV', 'WEB', 'ASV']);
 
-type VerseResult = VerseContext & { verseId: string };
+type VerseResult = { verseId: string };
 type VerseGenre = 'law' | 'historical' | 'poetic' | 'prophetic' | 'gospel' | 'epistle' | 'apocalyptic';
 type VerseMetadata = {
   verseId: string;
@@ -46,18 +46,12 @@ type VerseMetadata = {
 
 type LexicalDoc = {
   verseId: string;
-  reference: string;
   text: string;
-  translation: string;
-  original: VerseContext['original'];
 };
 
 const LEXICAL_DOCS: LexicalDoc[] = Object.values(BIBLE_INDEX).map((verse) => ({
   verseId: verse.reference,
-  reference: verse.reference,
-  text: verse.text,
-  translation: verse.translation,
-  original: verse.original ? verse.original.map((orig) => ({ ...orig })) : []
+  text: verse.text
 }));
 
 let lexicalFuse: Fuse<LexicalDoc> | null = null;
@@ -458,6 +452,88 @@ function dedupeByVerseId(verses: VerseContext[]): VerseContext[] {
   return deduped;
 }
 
+function parseReferenceKey(reference: string): { book: string; chapter: number; verse: number } | null {
+  const match = reference.trim().match(/^([A-Z0-9]{3})\s+(\d+):(\d+)/i);
+  if (!match) return null;
+  return {
+    book: match[1].toUpperCase(),
+    chapter: Number.parseInt(match[2], 10),
+    verse: Number.parseInt(match[3], 10)
+  };
+}
+
+async function resolveVerseText(
+  verseId: string,
+  translation: string
+): Promise<VerseContext | null> {
+  const canUseIndex = translation === 'WEB' || LOCAL_TRANSLATIONS.has(translation);
+  if (LOCAL_TRANSLATIONS.has(translation)) {
+    const localText = await getTranslationVerse(verseId, translation);
+    if (localText) {
+      return { reference: verseId, translation, text: localText, original: [] };
+    }
+  }
+
+  if (canUseIndex) {
+    const indexed = BIBLE_INDEX[verseId];
+    if (indexed?.text) {
+      return {
+        reference: verseId,
+        translation: 'WEB',
+        text: indexed.text,
+        original: indexed.original ? indexed.original.map((orig) => ({ ...orig })) : []
+      };
+    }
+  }
+
+  const parsed = parseReferenceKey(verseId);
+  if (parsed) {
+    const fetched = await fetchVerseHelloAO(translation, parsed.book, parsed.chapter, parsed.verse)
+      || await fetchVerseFallback(verseId, translation);
+    if (fetched) {
+      return { reference: verseId, translation, text: fetched, original: [] };
+    }
+  }
+
+  return null;
+}
+
+async function fetchVersesByIds(
+  verseIds: string[],
+  translation: string
+): Promise<VerseContext[]> {
+  if (verseIds.length === 0) return [];
+
+  const refs = verseIds
+    .map((id) => parseReferenceKey(id))
+    .filter((ref): ref is { book: string; chapter: number; verse: number } => Boolean(ref));
+
+  const byId = new Map<string, VerseContext>();
+
+  if (refs.length > 0) {
+    try {
+      await ensureDbReady();
+      const pool = getDbPool();
+      const rows = await fetchVersesByRefs(pool, refs, translation);
+      for (const row of rows) {
+        byId.set(row.reference, row);
+      }
+    } catch (error) {
+      console.warn('DB verse fetch failed; falling back to local/API', error);
+    }
+  }
+
+  for (const verseId of verseIds) {
+    if (byId.has(verseId)) continue;
+    const resolved = await resolveVerseText(verseId, translation);
+    if (resolved) {
+      byId.set(verseId, resolved);
+    }
+  }
+
+  return verseIds.map((id) => byId.get(id)).filter((v): v is VerseContext => Boolean(v));
+}
+
 function mergeLayerText(a?: string, b?: string): string | undefined {
   if (!a) return b;
   if (!b) return a;
@@ -680,17 +756,19 @@ type RankedVerse = {
 const RRF_K = 60;
 const HYBRID_CANDIDATE_LIMIT = 30;
 const DEFAULT_HYBRID_TOPK = 12;
+const MIN_HYBRID_TOPK = 10;
 const MAX_HYBRID_TOPK = 15;
 
 function clampTopK(topK?: number): number {
   const desired = Number.isFinite(topK) ? Math.floor(topK as number) : DEFAULT_HYBRID_TOPK;
-  return Math.min(Math.max(desired, 1), MAX_HYBRID_TOPK);
+  return Math.min(Math.max(desired, MIN_HYBRID_TOPK), MAX_HYBRID_TOPK);
 }
 
 async function semanticSearch(
   query: string,
+  translation: string,
   limit: number
-): Promise<Array<{ verseId: string; verse: VerseContext; rank: number }>> {
+): Promise<Array<{ verseId: string; rank: number }>> {
   if (limit <= 0) return [];
   let embedding: number[] | null = null;
   try {
@@ -703,28 +781,12 @@ async function semanticSearch(
   try {
     await ensureDbReady();
     const pool = getDbPool();
-    const rows = await vectorSearchVerses(pool, embedding, 'BSB', limit);
-    return rows.map((verse, index) => ({
-      verseId: verse.reference,
-      verse: {
-        ...verse,
-        original: verse.original ? verse.original.map((orig) => ({ ...orig })) : []
-      },
-      rank: index + 1
-    }));
+    const rows = await vectorSearchVerses(pool, embedding, translation, limit);
+    return rows.map((verse, index) => ({ verseId: verse.reference, rank: index + 1 }));
   } catch (error) {
     console.warn('Semantic vector search failed', error);
     return [];
   }
-}
-
-function cloneLexicalVerse(doc: LexicalDoc): VerseContext {
-  return {
-    reference: doc.reference,
-    translation: doc.translation,
-    text: doc.text,
-    original: doc.original ? doc.original.map((orig) => ({ ...orig })) : []
-  };
 }
 
 async function applyMetadataBoosts(scored: RankedVerse[], domain: QueryDomain): Promise<RankedVerse[]> {
@@ -758,14 +820,15 @@ async function applyMetadataBoosts(scored: RankedVerse[], domain: QueryDomain): 
 async function hybridSearch(query: string, options?: { topK?: number }): Promise<VerseResult[]>;
 async function hybridSearch(
   query: string,
-  options?: { topK?: number; domain?: QueryDomain }
+  options?: { topK?: number; domain?: QueryDomain; translation?: string }
 ): Promise<VerseResult[]> {
   const topK = clampTopK(options?.topK);
+  const translation = options?.translation || 'BSB';
 
   const fuse = getLexicalFuse();
   const lexicalHits = fuse.search(query, { limit: HYBRID_CANDIDATE_LIMIT });
   const lexicalRanks = new Map<string, number>();
-  const verseById = new Map<string, VerseContext>();
+  const verseById = new Map<string, VerseResult>();
 
   lexicalHits.forEach((hit, index) => {
     const verseId = hit.item.verseId;
@@ -773,19 +836,21 @@ async function hybridSearch(
       lexicalRanks.set(verseId, index + 1);
     }
     if (!verseById.has(verseId)) {
-      verseById.set(verseId, cloneLexicalVerse(hit.item));
+      verseById.set(verseId, { verseId });
     }
   });
 
-  const semanticHits = await semanticSearch(query, HYBRID_CANDIDATE_LIMIT);
+  const semanticHits = await semanticSearch(query, translation, HYBRID_CANDIDATE_LIMIT);
   const semanticRanks = new Map<string, number>();
   for (const hit of semanticHits) {
     semanticRanks.set(hit.verseId, hit.rank);
-    verseById.set(hit.verseId, hit.verse);
+    if (!verseById.has(hit.verseId)) {
+      verseById.set(hit.verseId, { verseId: hit.verseId });
+    }
   }
 
   const scored: RankedVerse[] = [];
-  for (const [verseId, verse] of verseById.entries()) {
+  for (const [verseId] of verseById.entries()) {
     const rankLexical = lexicalRanks.get(verseId);
     const rankSemantic = semanticRanks.get(verseId);
     let score = 0;
@@ -797,7 +862,7 @@ async function hybridSearch(
     }
     scored.push({
       verseId,
-      verse,
+      verse: { reference: verseId, translation, text: '', original: [] },
       rankLexical,
       rankSemantic,
       score
@@ -809,10 +874,7 @@ async function hybridSearch(
   const boosted = options?.domain ? await applyMetadataBoosts(scored, options.domain) : scored;
   boosted.sort((a, b) => b.score - a.score);
 
-  return boosted.slice(0, topK).map((hit) => ({
-    ...hit.verse,
-    verseId: hit.verseId
-  }));
+  return boosted.slice(0, topK).map((hit) => ({ verseId: hit.verseId }));
 }
 
 /**
@@ -825,16 +887,6 @@ async function getTskCrossReferences(
   translation: string
 ): Promise<VerseContext[]> {
   if (primaryVerses.length === 0) return [];
-
-  const parseReferenceKey = (reference: string) => {
-    const match = reference.trim().match(/^([A-Z0-9]{3})\s+(\d+):(\d+)/i);
-    if (!match) return null;
-    return {
-      book: match[1].toUpperCase(),
-      chapter: Number.parseInt(match[2], 10),
-      verse: Number.parseInt(match[3], 10)
-    };
-  };
 
   // 1. Extract book, chapter, verse from primary verses
   const refs = primaryVerses
@@ -908,19 +960,41 @@ export async function retrieveContextForQuery(
   const cacheKey = `context:${CONTEXT_CACHE_VERSION}:${translation}:${query.trim().toLowerCase()}`;
   const cached = await getCached<VerseContext[]>(cacheKey);
   if (cached) {
-    return cloneVerses(dedupeByVerseId(cached));
+    return cloneVerses(normalizeVerses(dedupeByVerseId(cached)));
   }
 
+  const topK = clampTopK();
   const { domain, expandedQuery } = classifyAndExpand(query);
-  const hybridResults = await hybridSearch(expandedQuery, { topK: DEFAULT_HYBRID_TOPK, domain });
-  const verses = hybridResults.map(({ verseId, ...verse }) => verse);
+  const hybridResults = await hybridSearch(expandedQuery, {
+    topK,
+    domain,
+    translation
+  });
+
+  const directRefs = extractDirectReferences(query)
+    .map((ref) => `${ref.book} ${ref.chapter}:${ref.verse}`);
+  const orderedIds: string[] = [];
+  for (const verseId of [...directRefs, ...hybridResults.map((result) => result.verseId)]) {
+    const key = verseId.trim().toUpperCase();
+    if (!orderedIds.includes(key)) {
+      orderedIds.push(key);
+    }
+  }
+  const limitedIds = orderedIds.slice(0, topK);
+
+  let verses = await fetchVersesByIds(limitedIds, translation);
+  if (verses.length === 0) {
+    const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
+    verses = apiVerses;
+  }
 
   attachIndexedOriginals(verses);
   const enriched = await enrichOriginalLanguages(verses);
   const translated = await applyTranslationOverride(enriched, translation);
   const deduped = dedupeByVerseId(translated);
-  await setCached(cacheKey, deduped);
-  return cloneVerses(deduped);
+  const normalized = normalizeVerses(deduped).slice(0, topK);
+  await setCached(cacheKey, normalized);
+  return cloneVerses(normalized);
 }
 
 async function retrieveContextFromDb(
