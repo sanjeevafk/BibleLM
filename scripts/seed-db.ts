@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
-import * as xlsx from 'xlsx';
 import { Pool } from 'pg';
 
 dotenv.config({ path: path.join(process.cwd(), '.env.local') });
@@ -33,7 +32,9 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_EMBEDDING_MODEL = process.env.GROQ_EMBEDDING_MODEL;
 const EMBEDDING_DIM = Number.parseInt(process.env.EMBEDDING_DIM || '', 10);
 
-const BSB_XLSX_PATH = process.env.BSB_XLSX_PATH || path.join(process.cwd(), 'bereanstandardbible.xlsx');
+const BSB_JSON_PATH =
+  process.env.BSB_JSON_PATH ||
+  path.join(process.cwd(), 'datasets', 'bible_databases', 'formats', 'json', 'BSB.json');
 const TSK_PATH =
   process.env.TSK_PATH || path.join(process.cwd(), 'datasets', 'cross_references.txt');
 const STRONGS_GREEK_PATH =
@@ -304,59 +305,47 @@ function extractVerseRow(row: Record<string, unknown>, translation: string): Ver
   return null;
 }
 
+type BsbJson = {
+  translation?: string;
+  books?: Array<{
+    name?: string;
+    chapters?: Array<{
+      chapter?: number;
+      verses?: Array<{
+        verse?: number;
+        text?: string;
+      }>;
+    }>;
+  }>;
+};
+
 async function loadBsbVerses(): Promise<VerseRow[]> {
-  if (!fs.existsSync(BSB_XLSX_PATH)) {
-    throw new Error(`BSB file not found at ${BSB_XLSX_PATH}`);
-  }
-  const workbook = xlsx.readFile(BSB_XLSX_PATH, { cellDates: false });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) {
-    throw new Error('No sheets found in BSB workbook');
+  if (!fs.existsSync(BSB_JSON_PATH)) {
+    throw new Error(`BSB file not found at ${BSB_JSON_PATH}`);
   }
 
-  const rows = xlsx.utils.sheet_to_json<unknown[]>(sheet, {
-    defval: '',
-    header: 1
-  });
-
+  const raw = fs.readFileSync(BSB_JSON_PATH, 'utf8');
+  const data = JSON.parse(raw) as BsbJson;
   const verses: VerseRow[] = [];
-  let skippedEmpty = 0;
-  let skippedRegex = 0;
 
-  for (let rowIndex = 3; rowIndex < rows.length; rowIndex += 1) {
-    const rawRow = rows[rowIndex];
-    const row = Array.isArray(rawRow) ? rawRow : [];
-    const verseRef = String(row[1] ?? '')
-      .trim()
-      .replace(/\u00A0/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const text = String(row[2] ?? '').trim();
-
-    if (!verseRef || !text) {
-      skippedEmpty += 1;
-      continue;
+  for (const book of data.books ?? []) {
+    if (!book?.name) continue;
+    const bookCode = normalizeBook(book.name);
+    for (const chapter of book.chapters ?? []) {
+      const chapterNum = chapter?.chapter;
+      if (!chapterNum) continue;
+      for (const verse of chapter.verses ?? []) {
+        if (!verse?.verse || !verse.text) continue;
+        verses.push({
+          book: bookCode,
+          chapter: chapterNum,
+          verse: verse.verse,
+          text: verse.text.trim(),
+          translation: 'BSB'
+        });
+      }
     }
-
-    const match = verseRef.match(/^(.+?)\s*(\d+):(\d+)$/);
-    if (!match) {
-      skippedRegex += 1;
-      continue;
-    }
-
-    verses.push({
-      book: normalizeBook(match[1]),
-      chapter: Number.parseInt(match[2], 10),
-      verse: Number.parseInt(match[3], 10),
-      text,
-      translation: 'BSB'
-    });
   }
-
-  console.info(
-    `BSB parse debug: skipped ${skippedEmpty} empty rows, ${skippedRegex} regex failures.`
-  );
 
   if (verses.length !== 31102) {
     console.warn(`Warning: Expected 31102 verses, but parsed ${verses.length}.`);
