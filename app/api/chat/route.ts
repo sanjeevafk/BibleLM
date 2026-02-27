@@ -2,7 +2,7 @@ import { simulateReadableStream, streamText } from 'ai';
 import type { UIMessage } from 'ai';
 import { retrieveContextForQuery } from '@/lib/retrieval';
 import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
-import { getCachedResponse, setCachedResponse } from '@/lib/cache';
+import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache';
 import { generateWithFallback } from '@/lib/llm-fallback';
 
 // export const runtime = 'edge';
@@ -197,7 +197,14 @@ export async function POST(req: Request) {
 
     let cached = null as Awaited<ReturnType<typeof getCachedResponse>>;
     let cachedModelKey: string | null = null;
+    let cachedKey: string | null = null;
     for (const modelKey of CACHE_MODEL_CANDIDATES) {
+      const cacheKey = buildCacheKey({
+        query,
+        translation: requestedTranslation,
+        model: modelKey,
+        userKey: customApiKey
+      });
       cached = await getCachedResponse({
         query,
         translation: requestedTranslation,
@@ -206,22 +213,19 @@ export async function POST(req: Request) {
       });
       if (cached?.response) {
         cachedModelKey = modelKey;
+        cachedKey = cacheKey;
         break;
       }
     }
 
     if (cached?.response) {
-      console.info('[cache] hit', {
-        query,
-        translation: requestedTranslation,
-        model: cachedModelKey || PRIMARY_MODEL_USED
-      });
+      console.log('Cache hit:', cachedKey);
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
       const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
       const finalFallback = cachedModelUsed === 'context-only';
 
       const cachedResult = await streamTextFromContent(cached.response, [
-        { role: 'system', content: cached.finalPrompt },
+        { role: 'system', content: cached.prompt },
         ...modelHistory,
         { role: 'user', content: query }
       ] as Array<{ role: string; content: string }>);
@@ -237,7 +241,13 @@ export async function POST(req: Request) {
       });
     }
 
-    console.info('[cache] miss', { query, translation: requestedTranslation });
+    const missKey = buildCacheKey({
+      query,
+      translation: requestedTranslation,
+      model: PRIMARY_MODEL_USED,
+      userKey: customApiKey
+    });
+    console.log('Cache miss:', missKey);
 
     // RAG Retrieval
     const verses = await retrieveContextForQuery(query, requestedTranslation, apiKey);
@@ -282,7 +292,7 @@ export async function POST(req: Request) {
           {
             verses,
             context,
-            finalPrompt,
+            prompt: finalPrompt,
             response: text,
             modelUsed: normalizedModelUsed
           }
