@@ -20,7 +20,7 @@ const DOMAIN_RULES: DomainRule[] = [
   },
   {
     domain: 'typology',
-    keywords: ['type', 'shadow', 'foreshadow', 'typology']
+    keywords: ['typology', 'shadow', 'foreshadow', 'antitype', 'prefigure']
   }
 ];
 
@@ -56,7 +56,7 @@ export function classifyAndExpand(query: string): { domain: QueryDomain; expande
 
   const expansions = EXPANSION_MAP[domain] ?? [];
   const additions = expansions.filter((term) => !normalized.includes(term.toLowerCase()));
-  const expandedQuery = additions.length > 0 ? `${query} ${additions.join(' ')}` : query;
+  const expandedQuery = additions.length > 0 ? `${query} ${additions.join(' ')}`.trim() : query;
 
   return { domain, expandedQuery };
 }
