@@ -817,7 +817,6 @@ async function applyMetadataBoosts(scored: RankedVerse[], domain: QueryDomain): 
   });
 }
 
-async function hybridSearch(query: string, options?: { topK?: number }): Promise<VerseResult[]>;
 async function hybridSearch(
   query: string,
   options?: { topK?: number; domain?: QueryDomain; translation?: string }
