@@ -1,0 +1,78 @@
+name: "CodeQL Security & Quality Scan"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'lib/**'
+      - 'app/**'
+      - 'scripts/**'
+      - 'components/**'
+      - 'package.json'
+      - 'tsconfig.json'
+  schedule:
+    - cron: '40 23 * * 5'   # Every Friday at 23:40 UTC
+
+jobs:
+  analyze:
+    name: Analyze (TypeScript/JavaScript)
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write      # Required for uploading results
+      packages: read              # For fetching CodeQL packs
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript-typescript' ]
+        build-mode: [ 'none' ]      # No auto-build needed for Next.js
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Optional: Setup Node.js (only if you need to run custom scripts before analysis)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Optional: Install dependencies if your CodeQL needs them (e.g. for custom analysis)
+      - name: Install dependencies
+        run: npm ci --ignore-scripts   # --ignore-scripts skips post-install hooks
+
+      # Optional manual build step (uncomment only if CodeQL needs compiled output)
+      # - name: Build project (if needed)
+      #   run: npm run build
+      #   if: matrix.build-mode == 'manual'
+
+      # Initialize CodeQL
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3   # v3 is current stable as of Feb 2026
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended,security-and-quality   # Most comprehensive free packs
+
+      # Perform the analysis
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+      # Optional: Upload artifact with results for manual review
+      - name: Upload CodeQL results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-results-${{ matrix.language }}
+          path: |
+            codeql-database-*/
+            results-*/
+          retention-days: 7
