@@ -345,6 +345,93 @@ function cloneVerses(verses: VerseContext[]): VerseContext[] {
   }));
 }
 
+type ParsedReference = {
+  book: string;
+  chapter: number;
+  verseStart: number;
+  verseEnd: number;
+};
+
+function parseReferenceRange(reference: string): ParsedReference | null {
+  const match = reference.match(/^([1-3]?[A-Z]{2,3})\s+(\d+):(\d+)(?:[-–](\d+))?$/i);
+  if (!match) return null;
+  const [, book, chapter, verseStart, verseEnd] = match;
+  const start = Number.parseInt(verseStart, 10);
+  const end = Number.parseInt(verseEnd || verseStart, 10);
+  if (!book || Number.isNaN(start) || Number.isNaN(end)) return null;
+  return { book: book.toUpperCase(), chapter: Number.parseInt(chapter, 10), verseStart: start, verseEnd: end };
+}
+
+function dedupeVerses(verses: VerseContext[]): VerseContext[] {
+  const seen = new Set<string>();
+  const deduped: VerseContext[] = [];
+  for (const verse of verses) {
+    const key = `${verse.reference}|${verse.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(verse);
+  }
+  return deduped;
+}
+
+function mergeLayerText(a?: string, b?: string): string | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.includes(b)) return a;
+  if (b.includes(a)) return b;
+  return `${a}\n${b}`;
+}
+
+function groupSequentialVerses(verses: VerseContext[]): VerseContext[] {
+  const grouped: VerseContext[] = [];
+  let current: VerseContext | null = null;
+  let currentRef: ParsedReference | null = null;
+
+  const pushCurrent = () => {
+    if (current) grouped.push(current);
+  };
+
+  for (const verse of verses) {
+    const parsed = parseReferenceRange(verse.reference);
+    if (!current || !currentRef || !parsed) {
+      pushCurrent();
+      current = { ...verse, original: verse.original ? [...verse.original] : [] };
+      currentRef = parsed;
+      continue;
+    }
+
+    const canMerge =
+      parsed.book === currentRef.book &&
+      parsed.chapter === currentRef.chapter &&
+      parsed.verseStart === currentRef.verseEnd + 1 &&
+      verse.translation === current.translation &&
+      Boolean(verse.isCrossReference) === Boolean(current.isCrossReference);
+
+    if (canMerge) {
+      currentRef.verseEnd = parsed.verseEnd;
+      current.reference = `${currentRef.book} ${currentRef.chapter}:${currentRef.verseStart}-${currentRef.verseEnd}`;
+      current.text = `${current.text} ${verse.text}`.replace(/\s+/g, ' ').trim();
+      current.original = [
+        ...(current.original || []),
+        ...(verse.original || [])
+      ];
+      current.openHebrew = mergeLayerText(current.openHebrew, verse.openHebrew);
+      current.openGnt = mergeLayerText(current.openGnt, verse.openGnt);
+    } else {
+      pushCurrent();
+      current = { ...verse, original: verse.original ? [...verse.original] : [] };
+      currentRef = parsed;
+    }
+  }
+
+  pushCurrent();
+  return grouped;
+}
+
+function normalizeVerses(verses: VerseContext[]): VerseContext[] {
+  return groupSequentialVerses(dedupeVerses(verses));
+}
+
 async function applyTranslationOverride(verses: VerseContext[], translation: string): Promise<VerseContext[]> {
   if (!LOCAL_TRANSLATIONS.has(translation)) {
     return verses;
@@ -591,7 +678,7 @@ export async function retrieveContextForQuery(
   const cacheKey = `context:${CONTEXT_CACHE_VERSION}:${translation}:${query.trim().toLowerCase()}`;
   const cached = await getCached<VerseContext[]>(cacheKey);
   if (cached) {
-    return cloneVerses(cached);
+    return cloneVerses(normalizeVerses(cached));
   }
 
   let verses: VerseContext[] = [];
@@ -615,14 +702,16 @@ export async function retrieveContextForQuery(
     }
     const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
     const translated = await applyTranslationOverride(apiVerses, translation);
-    await setCached(cacheKey, translated);
-    return cloneVerses(translated);
+    const normalized = normalizeVerses(translated);
+    await setCached(cacheKey, normalized);
+    return cloneVerses(normalized);
   }
 
   const enriched = await enrichOriginalLanguages(verses);
   const translated = await applyTranslationOverride(enriched, translation);
-  await setCached(cacheKey, translated);
-  return cloneVerses(translated);
+  const normalized = normalizeVerses(translated);
+  await setCached(cacheKey, normalized);
+  return cloneVerses(normalized);
 }
 
 async function retrieveContextFromDb(
