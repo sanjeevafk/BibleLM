@@ -18,7 +18,8 @@ const gunzip = promisify(zlib.gunzip);
 const TRANSLATION_ALIASES: Record<string, string> = {
   BSB: 'BSB',
   KJV: 'KJV',
-  WEB: 'WEB',
+  WEB: 'WEB',  // kept as alias; no WEB data in bible_databases — falls through to null gracefully
+  NHEB: 'NHEB',
   ASV: 'ASV'
 };
 

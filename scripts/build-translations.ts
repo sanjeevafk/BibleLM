@@ -6,14 +6,14 @@ import readline from 'readline';
 
 type TranslationBook = Record<string, Record<string, string>>;
 
-const SOURCE_DIR = path.join(process.cwd(), '..', 'datasets', 'scrollmapper', 'formats', 'csv');
+const SOURCE_DIR = path.join(process.cwd(), 'datasets', 'bible_databases', 'formats', 'csv');
 const OUTPUT_DIR = path.join(process.cwd(), 'data', 'translations');
 const INDEX_PATH = path.join(process.cwd(), 'data', 'translations-index.json');
 const HASH_PATH = path.join(OUTPUT_DIR, '.translations.hash');
 
 const TRANSLATION_FILES = [
   { code: 'KJV', file: 'KJV.csv' },
-  { code: 'WEB', file: 'WEB.csv' },
+  { code: 'NHEB', file: 'NHEB.csv' },
   { code: 'ASV', file: 'ASV.csv' }
 ];
 
@@ -108,6 +108,25 @@ const BOOK_ALIASES: Record<string, string> = {
   judges: 'JDG',
   rut: 'RUT',
   ruth: 'RUT',
+  // Roman-numeral prefixed forms used by bible_databases CSVs (e.g. "I Samuel", "II Kings")
+  isamuel: '1SA',
+  iisamuel: '2SA',
+  ikings: '1KI',
+  iikings: '2KI',
+  ichronicles: '1CH',
+  iichronicles: '2CH',
+  icorinthians: '1CO',
+  iicorinthians: '2CO',
+  ithessalonians: '1TH',
+  iithessalonians: '2TH',
+  itimothy: '1TI',
+  iitimothy: '2TI',
+  ipeter: '1PE',
+  iipeter: '2PE',
+  ijohn: '1JN',
+  iijohn: '2JN',
+  iiijohn: '3JN',
+  revelationofjohn: 'REV',
   '1sa': '1SA',
   '1sam': '1SA',
   '1samuel': '1SA',
@@ -468,11 +487,11 @@ async function main() {
       console.log('Translations source not present; using committed outputs.');
       return;
     }
-    console.warn(
-      `Translations source not found at ${SOURCE_DIR}. ` +
-        'Skipping generation; commit data/translations outputs or provide sources.'
+    throw new Error(
+      `Translations source not found at:\n  ${SOURCE_DIR}\n\n` +
+      `Expected KJV.csv, WEB.csv, ASV.csv inside that directory.\n` +
+      `Make sure the bible_databases dataset is cloned into datasets/bible_databases/.`
     );
-    return;
   }
 
   const hash = crypto.createHash('sha256');
