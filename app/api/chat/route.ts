@@ -5,6 +5,7 @@ import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
 import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache';
 import { generateWithFallback } from '@/lib/llm-fallback';
 import { validateDataIntegrity } from '@/lib/validate-data';
+import type { VerseContext } from '@/lib/bible-fetch';
 
 // export const runtime = 'edge';
 
@@ -25,6 +26,12 @@ const CACHE_MODEL_CANDIDATES = [
   'context-only',
 ];
 const dataValidationPromise = validateDataIntegrity();
+
+type NormalizedChatResponse = {
+  content: string;
+  modelUsed: string;
+  verses: VerseContext[];
+};
 
 function normalizeModelId(modelUsed: string | undefined): string {
   if (!modelUsed) return PRIMARY_MODEL_USED;
@@ -104,6 +111,87 @@ function ensureFallbackBanner(
     return content;
   }
   return `${banner}\n\n${content}`;
+}
+
+function normalizeOriginalKeywordLine(line: string): string {
+  const match = line.match(/^(\s*[-*]\s+)(.+)$/);
+  if (!match) {
+    return line;
+  }
+
+  const prefix = match[1];
+  const body = match[2].trim();
+  if (!body || body.startsWith('`') || body.startsWith('```')) {
+    return line;
+  }
+
+  const wordWithMetaMatch = body.match(/^(\[?[^\(\]]+\]?)(\s*\(.*\))$/);
+  if (wordWithMetaMatch) {
+    const word = wordWithMetaMatch[1].replace(/^\[|\]$/g, '').trim();
+    const rest = wordWithMetaMatch[2].trim();
+    return `${prefix}\`${word}\` ${rest}`;
+  }
+
+  const compactMatch = body.match(/^([^\s,;:]+)(.*)$/);
+  if (!compactMatch) {
+    return line;
+  }
+
+  const word = compactMatch[1].replace(/^\[|\]$/g, '').trim();
+  const rest = compactMatch[2] || '';
+  return `${prefix}\`${word}\`${rest}`;
+}
+
+function normalizeResponseContent(content: string, verses: VerseContext[]): string {
+  if (!content || !content.trim()) {
+    return content;
+  }
+
+  let normalized = content.replace(/\r\n/g, '\n').trim();
+
+  normalized = normalized
+    .replace(/^\s*[-*]?\s*Reference\s*:\s*(.+)$/gim, (_match, ref) => `- **${String(ref).trim()}**`)
+    .replace(/^\s*[-*]?\s*Ref(?:erence)?\s*-\s*(.+)$/gim, (_match, ref) => `- **${String(ref).trim()}**`)
+    .replace(/^\s*([-*]\s*)?\*\*Original key words:?\*\*\s*$/gim, '**Original key words:**');
+
+  const lines = normalized.split('\n');
+  const output: string[] = [];
+  let inOriginalBlock = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^\*\*Original key words:\*\*$/i.test(trimmed)) {
+      inOriginalBlock = true;
+      output.push('**Original key words:**');
+      continue;
+    }
+
+    const startsNewVerse =
+      /^[-*]\s*["“]/.test(trimmed) ||
+      /^[-*]\s*\*\*[A-Z0-9]{2,}\s+\d+:\d+/.test(trimmed) ||
+      /^Textual conclusion/i.test(trimmed) ||
+      /^All quotes from/i.test(trimmed);
+
+    if (inOriginalBlock && startsNewVerse) {
+      inOriginalBlock = false;
+    }
+
+    if (inOriginalBlock && /^[-*]\s+/.test(trimmed)) {
+      output.push(normalizeOriginalKeywordLine(line));
+      continue;
+    }
+
+    output.push(line);
+  }
+
+  normalized = output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+  if (!/\*\*[A-Z0-9]{2,}\s+\d+:\d+(?:[-–]\d+)?/.test(normalized) && verses.length > 0) {
+    const refs = verses.map((verse) => `- **${verse.reference} (${verse.translation})**`).join('\n');
+    normalized = `${normalized}\n\n${refs}`.trim();
+  }
+
+  return normalized;
 }
 
 async function streamTextFromContent(text: string, messages: Array<{ role: string; content: string }>) {
@@ -263,14 +351,20 @@ export async function POST(req: Request) {
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
       const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
       const finalFallback = cachedModelUsed === 'context-only';
+      const normalizedCachedContent = normalizeResponseContent(cached.response, cached.verses || []);
       const cachedStreamedContent = ensureFallbackBanner(
-        cached.response,
+        normalizedCachedContent,
         cachedModelUsed,
         fallbackUsed,
         finalFallback
       );
+      const cachedResponse: NormalizedChatResponse = {
+        content: cachedStreamedContent,
+        modelUsed: cachedModelUsed,
+        verses: cached.verses || [],
+      };
 
-      const cachedResult = await streamTextFromContent(cachedStreamedContent, [
+      const cachedResult = await streamTextFromContent(cachedResponse.content, [
         { role: 'system', content: cached.prompt },
         ...modelHistory,
         { role: 'user', content: query }
@@ -280,7 +374,12 @@ export async function POST(req: Request) {
         headers: fallbackUsed ? { 'x-model-used': cachedModelUsed } : undefined,
         messageMetadata: ({ part }) => {
           if (part.type === 'start' || part.type === 'finish') {
-            return { modelUsed: cachedModelUsed, fallbackUsed, finalFallback } as any;
+            return {
+              modelUsed: cachedResponse.modelUsed,
+              fallbackUsed,
+              finalFallback,
+              verses: cachedResponse.verses,
+            } as any;
           }
           return undefined;
         },
@@ -315,19 +414,30 @@ export async function POST(req: Request) {
     const normalizedModelUsed = normalizeModelId(generation.modelUsed);
     const fallbackUsed = normalizedModelUsed !== PRIMARY_MODEL_USED;
     const finalFallback = generation.finalFallback === true || normalizedModelUsed === 'context-only';
+    const normalizedContent = normalizeResponseContent(generation.content, verses);
     const streamedContent = ensureFallbackBanner(
-      generation.content,
+      normalizedContent,
       normalizedModelUsed,
       fallbackUsed,
       finalFallback
     );
+    const normalizedResponse: NormalizedChatResponse = {
+      content: streamedContent,
+      modelUsed: normalizedModelUsed,
+      verses,
+    };
     console.log(`Model selected for response: ${normalizedModelUsed}`);
 
     const responseInit = {
       headers: fallbackUsed ? { 'x-model-used': normalizedModelUsed } : undefined,
       messageMetadata: ({ part }: { part: { type: string } }) => {
         if (part.type === 'start' || part.type === 'finish') {
-          return { modelUsed: normalizedModelUsed, fallbackUsed, finalFallback } as any;
+          return {
+            modelUsed: normalizedResponse.modelUsed,
+            fallbackUsed,
+            finalFallback,
+            verses: normalizedResponse.verses,
+          } as any;
         }
         return undefined;
       },
@@ -347,13 +457,13 @@ export async function POST(req: Request) {
             context,
             prompt: finalPrompt,
             response: text,
-            modelUsed: normalizedModelUsed
+            modelUsed: normalizedResponse.modelUsed
           }
         );
       }
     };
 
-    const fallbackResult = await streamTextFromContent(streamedContent, [
+    const fallbackResult = await streamTextFromContent(normalizedResponse.content, [
       { role: 'system', content: finalPrompt },
       ...modelHistory,
       { role: 'user', content: query }

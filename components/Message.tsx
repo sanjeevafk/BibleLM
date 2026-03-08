@@ -8,6 +8,9 @@ import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { UIMessage } from 'ai';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import type { VerseContext } from '@/lib/bible-fetch';
+
+const PRIMARY_MODEL_USED = 'gemini:gemini-2.5-flash';
 
 function getMessageText(message: UIMessage): string {
   const m = message as any;
@@ -34,6 +37,13 @@ type VerseBlock = {
   reference: string | null;
   shortQuote: string;
   markdown: string;
+};
+
+type MessageMetadata = {
+  modelUsed?: string;
+  fallbackUsed?: boolean;
+  finalFallback?: boolean;
+  verses?: VerseContext[];
 };
 
 function extractReference(lines: string[]): string | null {
@@ -144,15 +154,58 @@ function parseVerseBlocks(content: string): {
   };
 }
 
+function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
+  return verses
+    .filter((verse) => Boolean(verse?.text && verse?.reference))
+    .map((verse, index) => {
+      const originalLines = (verse.original || []).slice(0, 8).map((entry) => {
+        const parts: string[] = [];
+        if (entry.transliteration) {
+          parts.push(entry.transliteration);
+        }
+        parts.push(`Strong's ${entry.strongs}`);
+        if (entry.gloss) {
+          parts.push(`- ${entry.gloss}`);
+        }
+        if (entry.morph) {
+          parts.push(`Morph: ${entry.morph}`);
+        }
+        return `- \`${entry.word}\` (${parts.join(', ')})`;
+      });
+
+      const markdownParts = [
+        `"${verse.text}"`,
+        `- **${verse.reference} (${verse.translation})**`,
+      ];
+
+      if (originalLines.length > 0) {
+        markdownParts.push('**Original key words:**');
+        markdownParts.push(...originalLines);
+      }
+
+      return {
+        id: `${verse.reference}-${index + 1}`,
+        reference: verse.reference,
+        shortQuote: shortenQuote(stripOuterQuotes(verse.text)),
+        markdown: markdownParts.join('\n'),
+      };
+    });
+}
+
 export const Message = React.memo(function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
   const messageText = getMessageText(message);
-  const metadata = (message as any).metadata as
-    | { modelUsed?: string; fallbackUsed?: boolean; finalFallback?: boolean }
-    | undefined;
-  const fallbackUsed = !isUser && Boolean(metadata?.fallbackUsed && metadata?.modelUsed);
+  const metadata = (message as any).metadata as MessageMetadata | undefined;
+  const modelUsed = metadata?.modelUsed;
   const finalFallback = !isUser && Boolean(metadata?.finalFallback);
+  const metadataVerses = React.useMemo(() => {
+    if (!Array.isArray(metadata?.verses)) return [];
+    return metadata.verses.filter((verse): verse is VerseContext => Boolean(verse?.reference && verse?.text));
+  }, [metadata?.verses]);
+  const showFallbackBadge =
+    !isUser &&
+    Boolean(modelUsed && !modelUsed.startsWith(PRIMARY_MODEL_USED));
 
   const handleCopy = () => {
     navigator.clipboard.writeText(messageText);
@@ -240,6 +293,15 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     () => parseVerseBlocks(processedContent),
     [processedContent]
   );
+  const verseBlocks = React.useMemo(() => {
+    if (blocks.length > 0) {
+      return blocks;
+    }
+    if (metadataVerses.length > 0) {
+      return buildBlocksFromMetadata(metadataVerses);
+    }
+    return [];
+  }, [blocks, metadataVerses]);
 
   const markdownComponents = {
     p({ children }: { children: React.ReactNode }) {
@@ -311,10 +373,10 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
             : 'bg-muted text-foreground border rounded-bl-sm shadow-sm'
         }`}
       >
-        {!isUser && (fallbackUsed || finalFallback) && (
-          <div className="mb-2 rounded-md border border-muted/60 bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
-            {fallbackUsed && metadata?.modelUsed ? (
-              <div>Using fallback model: {metadata.modelUsed}</div>
+        {!isUser && (showFallbackBadge || finalFallback) && (
+          <div className="mb-2 inline-flex items-center gap-1 rounded-full border border-muted/60 bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
+            {showFallbackBadge ? (
+              <div>Fallback model - formatting may vary ({modelUsed})</div>
             ) : null}
             {finalFallback ? (
               <div>All providers unavailable. Showing raw verses and original-language notes instead.</div>
@@ -330,11 +392,11 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
             </div>
           )}
 
-          {blocks.length > 0 && (
+          {verseBlocks.length > 0 && (
             <div className="my-4 not-prose">
               {preamble && <hr className="my-4 border-muted/40" />}
               <Accordion type="multiple" className="space-y-3">
-                {blocks.map((block) => (
+                {verseBlocks.map((block) => (
                   <AccordionItem key={block.id} value={block.id}>
                     <AccordionTrigger className="px-1">
                       <div className="flex flex-col gap-1">
