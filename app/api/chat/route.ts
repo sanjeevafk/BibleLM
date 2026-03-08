@@ -8,16 +8,20 @@ import { validateDataIntegrity } from '@/lib/validate-data';
 
 // export const runtime = 'edge';
 
-const PRIMARY_MODEL = 'llama-3.1-8b-instant';
-const PRIMARY_MODEL_USED = `groq:${PRIMARY_MODEL}`;
-const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+const PRIMARY_MODEL = 'gemini-2.5-flash';
+const PRIMARY_MODEL_USED = `gemini:${PRIMARY_MODEL}`;
+const GEMINI_COMPAT_MODEL = 'gemini-1.5-flash';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+const GROQ_FALLBACK_MODEL = 'llama-3.1-8b-instant';
+const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
 const HF_FALLBACK_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
-const GEMINI_MODEL = 'gemini-1.5-flash';
 const CACHE_MODEL_CANDIDATES = [
   PRIMARY_MODEL_USED,
+  `gemini:${GEMINI_COMPAT_MODEL}`,
+  `openrouter:${OPENROUTER_MODEL}`,
   `groq:${GROQ_FALLBACK_MODEL}`,
+  `groq:${GROQ_SECONDARY_MODEL}`,
   `hf:${HF_FALLBACK_MODEL}`,
-  `gemini:${GEMINI_MODEL}`,
   'context-only',
 ];
 const dataValidationPromise = validateDataIntegrity();
@@ -25,14 +29,17 @@ const dataValidationPromise = validateDataIntegrity();
 function normalizeModelId(modelUsed: string | undefined): string {
   if (!modelUsed) return PRIMARY_MODEL_USED;
   if (modelUsed.includes(':') || modelUsed === 'context-only') return modelUsed;
-  if (modelUsed === PRIMARY_MODEL || modelUsed === GROQ_FALLBACK_MODEL) {
+  if (modelUsed === PRIMARY_MODEL || modelUsed === GEMINI_COMPAT_MODEL) {
+    return `gemini:${modelUsed}`;
+  }
+  if (modelUsed === GROQ_FALLBACK_MODEL || modelUsed === GROQ_SECONDARY_MODEL) {
     return `groq:${modelUsed}`;
+  }
+  if (modelUsed === OPENROUTER_MODEL) {
+    return `openrouter:${modelUsed}`;
   }
   if (modelUsed === HF_FALLBACK_MODEL) {
     return `hf:${modelUsed}`;
-  }
-  if (modelUsed === GEMINI_MODEL) {
-    return `gemini:${modelUsed}`;
   }
   return modelUsed;
 }
@@ -83,7 +90,37 @@ function buildPrompt(
   return `${finalPrompt}\n\nUser: ${query}`;
 }
 
+function ensureFallbackBanner(
+  content: string,
+  modelUsed: string,
+  fallbackUsed: boolean,
+  finalFallback: boolean
+): string {
+  if (!fallbackUsed || finalFallback) {
+    return content;
+  }
+  const banner = `Using fallback model: ${modelUsed} due to rate limits / availability`;
+  if (content.startsWith(banner)) {
+    return content;
+  }
+  return `${banner}\n\n${content}`;
+}
+
 async function streamTextFromContent(text: string, messages: Array<{ role: string; content: string }>) {
+  const chunkText = (input: string): string[] => {
+    const chunks: string[] = [];
+    const maxChunkLength = 220;
+    let cursor = 0;
+    while (cursor < input.length) {
+      const next = input.slice(cursor, cursor + maxChunkLength);
+      chunks.push(next);
+      cursor += maxChunkLength;
+    }
+    return chunks.length > 0 ? chunks : [input];
+  };
+
+  const textDeltas = chunkText(text).map((delta) => ({ type: 'text-delta', id: 'text-1', delta }));
+
   const cachedStreamModel = {
     specificationVersion: 'v3',
     provider: 'cache',
@@ -93,7 +130,7 @@ async function streamTextFromContent(text: string, messages: Array<{ role: strin
         chunks: [
           { type: 'stream-start', warnings: [] },
           { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: text },
+          ...textDeltas,
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
@@ -159,15 +196,14 @@ export async function POST(req: Request) {
         Boolean(message && message.content && message.content.trim())
       );
 
-    const apiKey = customApiKey || process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({
-          error: 'Groq API key is missing. Set GROQ_API_KEY or provide a custom API key.'
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
+    const groqApiKey = customApiKey || process.env.GROQ_API_KEY;
+    console.log('Using primary provider: Gemini');
+    console.log('Provider keys:', {
+      hasGemini: Boolean(process.env.GEMINI_API_KEY),
+      hasOpenRouter: Boolean(process.env.OPENROUTER_API_KEY),
+      hasGroq: Boolean(groqApiKey),
+      hasHf: Boolean(process.env.HF_TOKEN),
+    });
 
     // Get the latest user message
     let lastUserIndex = -1;
@@ -227,8 +263,14 @@ export async function POST(req: Request) {
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
       const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
       const finalFallback = cachedModelUsed === 'context-only';
+      const cachedStreamedContent = ensureFallbackBanner(
+        cached.response,
+        cachedModelUsed,
+        fallbackUsed,
+        finalFallback
+      );
 
-      const cachedResult = await streamTextFromContent(cached.response, [
+      const cachedResult = await streamTextFromContent(cachedStreamedContent, [
         { role: 'system', content: cached.prompt },
         ...modelHistory,
         { role: 'user', content: query }
@@ -254,7 +296,7 @@ export async function POST(req: Request) {
     console.log('Cache MISS – proceeding to LLM', missKey);
 
     // RAG Retrieval
-    const verses = await retrieveContextForQuery(query, requestedTranslation, apiKey);
+    const verses = await retrieveContextForQuery(query, requestedTranslation, groqApiKey);
 
     // Build context-aware prompt
     const finalPrompt = buildContextPrompt(query, verses, requestedTranslation);
@@ -267,12 +309,19 @@ export async function POST(req: Request) {
     const generation = await generateWithFallback(prompt, {
       maxTokens: 2048,
       temperature: 0.1,
-      apiKey,
+      apiKey: groqApiKey,
     } as any);
 
     const normalizedModelUsed = normalizeModelId(generation.modelUsed);
     const fallbackUsed = normalizedModelUsed !== PRIMARY_MODEL_USED;
     const finalFallback = generation.finalFallback === true || normalizedModelUsed === 'context-only';
+    const streamedContent = ensureFallbackBanner(
+      generation.content,
+      normalizedModelUsed,
+      fallbackUsed,
+      finalFallback
+    );
+    console.log(`Model selected for response: ${normalizedModelUsed}`);
 
     const responseInit = {
       headers: fallbackUsed ? { 'x-model-used': normalizedModelUsed } : undefined,
@@ -304,7 +353,7 @@ export async function POST(req: Request) {
       }
     };
 
-    const fallbackResult = await streamTextFromContent(generation.content, [
+    const fallbackResult = await streamTextFromContent(streamedContent, [
       { role: 'system', content: finalPrompt },
       ...modelHistory,
       { role: 'user', content: query }

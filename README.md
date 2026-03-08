@@ -8,7 +8,7 @@
 ## Core Philosophy
 
 - **Scripture-First & Absolute Neutrality** — Every response **must** quote real verses with chapter:verse citations. No interpretation, application, denominational slant, political framing, or moralizing allowed. The system prompt rigidly enforces this.
-- **Zero-Cost Operation** — Runs indefinitely on Vercel **Hobby** tier + Groq **free** tier (llama-3.1-8b-instant default; BYOK for 70B). No paid vector DBs, no heavy compute, no always-on servers.
+- **Zero-Cost Operation** — Runs indefinitely on Vercel **Hobby** tier + Gemini **free** tier (Gemini 2.5 Flash primary). No paid vector DBs, no heavy compute, no always-on servers.
 - **Speed & Reliability** — Common queries (<1 s) via bundled data + Edge Functions. Rare verses fallback gracefully.
 - **Original-Language Fidelity** — Hebrew (OSHB) / Greek (SBLGNT) word popups with Strong's number, transliteration, and gloss — no loose paraphrasing.
 
@@ -20,10 +20,15 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
 
 - **Framework** — Next.js 16+ (App Router, Server Actions, React Server Components)
 - **Styling** — Tailwind CSS + shadcn/ui (radix primitives)
-- **LLM Integration** — Vercel AI SDK (`@ai-sdk/groq`, `streamText`, `generateText`)
-- **Models** (Groq)  
-  - Default: `llama-3.1-8b-instant` (~14k TPM free tier)  
-  - Optional BYOK: `llama-3.1-70b-versatile`, `llama3-8b-8192` fallback
+- **LLM Integration** — Vercel AI SDK + provider SDKs (`@google/genai`, OpenRouter, `@ai-sdk/groq`, Hugging Face Inference)
+- **Primary LLM** — Gemini 2.5 Flash (`GEMINI_API_KEY`) with streamed generation
+- **Fallback Models (ordered)**  
+  - Gemini 1.5 Flash (`gemini-1.5-flash`)
+  - OpenRouter (`OPENROUTER_API_KEY`)  
+    Get key: https://openrouter.ai/keys
+  - Groq (`llama-3.1-8b-instant`, then `llama-3.3-70b-versatile`)
+  - Hugging Face Inference (`meta-llama/Meta-Llama-3.1-8B-Instruct`)
+  - Final: raw verses + original-language notes only
 - **Retrieval** — Hybrid RAG (no vector DB at runtime):  
   - Direct reference parsing (`John 3:16`, `Ex 21:22-25`)  
   - Groq-powered semantic verse suggestion (cheap 8B re-ranking)  
@@ -62,25 +67,26 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
 6. **Prompt Engineering**  
    - System prompt (~800 tokens): enforces citation-only, bans commentary, requires exact quotes  
    - Temperature = 0.1 (near-deterministic)  
-   - Frequency penalty = 0.5 (prevents loops)  
+   - Max output tokens = 2048  
    - Full history included (token-efficient truncation if needed)
 
 7. **Inference & Streaming**  
-   - `streamText` → Groq → `toUIMessageStreamResponse()`  
+   - Gemini/OpenRouter stream where available, then normalized to a unified streaming output  
    - UI shows typewriter effect instantly
 
 8. **Fallbacks**  
-   - Model retry cascade: 8B → 70B → older 8B  
+   - Model retry cascade: Gemini → OpenRouter → Groq → HF  
    - Rate-limit (429) → client-side "Lite mode" (verses + Strong's only)
 
 ## Fallback Models & Rate Limits
 
-Groq’s free tier is subject to TPM (tokens-per-minute) limits, so long contexts or spikes can trip rate limiting. BibleLM now falls back automatically in this order:
+BibleLM now uses Gemini as primary and falls back automatically when rate limits or provider outages occur:
 
-- Groq: `llama-3.1-8b-instant` (primary)
-- Groq: `llama-3.3-70b-versatile` (secondary)
+- Primary LLM: Gemini 2.5 Flash (free tier, generous limits)
+- Gemini fallback: `gemini-1.5-flash`
+- OpenRouter fallback (`OPENROUTER_API_KEY`)
+- Groq fallback: `llama-3.1-8b-instant` then `llama-3.3-70b-versatile`
 - Hugging Face Inference: `meta-llama/Meta-Llama-3.1-8B-Instruct` (reuses `HF_TOKEN`)
-- Google Gemini: `gemini-1.5-flash` (optional `GEMINI_API_KEY`)
 - Final: raw verses + original-language notes only
 
 ## 📦 Data Bundling & Optimization
@@ -169,7 +175,8 @@ npm install
 
 # 2. Env (optional for full power)
 cp .env.example .env.local
-# Add GROQ_API_KEY=...
+# Add GEMINI_API_KEY=...
+# Optional but recommended: OPENROUTER_API_KEY=...
 
 # 3. Build data bundles (one-time or regenerate)
 npm run build:data
@@ -187,7 +194,8 @@ npm run format  # Prettier
 ## 🚀 Deployment (Vercel – Zero Config)
 
 Fork or connect repo to Vercel
-Add GROQ_API_KEY (optional) in Environment Variables
+Add GEMINI_API_KEY (required for best experience) in Environment Variables
+Optional fallback keys: OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN
 Deploy → Edge Functions auto-handle /api/chat
 
 ## 🤝 Contributing
