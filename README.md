@@ -88,6 +88,7 @@ BibleLM now uses Gemini as primary and falls back automatically when rate limits
 - Groq fallback: `llama-3.1-8b-instant` then `llama-3.3-70b-versatile`
 - Hugging Face Inference: `meta-llama/Meta-Llama-3.1-8B-Instruct` (reuses `HF_TOKEN`)
 - Final: raw verses + original-language notes only
+- Response aesthetics unified across providers (cards, collapsed original-language details, quote styling)
 
 ## 📦 Data Bundling & Optimization
 

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import type { UIMessage } from 'ai';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import type { VerseContext } from '@/lib/bible-fetch';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 const PRIMARY_MODEL_USED = 'gemini:gemini-2.5-flash';
 
@@ -192,9 +193,31 @@ function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
     });
 }
 
+function splitOriginalLanguageSection(markdown: string): { main: string; original: string } {
+  const lines = markdown.split(/\r?\n/);
+  const startIndex = lines.findIndex((line) => /\*\*Original key words:\*\*/i.test(line.trim()));
+  if (startIndex === -1) {
+    return { main: markdown.trim(), original: '' };
+  }
+
+  const main = lines.slice(0, startIndex).join('\n').trim();
+  const original = lines.slice(startIndex).join('\n').trim();
+  return { main, original };
+}
+
+function stripMarkdownForCopy(text: string): string {
+  return text
+    .replace(/```[^`]*```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .trim();
+}
+
 export const Message = React.memo(function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
+  const [copiedVerseId, setCopiedVerseId] = React.useState<string | null>(null);
   const messageText = getMessageText(message);
   const metadata = (message as any).metadata as MessageMetadata | undefined;
   const modelUsed = metadata?.modelUsed;
@@ -212,6 +235,13 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const handleCopyVerse = React.useCallback((block: VerseBlock) => {
+    const copyText = stripMarkdownForCopy(block.markdown);
+    navigator.clipboard.writeText(copyText);
+    setCopiedVerseId(block.id);
+    setTimeout(() => setCopiedVerseId((current) => (current === block.id ? null : current)), 1600);
+  }, []);
 
   const processedContent = React.useMemo(() => {
     const preprocessContent = (text: string) => {
@@ -307,12 +337,26 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     p({ children }: { children: React.ReactNode }) {
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' ? child : ''))
-        .join('');
+        .join('')
+        .trim();
         
       if (text.includes('All quotes from') && text.includes('OSHB')) {
-        return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase opacity-70">{children}</p>;
+        return <p className="text-[10px] text-muted-foreground mt-4 pt-2 border-t font-sans tracking-wide uppercase opacity-70 break-words">{children}</p>;
       }
-      return <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>;
+      if (
+        (text.startsWith('"') && text.endsWith('"')) ||
+        (text.startsWith('“') && text.endsWith('”'))
+      ) {
+        return (
+          <p className="bible-verse mb-4 border-l-2 border-primary/20 pl-4 pr-1 text-[1.05rem] leading-8 break-words [overflow-wrap:anywhere]">
+            {children}
+          </p>
+        );
+      }
+      return <p className="mb-4 last:mb-0 leading-relaxed break-words [overflow-wrap:anywhere]">{children}</p>;
+    },
+    blockquote({ children }: { children: React.ReactNode }) {
+      return <blockquote className="my-3 border-l-2 border-primary/20 pl-4 text-[1.02rem] italic leading-7">{children}</blockquote>;
     },
     li({ children }: { children: React.ReactNode }) {
       const text = React.Children.toArray(children)
@@ -324,14 +368,14 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       const isReference = /([A-Z0-9]{3})\s\d+:\d+/i.test(text);
 
       if (isOriginalWord) {
-        return <li className="list-none inline-flex flex-wrap gap-1 my-1">{children}</li>;
+        return <li className="list-none inline-flex flex-wrap gap-1 my-1 max-w-full">{children}</li>;
       }
 
       if (isReference && text.length < 50) {
-        return <li className="list-none text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-2 mb-3 px-1 border-l-2 border-muted-foreground/20 ml-1">{children}</li>;
+        return <li className="list-none text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-2 mb-3 px-1 border-l-2 border-muted-foreground/20 ml-1 break-words">{children}</li>;
       }
 
-      return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50">{children}</li>;
+      return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50 break-words [overflow-wrap:anywhere]">{children}</li>;
     },
     strong({ children }: { children: React.ReactNode }) {
       const text = React.Children.toArray(children)
@@ -360,14 +404,14 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
         );
       }
       
-      return <code className={`bg-black/10 dark:bg-white/10 rounded px-1.5 py-0.5 font-mono text-[13px] ${className || ''}`} {...rest}>{children}</code>;
+      return <code className={`bg-black/10 dark:bg-white/10 rounded px-1.5 py-0.5 font-mono text-[13px] break-all ${className || ''}`} {...rest}>{children}</code>;
     }
   } as const;
 
   return (
     <div className={`flex w-full my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div 
-        className={`relative flex flex-col max-w-[85%] md:max-w-[75%] px-4 py-3 rounded-2xl ${
+        className={`relative flex flex-col max-w-[92%] md:max-w-[82%] px-4 py-3 rounded-2xl ${
           isUser 
             ? 'bg-blue-600 text-white rounded-br-sm shadow-md' 
             : 'bg-muted text-foreground border rounded-bl-sm shadow-sm'
@@ -383,7 +427,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
             ) : null}
           </div>
         )}
-        <div className="text-sm leading-relaxed overflow-x-visible">
+        <div className="text-sm leading-relaxed overflow-x-visible break-words [overflow-wrap:anywhere]">
           {preamble && (
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
@@ -393,31 +437,59 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
           )}
 
           {verseBlocks.length > 0 && (
-            <div className="my-4 not-prose">
+            <div className="my-5 not-prose space-y-4">
               {preamble && <hr className="my-4 border-muted/40" />}
-              <Accordion type="multiple" className="space-y-3">
-                {verseBlocks.map((block) => (
-                  <AccordionItem key={block.id} value={block.id}>
-                    <AccordionTrigger className="px-1">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                          {block.reference || 'Verse'}
-                        </span>
-                        <span className="text-sm font-medium text-foreground">
-                          “{block.shortQuote}”
-                        </span>
+              {verseBlocks.map((block) => {
+                const section = splitOriginalLanguageSection(block.markdown);
+                const verseCopied = copiedVerseId === block.id;
+                return (
+                  <Card key={block.id} className="border-muted/60 bg-card/90 shadow-sm">
+                    <CardHeader className="space-y-2 px-4 pb-2 pt-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="verse-reference break-words">{block.reference || 'Verse'}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => handleCopyVerse(block)}
+                        >
+                          {verseCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                          Copy verse
+                        </Button>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-1 border-t border-muted/30">
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                          {block.markdown}
-                        </ReactMarkdown>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                      <p className="text-sm text-muted-foreground leading-relaxed break-words [overflow-wrap:anywhere]">
+                        "{block.shortQuote}"
+                      </p>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 pt-0 space-y-3">
+                      {section.main && (
+                        <div className="prose prose-sm dark:prose-invert max-w-none break-words [overflow-wrap:anywhere]">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {section.main}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+
+                      {section.original && (
+                        <Accordion type="single" collapsible className="w-full">
+                          <AccordionItem value={`${block.id}-orig`}>
+                            <AccordionTrigger className="px-1 text-xs uppercase tracking-wider text-muted-foreground">
+                              Original-language details
+                            </AccordionTrigger>
+                            <AccordionContent className="px-1 pt-2 border-t border-muted/30">
+                              <div className="prose prose-sm dark:prose-invert max-w-none break-words [overflow-wrap:anywhere]">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                  {section.original}
+                                </ReactMarkdown>
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
               {postamble && <hr className="my-4 border-muted/40" />}
             </div>
           )}

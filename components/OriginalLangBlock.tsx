@@ -64,41 +64,41 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
           {word}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 space-y-2 text-xs">
-        <div className="flex items-center justify-between">
-          <span className={`${langClass} text-sm font-bold`}>{word}</span>
+      <PopoverContent className="w-[min(92vw,22rem)] max-h-[72vh] overflow-y-auto space-y-2 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <span className={`${langClass} text-base font-bold bg-primary/5 px-2 py-1 rounded-md border border-primary/10`}>{word}</span>
           <a
             href={bollsLink}
             target="_blank"
             rel="noreferrer"
-            className="text-[10px] font-mono text-muted-foreground underline underline-offset-2"
+            className="text-[10px] font-mono text-muted-foreground underline underline-offset-2 shrink-0"
           >
             {strongs}
           </a>
         </div>
         {translit && (
-          <div className="text-[11px] text-muted-foreground italic">{translit}</div>
+          <div className="text-[11px] text-muted-foreground italic break-words">{translit}</div>
         )}
         {gloss && (
-          <div>
+          <div className="rounded-md border bg-muted/40 p-2">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Gloss</div>
-            <div className="leading-relaxed">{gloss}</div>
+            <div className="leading-relaxed break-words [overflow-wrap:anywhere]">{gloss}</div>
           </div>
         )}
-        <div>
+        <div className="rounded-md border bg-muted/40 p-2">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Strong's</div>
-          <div className="font-mono">
-            <a href={bollsLink} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          <div className="font-mono text-[11px]">
+            <a href={bollsLink} target="_blank" rel="noreferrer" className="underline underline-offset-2 text-primary/90">
               {strongs}
             </a>
           </div>
         </div>
         {morphValue && (
-          <div>
+          <div className="rounded-md border bg-muted/40 p-2">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Morph</div>
-            <div className="font-mono">{morphValue}</div>
+            <div className="font-mono text-[11px] text-primary/90">{morphValue}</div>
             {decodedMorph?.description && (
-              <div className="text-[10px] text-muted-foreground mt-1">{decodedMorph.description}</div>
+              <div className="text-[10px] text-muted-foreground mt-1 break-words [overflow-wrap:anywhere]">{decodedMorph.description}</div>
             )}
           </div>
         )}
