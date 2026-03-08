@@ -207,11 +207,7 @@ function splitOriginalLanguageSection(markdown: string): { main: string; origina
 
 function stripMarkdownForCopy(text: string): string {
   return text
-    .replace(/```[^`]*```/g, '')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/^\s*[-*]\s+/gm, '')
-    .trim();
+    .replace(/\*\*|\*|__|_|`|~~|#|> /g, '');
 }
 
 export const Message = React.memo(function Message({ message }: { message: UIMessage }) {
@@ -334,7 +330,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
   }, [blocks, metadataVerses]);
 
   const markdownComponents = {
-    p({ children }: { children: React.ReactNode }) {
+    p({ children }: { children?: React.ReactNode }) {
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' ? child : ''))
         .join('')
@@ -355,10 +351,10 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       }
       return <p className="mb-4 last:mb-0 leading-relaxed break-words [overflow-wrap:anywhere]">{children}</p>;
     },
-    blockquote({ children }: { children: React.ReactNode }) {
+    blockquote({ children }: { children?: React.ReactNode }) {
       return <blockquote className="my-3 border-l-2 border-primary/20 pl-4 text-[1.02rem] italic leading-7">{children}</blockquote>;
     },
-    li({ children }: { children: React.ReactNode }) {
+    li({ children }: { children?: React.ReactNode }) {
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' || typeof child === 'number' ? String(child) : ''))
         .join('')
@@ -377,7 +373,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
 
       return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50 break-words [overflow-wrap:anywhere]">{children}</li>;
     },
-    strong({ children }: { children: React.ReactNode }) {
+    strong({ children }: { children?: React.ReactNode }) {
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' ? child : ''))
         .join('');
@@ -471,7 +467,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
                       )}
 
                       {section.original && (
-                        <Accordion type="single" collapsible className="w-full">
+                        <Accordion type="single" className="w-full">
                           <AccordionItem value={`${block.id}-orig`}>
                             <AccordionTrigger className="px-1 text-xs uppercase tracking-wider text-muted-foreground">
                               Original-language details

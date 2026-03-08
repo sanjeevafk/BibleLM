@@ -354,7 +354,7 @@ export async function generateWithFallback(
           model: groq(modelName) as any,
           prompt,
           temperature,
-          maxTokens,
+          maxOutputTokens: maxTokens,
         });
         const text = result.text?.trim();
         if (text) {

@@ -34,6 +34,120 @@ type NormalizedChatResponse = {
   verses: VerseContext[];
 };
 
+const DEBUG_LLM = process.env.DEBUG_LLM === '1';
+const RATE_LIMIT_WINDOW_SECONDS = 60;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+const RATE_LIMIT_WARN_THRESHOLD = 50;
+const RATE_LIMIT_SCRIPT = `
+local current = redis.call("INCR", KEYS[1])
+if current == 1 then
+  redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return current
+`;
+
+function debugLog(...args: unknown[]) {
+  if (DEBUG_LLM) {
+    console.log(...args);
+  }
+}
+
+function isValidIPv4(value: string): boolean {
+  const parts = value.split('.');
+  if (parts.length !== 4) return false;
+  return parts.every((part) => {
+    if (!/^\d{1,3}$/.test(part)) return false;
+    const num = Number(part);
+    return num >= 0 && num <= 255;
+  });
+}
+
+function isLikelyIPv6(value: string): boolean {
+  if (!value.includes(':')) return false;
+  return /^[0-9a-f:]+$/i.test(value);
+}
+
+function normalizeIpCandidate(candidate: string | null | undefined): string | null {
+  if (!candidate) return null;
+  let value = candidate.trim();
+  if (!value) return null;
+
+  // x-forwarded-for may contain a comma-separated chain.
+  if (value.includes(',')) {
+    value = value.split(',')[0]?.trim() || '';
+  }
+
+  if (!value) return null;
+
+  // Strip brackets from IPv6 format "[::1]:443".
+  if (value.startsWith('[') && value.includes(']')) {
+    value = value.slice(1, value.indexOf(']'));
+  }
+
+  // Strip port from IPv4 format "1.2.3.4:1234".
+  const ipv4WithPortMatch = value.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/);
+  if (ipv4WithPortMatch) {
+    value = ipv4WithPortMatch[1];
+  }
+
+  // Normalize IPv4-mapped IPv6 "::ffff:1.2.3.4".
+  if (value.startsWith('::ffff:')) {
+    value = value.slice('::ffff:'.length);
+  }
+
+  // Remove IPv6 scope zone, e.g. "fe80::1%eth0".
+  value = value.split('%')[0];
+
+  if (isValidIPv4(value) || isLikelyIPv6(value)) {
+    return value.toLowerCase();
+  }
+  return null;
+}
+
+function getClientIp(req: Request): string | null {
+  const candidates = [
+    req.headers.get('x-vercel-forwarded-for'),
+    req.headers.get('cf-connecting-ip'),
+    req.headers.get('x-real-ip'),
+    req.headers.get('x-forwarded-for'),
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = normalizeIpCandidate(candidate);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+async function incrementRateLimitCounter(rateLimitKey: string): Promise<number | null> {
+  if (!redis) {
+    return null;
+  }
+
+  try {
+    const rawCount = await redis.eval<[string], number>(RATE_LIMIT_SCRIPT, [rateLimitKey], [
+      String(RATE_LIMIT_WINDOW_SECONDS),
+    ]);
+    const count = Number(rawCount);
+    return Number.isFinite(count) ? count : null;
+  } catch (error) {
+    console.warn('[rate-limit] Atomic counter failed; falling back to non-atomic INCR/EXPIRE.', error);
+    try {
+      const fallbackCount = await redis.incr(rateLimitKey);
+      if (fallbackCount === 1) {
+        await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
+      }
+      return fallbackCount;
+    } catch (fallbackError) {
+      console.warn('[rate-limit] Fallback counter failed; disabling rate limit for this request.', fallbackError);
+      return null;
+    }
+  }
+}
+
 function normalizeModelId(modelUsed: string | undefined): string {
   if (!modelUsed) return PRIMARY_MODEL_USED;
   if (modelUsed.includes(':') || modelUsed === 'context-only') return modelUsed;
@@ -287,7 +401,7 @@ export async function POST(req: Request) {
 
     const groqApiKey = customApiKey || process.env.GROQ_API_KEY;
     console.log('Using primary provider: Gemini');
-    console.log('Provider keys:', {
+    debugLog('Provider keys:', {
       hasGemini: Boolean(process.env.GEMINI_API_KEY),
       hasOpenRouter: Boolean(process.env.OPENROUTER_API_KEY),
       hasGroq: Boolean(groqApiKey),
@@ -317,27 +431,29 @@ export async function POST(req: Request) {
     const rawTranslation =
       typeof translation === 'string' && translation.trim() ? translation : queryTranslation;
     const requestedTranslation = normalizeTranslation(rawTranslation);
-    console.log('Using translation:', requestedTranslation);
+    debugLog('Using translation:', requestedTranslation);
 
-    const ipHeader = req.headers.get('x-forwarded-for') || 'unknown';
-    const ip = ipHeader.split(',')[0]?.trim() || 'unknown';
-    const rateLimitKey = `ratelimit:${ip}`;
     let rateLimitWarning: string | null = null;
 
     if (redis) {
-      const count = await redis.incr(rateLimitKey);
-      if (count === 1) {
-        await redis.expire(rateLimitKey, 60);
-      }
-      console.log(`Rate limit count: ${count} for IP ${ip}`);
-      if (count > 50 && count <= 60) {
-        rateLimitWarning = `Approaching rate limit (${count}/60 req/min)`;
-      }
-      if (count > 60) {
-        return new Response('Rate limit exceeded (60 req/min). Try again in 60s.', { status: 429 });
+      const ip = getClientIp(req);
+      if (ip) {
+        const rateLimitKey = `ratelimit:${ip}`;
+        const count = await incrementRateLimitCounter(rateLimitKey);
+        debugLog(`Rate limit count: ${count ?? 'n/a'} for IP ${ip}`);
+        if (typeof count === 'number') {
+          if (count > RATE_LIMIT_WARN_THRESHOLD && count <= RATE_LIMIT_MAX_REQUESTS) {
+            rateLimitWarning = `Approaching rate limit (${count}/${RATE_LIMIT_MAX_REQUESTS} req/min)`;
+          }
+          if (count > RATE_LIMIT_MAX_REQUESTS) {
+            return new Response('Rate limit exceeded (60 req/min). Try again in 60s.', { status: 429 });
+          }
+        }
+      } else {
+        debugLog('Rate limiting skipped: unable to determine valid client IP.');
       }
     } else {
-      console.log('Rate limiting disabled: Upstash Redis not configured.');
+      debugLog('Rate limiting disabled: Upstash Redis not configured.');
     }
 
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
