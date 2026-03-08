@@ -177,7 +177,7 @@ function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
 
       const markdownParts = [
         `"${verse.text}"`,
-        `- **${verse.reference} (${verse.translation})**`,
+        `- **${verse.reference}${verse.translation ? ` (${verse.translation})` : ''}**`,
       ];
 
       if (originalLines.length > 0) {

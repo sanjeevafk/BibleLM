@@ -47,7 +47,7 @@ const CardFooter = React.forwardRef<
 CardFooter.displayName = "CardFooter";
 
 const CardTitle = React.forwardRef<
-  HTMLParagraphElement,
+  HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
 >(({ className, ...props }, ref) => (
   <h3

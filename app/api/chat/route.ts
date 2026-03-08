@@ -135,6 +135,9 @@ async function incrementRateLimitCounter(rateLimitKey: string): Promise<number |
     return Number.isFinite(count) ? count : null;
   } catch (error) {
     console.warn('[rate-limit] Atomic counter failed; falling back to non-atomic INCR/EXPIRE.', error);
+    if (!redis) {
+      return null;
+    }
     try {
       const fallbackCount = await redis.incr(rateLimitKey);
       if (fallbackCount === 1) {
@@ -407,8 +410,9 @@ export async function POST(req: Request) {
         Boolean(message && message.content && message.content.trim())
       );
 
+    // Groq API key is used for query classification and as a fallback LLM provider
+    // Primary LLM provider is Gemini (uses GEMINI_API_KEY from environment)
     const groqApiKey = customApiKey || process.env.GROQ_API_KEY;
-    console.log('Using primary provider: Gemini');
     debugLog('Provider keys:', {
       hasGemini: Boolean(process.env.GEMINI_API_KEY),
       hasOpenRouter: Boolean(process.env.OPENROUTER_API_KEY),
@@ -454,7 +458,9 @@ export async function POST(req: Request) {
             rateLimitWarning = `Approaching rate limit (${count}/${RATE_LIMIT_MAX_REQUESTS} req/min)`;
           }
           if (count > RATE_LIMIT_MAX_REQUESTS) {
-            return new Response('Rate limit exceeded (60 req/min). Try again in 60s.', { status: 429 });
+            return new Response(JSON.stringify({ 
+              error: 'Rate limit exceeded (60 req/min). Try again in 60s.' 
+            }), { status: 429, headers: { 'Content-Type': 'application/json' } });
           }
         }
       } else {
@@ -490,7 +496,7 @@ export async function POST(req: Request) {
     }
 
     if (cached?.response) {
-      console.log('Cache HIT – returning stored response', cachedKey);
+      debugLog('Cache HIT – returning stored response', cachedKey);
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
       const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
       const finalFallback = cachedModelUsed === 'context-only';
@@ -542,7 +548,7 @@ export async function POST(req: Request) {
       translation: requestedTranslation,
       model: PRIMARY_MODEL_USED,
     });
-    console.log('Cache MISS – proceeding to LLM', missKey);
+    debugLog('Cache MISS – proceeding to LLM', missKey);
 
     // RAG Retrieval
     const verses = await retrieveContextForQuery(query, requestedTranslation, groqApiKey);
@@ -576,7 +582,7 @@ export async function POST(req: Request) {
       modelUsed: normalizedModelUsed,
       verses,
     };
-    console.log(`Model selected for response: ${normalizedModelUsed}`);
+    debugLog(`Model selected for response: ${normalizedModelUsed}`);
 
     const responseInit = {
       headers: {
