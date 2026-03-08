@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback, useLayoutEffect, useSyncExternalStore } from 'react';
 
 import { useChat } from '@ai-sdk/react';
-import type { UIMessage } from 'ai';
+import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,6 +123,7 @@ function ChatInner({
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
   const [translation, setTranslation] = useState('BSB');
+  const [rateLimitWarning, setRateLimitWarning] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialMessages = useMemo<UIMessage[]>(
     () => [
@@ -140,8 +141,24 @@ function ChatInner({
     []
   );
 
+  const chatFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+    const warning = response.headers.get('x-rate-limit-warning');
+    setRateLimitWarning(warning);
+    return response;
+  }, []);
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport<UIMessage>({
+        fetch: chatFetch,
+      }),
+    [chatFetch]
+  );
+
   const { messages, sendMessage, status, error, clearError } = useChat<UIMessage>({
     messages: initialMessages,
+    transport,
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
@@ -265,6 +282,7 @@ function ChatInner({
 
   const handleClearChat = () => {
     clearError();
+    setRateLimitWarning(null);
     onClearChat();
   };
 
@@ -370,6 +388,11 @@ function ChatInner({
 
       {/* Input Form */}
       <div className="p-3 sm:p-4 bg-background border-t">
+        {rateLimitWarning && (
+          <div className="mx-auto mb-2 w-full max-w-3xl rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            {rateLimitWarning}
+          </div>
+        )}
         <form 
           onSubmit={handleSubmit}
           className="relative max-w-3xl mx-auto flex items-center shadow-sm"

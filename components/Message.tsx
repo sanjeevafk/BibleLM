@@ -2,6 +2,7 @@
 
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { OriginalLangBlock } from './OriginalLangBlock';
 import { Copy, Check } from 'lucide-react';
@@ -224,7 +225,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
   }, [metadata?.verses]);
   const showFallbackBadge =
     !isUser &&
-    Boolean(modelUsed && !modelUsed.startsWith(PRIMARY_MODEL_USED));
+    Boolean(modelUsed && modelUsed !== PRIMARY_MODEL_USED);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(messageText);
@@ -329,8 +330,8 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     return [];
   }, [blocks, metadataVerses]);
 
-  const markdownComponents = {
-    p({ children }: { children?: React.ReactNode }) {
+  const markdownComponents: Components = {
+    p({ children }) {
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' ? child : ''))
         .join('')
@@ -351,10 +352,10 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       }
       return <p className="mb-4 last:mb-0 leading-relaxed break-words [overflow-wrap:anywhere]">{children}</p>;
     },
-    blockquote({ children }: { children?: React.ReactNode }) {
+    blockquote({ children }) {
       return <blockquote className="my-3 border-l-2 border-primary/20 pl-4 text-[1.02rem] italic leading-7">{children}</blockquote>;
     },
-    li({ children }: { children?: React.ReactNode }) {
+    li({ children }) {
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' || typeof child === 'number' ? String(child) : ''))
         .join('')
@@ -373,7 +374,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
 
       return <li className="mb-3 ml-4 list-disc marker:text-muted-foreground/50 break-words [overflow-wrap:anywhere]">{children}</li>;
     },
-    strong({ children }: { children?: React.ReactNode }) {
+    strong({ children }) {
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' ? child : ''))
         .join('');
@@ -382,7 +383,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       }
       return <strong className="font-bold text-primary/90">{children}</strong>;
     },
-    code(props: { children?: React.ReactNode; className?: string; [key: string]: unknown } | any) {
+    code(props) {
       const { children, className, ...rest } = props;
       const text = String(children);
       
@@ -402,7 +403,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       
       return <code className={`bg-black/10 dark:bg-white/10 rounded px-1.5 py-0.5 font-mono text-[13px] break-all ${className || ''}`} {...rest}>{children}</code>;
     }
-  } as const;
+  };
 
   return (
     <div className={`flex w-full my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>

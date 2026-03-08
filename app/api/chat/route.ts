@@ -309,7 +309,11 @@ function normalizeResponseContent(content: string, verses: VerseContext[]): stri
   return normalized;
 }
 
-async function streamTextFromContent(text: string, messages: Array<{ role: string; content: string }>) {
+async function streamTextFromContent(
+  text: string,
+  messages: Array<{ role: string; content: string }>,
+  preferredChunks?: string[]
+) {
   const chunkText = (input: string): string[] => {
     const chunks: string[] = [];
     const maxChunkLength = 220;
@@ -322,7 +326,11 @@ async function streamTextFromContent(text: string, messages: Array<{ role: strin
     return chunks.length > 0 ? chunks : [input];
   };
 
-  const textDeltas = chunkText(text).map((delta) => ({ type: 'text-delta', id: 'text-1', delta }));
+  const chunks =
+    Array.isArray(preferredChunks) && preferredChunks.length > 0
+      ? preferredChunks
+      : chunkText(text);
+  const textDeltas = chunks.map((delta) => ({ type: 'text-delta', id: 'text-1', delta }));
 
   const cachedStreamModel = {
     specificationVersion: 'v3',
@@ -607,11 +615,15 @@ export async function POST(req: Request) {
       }
     };
 
-    const fallbackResult = await streamTextFromContent(normalizedResponse.content, [
-      { role: 'system', content: finalPrompt },
-      ...modelHistory,
-      { role: 'user', content: query }
-    ] as Array<{ role: string; content: string }>);
+    const fallbackResult = await streamTextFromContent(
+      normalizedResponse.content,
+      [
+        { role: 'system', content: finalPrompt },
+        ...modelHistory,
+        { role: 'user', content: query }
+      ] as Array<{ role: string; content: string }>,
+      generation.chunks
+    );
 
     return fallbackResult.toUIMessageStreamResponse(responseInit);
   } catch (e: unknown) {

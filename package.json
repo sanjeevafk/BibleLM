@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "npm run build:morphhb && npm run build:openhebrewbible && npm run build:translations && npm run build:opengnt && next build",
-    "build:morphhb": "ts-node scripts/parse-morphhb.ts",
-    "build:openhebrewbible": "ts-node scripts/parse-openhebrewbible.ts",
-    "build:translations": "ts-node scripts/build-translations.ts",
-    "build:opengnt": "ts-node scripts/build-opengnt.ts",
+    "build:morphhb": "ts-node --project tsconfig.scripts.json scripts/parse-morphhb.ts",
+    "build:openhebrewbible": "ts-node --project tsconfig.scripts.json scripts/parse-openhebrewbible.ts",
+    "build:translations": "ts-node --project tsconfig.scripts.json scripts/build-translations.ts",
+    "build:opengnt": "ts-node --project tsconfig.scripts.json scripts/build-opengnt.ts",
     "start": "next start",
     "lint": "next lint"
   },
