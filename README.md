@@ -112,6 +112,15 @@ BibleLM uses Upstash Redis to cache full chat responses (verses + context + fina
 
 Upstash's free tier includes 500K commands/month (plus 256 MB storage and one free database), which is typically enough for Hobby usage. To enable caching, create a free Upstash Redis database and copy the REST URL and token into `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in your environment.
 
+- Cache key format: `sha256(query + translation + model)`
+- Cache TTL: 72 hours
+- Cache hit behavior: bypasses LLM generation and streams cached content immediately
+
+## Rate Limiting
+
+- Rate limiting: 60 requests/min per IP via Upstash Redis
+- Environment variables: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+
 ## OpenHebrewBible Subset
 
 OpenHebrewBible subset (clause segmentation, poetic division, BHS-WLC alignments, extended glosses) — processed from eliranwong/OpenHebrewBible — CC BY-NC 4.0 — attribution required.

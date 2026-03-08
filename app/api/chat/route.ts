@@ -6,6 +6,7 @@ import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache
 import { generateWithFallback } from '@/lib/llm-fallback';
 import { validateDataIntegrity } from '@/lib/validate-data';
 import type { VerseContext } from '@/lib/bible-fetch';
+import { redis } from '@/lib/redis';
 
 // export const runtime = 'edge';
 
@@ -317,6 +318,28 @@ export async function POST(req: Request) {
       typeof translation === 'string' && translation.trim() ? translation : queryTranslation;
     const requestedTranslation = normalizeTranslation(rawTranslation);
     console.log('Using translation:', requestedTranslation);
+
+    const ipHeader = req.headers.get('x-forwarded-for') || 'unknown';
+    const ip = ipHeader.split(',')[0]?.trim() || 'unknown';
+    const rateLimitKey = `ratelimit:${ip}`;
+    let rateLimitWarning: string | null = null;
+
+    if (redis) {
+      const count = await redis.incr(rateLimitKey);
+      if (count === 1) {
+        await redis.expire(rateLimitKey, 60);
+      }
+      console.log(`Rate limit count: ${count} for IP ${ip}`);
+      if (count > 50 && count <= 60) {
+        rateLimitWarning = `Approaching rate limit (${count}/60 req/min)`;
+      }
+      if (count > 60) {
+        return new Response('Rate limit exceeded (60 req/min). Try again in 60s.', { status: 429 });
+      }
+    } else {
+      console.log('Rate limiting disabled: Upstash Redis not configured.');
+    }
+
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
     const modelHistory = history.map((message) => ({
       role: message.role,
@@ -324,23 +347,19 @@ export async function POST(req: Request) {
     }));
 
     let cached = null as Awaited<ReturnType<typeof getCachedResponse>>;
-    let cachedModelKey: string | null = null;
     let cachedKey: string | null = null;
     for (const modelKey of CACHE_MODEL_CANDIDATES) {
       const cacheKey = buildCacheKey({
         query,
         translation: requestedTranslation,
         model: modelKey,
-        userKey: customApiKey
       });
       cached = await getCachedResponse({
         query,
         translation: requestedTranslation,
         model: modelKey,
-        userKey: customApiKey
       });
       if (cached?.response) {
-        cachedModelKey = modelKey;
         cachedKey = cacheKey;
         break;
       }
@@ -370,8 +389,16 @@ export async function POST(req: Request) {
         { role: 'user', content: query }
       ] as Array<{ role: string; content: string }>);
 
+      const cachedHeaders: Record<string, string> = {};
+      if (fallbackUsed) {
+        cachedHeaders['x-model-used'] = cachedModelUsed;
+      }
+      if (rateLimitWarning) {
+        cachedHeaders['x-rate-limit-warning'] = rateLimitWarning;
+      }
+
       return cachedResult.toUIMessageStreamResponse({
-        headers: fallbackUsed ? { 'x-model-used': cachedModelUsed } : undefined,
+        headers: Object.keys(cachedHeaders).length > 0 ? cachedHeaders : undefined,
         messageMetadata: ({ part }) => {
           if (part.type === 'start' || part.type === 'finish') {
             return {
@@ -390,7 +417,6 @@ export async function POST(req: Request) {
       query,
       translation: requestedTranslation,
       model: PRIMARY_MODEL_USED,
-      userKey: customApiKey
     });
     console.log('Cache MISS – proceeding to LLM', missKey);
 
@@ -429,7 +455,10 @@ export async function POST(req: Request) {
     console.log(`Model selected for response: ${normalizedModelUsed}`);
 
     const responseInit = {
-      headers: fallbackUsed ? { 'x-model-used': normalizedModelUsed } : undefined,
+      headers: {
+        ...(fallbackUsed ? { 'x-model-used': normalizedModelUsed } : {}),
+        ...(rateLimitWarning ? { 'x-rate-limit-warning': rateLimitWarning } : {}),
+      },
       messageMetadata: ({ part }: { part: { type: string } }) => {
         if (part.type === 'start' || part.type === 'finish') {
           return {
@@ -450,7 +479,6 @@ export async function POST(req: Request) {
             query,
             translation: requestedTranslation,
             model: normalizedModelUsed,
-            userKey: customApiKey
           },
           {
             verses,

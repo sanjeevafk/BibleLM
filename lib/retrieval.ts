@@ -388,6 +388,9 @@ function applyTopicGuards(query: string, verses: VerseContext[]): VerseContext[]
 
 
 async function getCached<T>(key: string): Promise<T | null> {
+  if (!redis) {
+    return null;
+  }
   try {
     return await redis.get<T>(key);
   } catch (error) {
@@ -397,6 +400,9 @@ async function getCached<T>(key: string): Promise<T | null> {
 }
 
 async function setCached<T>(key: string, value: T, ttlSeconds: number = CACHE_TTL_SECONDS): Promise<void> {
+  if (!redis) {
+    return;
+  }
   try {
     await redis.set(key, value, { ex: ttlSeconds });
   } catch (error) {

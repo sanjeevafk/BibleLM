@@ -1,15 +1,8 @@
-import { Redis } from '@upstash/redis';
 import crypto from 'crypto';
 import type { VerseContext } from './bible-fetch';
+import { redis } from './redis';
 
 const CACHE_TTL_SECONDS = 259200; // 72 hours
-
-const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-  ? new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
-  : null;
 
 export type CachedChatResponse = {
   verses: VerseContext[];
@@ -23,11 +16,10 @@ type CacheKeyInput = {
   query: string;
   translation: string;
   model: string;
-  userKey?: string | null;
 };
 
-function buildCacheKey({ query, translation, model, userKey }: CacheKeyInput): string {
-  const input = `${query}\u0000${translation}\u0000${model}\u0000${userKey || ''}`;
+function buildCacheKey({ query, translation, model }: CacheKeyInput): string {
+  const input = `${query}\u0000${translation}\u0000${model}`;
   return crypto.createHash('sha256').update(input).digest('hex');
 }
 
