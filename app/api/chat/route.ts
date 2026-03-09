@@ -10,16 +10,14 @@ import { redis } from '@/lib/redis';
 
 // export const runtime = 'edge';
 
-const PRIMARY_MODEL = 'gemini-2.5-flash';
+const PRIMARY_MODEL = 'gemini-1.5-flash';
 const PRIMARY_MODEL_USED = `gemini:${PRIMARY_MODEL}`;
-const GEMINI_COMPAT_MODEL = 'gemini-1.5-flash';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct';
 const GROQ_FALLBACK_MODEL = 'llama-3.1-8b-instant';
 const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
 const HF_FALLBACK_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
 const CACHE_MODEL_CANDIDATES = [
   PRIMARY_MODEL_USED,
-  `gemini:${GEMINI_COMPAT_MODEL}`,
   `openrouter:${OPENROUTER_MODEL}`,
   `groq:${GROQ_FALLBACK_MODEL}`,
   `groq:${GROQ_SECONDARY_MODEL}`,
@@ -32,6 +30,9 @@ type NormalizedChatResponse = {
   content: string;
   modelUsed: string;
   verses: VerseContext[];
+  metadata: {
+    translation: string;
+  };
 };
 
 const DEBUG_LLM = process.env.DEBUG_LLM === '1';
@@ -154,7 +155,7 @@ async function incrementRateLimitCounter(rateLimitKey: string): Promise<number |
 function normalizeModelId(modelUsed: string | undefined): string {
   if (!modelUsed) return PRIMARY_MODEL_USED;
   if (modelUsed.includes(':') || modelUsed === 'context-only') return modelUsed;
-  if (modelUsed === PRIMARY_MODEL || modelUsed === GEMINI_COMPAT_MODEL) {
+  if (modelUsed === PRIMARY_MODEL) {
     return `gemini:${modelUsed}`;
   }
   if (modelUsed === GROQ_FALLBACK_MODEL || modelUsed === GROQ_SECONDARY_MODEL) {
@@ -172,7 +173,7 @@ function normalizeModelId(modelUsed: string | undefined): string {
 function normalizeTranslation(input: string | null | undefined): string {
   if (!input) return 'BSB';
   const upper = input.trim().toUpperCase();
-  if (['BSB', 'KJV', 'WEB', 'ASV'].includes(upper)) return upper;
+  if (['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'].includes(upper)) return upper;
   return 'BSB';
 }
 
@@ -309,6 +310,32 @@ function normalizeResponseContent(content: string, verses: VerseContext[]): stri
     normalized = `${normalized}\n\n${refs}`.trim();
   }
 
+  if (!/\*\*Original key words:\*\*/i.test(normalized)) {
+    const originalSections = verses
+      .filter((verse) => Array.isArray(verse.original) && verse.original.length > 0)
+      .slice(0, 4)
+      .map((verse) => {
+        const words = verse.original
+          .slice(0, 6)
+          .map((entry) => {
+            const parts: string[] = [];
+            if (entry.transliteration) parts.push(entry.transliteration);
+            parts.push(`Strong's ${entry.strongs}`);
+            if (entry.gloss) parts.push(`- ${entry.gloss}`);
+            if (entry.morph) parts.push(`Morph: ${entry.morph}`);
+            return `- ${entry.word} (${parts.join(', ')})`;
+          })
+          .join('\n');
+
+        return `- **${verse.reference}**\n**Original key words:**\n${words}`;
+      })
+      .join('\n\n');
+
+    if (originalSections) {
+      normalized = `${normalized}\n\n${originalSections}`.trim();
+    }
+  }
+
   return normalized;
 }
 
@@ -380,7 +407,12 @@ export async function POST(req: Request) {
         return 'http://localhost';
       })();
     const url = new URL(req.url, baseUrl);
-    const queryTranslation = url.searchParams.get('trans');
+    const queryTranslation =
+      url.searchParams.get('translation') ||
+      url.searchParams.get('trans');
+    const headerTranslation =
+      req.headers.get('x-translation') ||
+      req.headers.get('x-bible-translation');
 
     const rawMessages = Array.isArray(messages) ? messages : [];
     const normalizedMessages = rawMessages
@@ -441,8 +473,11 @@ export async function POST(req: Request) {
     }
 
     const rawTranslation =
-      typeof translation === 'string' && translation.trim() ? translation : queryTranslation;
+      typeof translation === 'string' && translation.trim()
+        ? translation
+        : queryTranslation || headerTranslation;
     const requestedTranslation = normalizeTranslation(rawTranslation);
+    console.log(`Translation switched to ${requestedTranslation}`);
     debugLog('Using translation:', requestedTranslation);
 
     let rateLimitWarning: string | null = null;
@@ -511,6 +546,9 @@ export async function POST(req: Request) {
         content: cachedStreamedContent,
         modelUsed: cachedModelUsed,
         verses: cached.verses || [],
+        metadata: {
+          translation: requestedTranslation,
+        },
       };
 
       const cachedResult = await streamTextFromContent(cachedResponse.content, [
@@ -536,6 +574,7 @@ export async function POST(req: Request) {
               fallbackUsed,
               finalFallback,
               verses: cachedResponse.verses,
+              metadata: cachedResponse.metadata,
             } as any;
           }
           return undefined;
@@ -581,6 +620,9 @@ export async function POST(req: Request) {
       content: streamedContent,
       modelUsed: normalizedModelUsed,
       verses,
+      metadata: {
+        translation: requestedTranslation,
+      },
     };
     debugLog(`Model selected for response: ${normalizedModelUsed}`);
 
@@ -596,6 +638,7 @@ export async function POST(req: Request) {
             fallbackUsed,
             finalFallback,
             verses: normalizedResponse.verses,
+            metadata: normalizedResponse.metadata,
           } as any;
         }
         return undefined;

@@ -14,9 +14,8 @@ type FallbackOptions = {
 export type FallbackResult =
   | { type: 'content'; content: string; modelUsed: string; finalFallback?: boolean; chunks?: string[] };
 
-const GEMINI_PRIMARY_MODEL = 'gemini-2.5-flash';
-const GEMINI_COMPAT_MODEL = 'gemini-1.5-flash';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+const GEMINI_PRIMARY_MODEL = 'gemini-1.5-flash';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct';
 const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
 const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
@@ -296,26 +295,24 @@ export async function generateWithFallback(
 
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    const geminiModels = [GEMINI_PRIMARY_MODEL, GEMINI_COMPAT_MODEL];
-    for (const modelName of geminiModels) {
-      try {
-        const result = await streamGeminiContent(
-          modelName,
-          prompt,
-          geminiKey,
-          temperature,
-          maxTokens,
-          options.onChunk
-        );
-        const text = result.text;
-        if (text) {
-          console.log(`[llm-fallback] Using primary provider: gemini:${modelName}`);
-          return { type: 'content', content: text, modelUsed: `gemini:${modelName}`, chunks: result.chunks };
-        }
-        throw new Error('Gemini returned empty output');
-      } catch (error) {
-        logModelFailure(`gemini:${modelName}`, error);
+    try {
+      const result = await streamGeminiContent(
+        GEMINI_PRIMARY_MODEL,
+        prompt,
+        geminiKey,
+        temperature,
+        maxTokens,
+        options.onChunk
+      );
+      const text = result.text;
+      if (text) {
+        console.log('Primary LLM: Gemini');
+        console.log(`[llm-fallback] Using primary provider: gemini:${GEMINI_PRIMARY_MODEL}`);
+        return { type: 'content', content: text, modelUsed: `gemini:${GEMINI_PRIMARY_MODEL}`, chunks: result.chunks };
       }
+      throw new Error('Gemini returned empty output');
+    } catch (error) {
+      logModelFailure(`gemini:${GEMINI_PRIMARY_MODEL}`, error);
     }
   } else {
     console.warn('[llm-fallback] GEMINI_API_KEY missing; skipping Gemini primary provider.');
@@ -324,6 +321,7 @@ export async function generateWithFallback(
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   if (openRouterKey) {
     try {
+      console.log('Fallback to OpenRouter');
       const result = await streamOpenRouterContent(
         prompt,
         openRouterKey,

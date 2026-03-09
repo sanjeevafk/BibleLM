@@ -8,7 +8,7 @@
 ## Core Philosophy
 
 - **Scripture-First & Absolute Neutrality** — Every response **must** quote real verses with chapter:verse citations. No interpretation, application, denominational slant, political framing, or moralizing allowed. The system prompt rigidly enforces this.
-- **Zero-Cost Operation** — Runs indefinitely on Vercel **Hobby** tier + Gemini **free** tier (Gemini 2.5 Flash primary). No paid vector DBs, no heavy compute, no always-on servers.
+- **Zero-Cost Operation** — Runs indefinitely on Vercel **Hobby** tier + Gemini **free** tier (Gemini 1.5 Flash primary). No paid vector DBs, no heavy compute, no always-on servers.
 - **Speed & Reliability** — Common queries (<1 s) via bundled data + Edge Functions. Rare verses fallback gracefully.
 - **Original-Language Fidelity** — Hebrew (OSHB) / Greek (SBLGNT) word popups with Strong's number, transliteration, and gloss — no loose paraphrasing.
 
@@ -21,14 +21,13 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
 - **Framework** — Next.js 16+ (App Router, Server Actions, React Server Components)
 - **Styling** — Tailwind CSS + shadcn/ui (radix primitives)
 - **LLM Integration** — Vercel AI SDK + provider SDKs (`@google/genai`, OpenRouter, `@ai-sdk/groq`, Hugging Face Inference)
-- **Primary LLM** — Gemini 2.5 Flash (`GEMINI_API_KEY`) with streamed generation
+- **Primary LLM** — Gemini 1.5 Flash (`GEMINI_API_KEY`) with streamed generation
 - **Fallback Models (ordered)**  
-  - Gemini 1.5 Flash (`gemini-1.5-flash`)
-  - OpenRouter (`OPENROUTER_API_KEY`)  
+   - OpenRouter (`OPENROUTER_API_KEY`, default model `meta-llama/llama-3.1-8b-instruct`)  
     Get key: https://openrouter.ai/keys
   - Groq (`llama-3.1-8b-instant`, then `llama-3.3-70b-versatile`)
   - Hugging Face Inference (`meta-llama/Meta-Llama-3.1-8B-Instruct`)
-  - Final: raw verses + original-language notes only
+   - Final: raw verses + original-language notes only with message `AI inference temporarily limited - showing Scripture context only.`
 - **Retrieval** — Hybrid RAG (no vector DB at runtime):  
   - Direct reference parsing (`John 3:16`, `Ex 21:22-25`)  
   - Groq-powered semantic verse suggestion (cheap 8B re-ranking)  
@@ -75,19 +74,18 @@ Next.js 14+ (App Router) + Vercel Edge runtime. Fully stateless where possible; 
    - UI shows typewriter effect instantly
 
 8. **Fallbacks**  
-   - Model retry cascade: Gemini → OpenRouter → Groq → HF  
+   - Model retry cascade: Gemini (1.5 Flash) -> OpenRouter -> Groq -> HF -> raw verses
    - Rate-limit (429) → client-side "Lite mode" (verses + Strong's only)
 
 ## Fallback Models & Rate Limits
 
 BibleLM now uses Gemini as primary and falls back automatically when rate limits or provider outages occur:
 
-- Primary LLM: Gemini 2.5 Flash (free tier, generous limits)
-- Gemini fallback: `gemini-1.5-flash`
-- OpenRouter fallback (`OPENROUTER_API_KEY`)
-- Groq fallback: `llama-3.1-8b-instant` then `llama-3.3-70b-versatile`
-- Hugging Face Inference: `meta-llama/Meta-Llama-3.1-8B-Instruct` (reuses `HF_TOKEN`)
-- Final: raw verses + original-language notes only
+- Primary LLM: Gemini 1.5 Flash (`gemini-1.5-flash`)
+- Fallback 1: OpenRouter (`OPENROUTER_API_KEY`, default `meta-llama/llama-3.1-8b-instruct`)
+- Fallback 2: Groq `llama-3.1-8b-instant` then `llama-3.3-70b-versatile`
+- Fallback 3: Hugging Face Inference `meta-llama/Meta-Llama-3.1-8B-Instruct` (reuses `HF_TOKEN`)
+- Fallback 4: raw verses + original-language notes only (`AI inference temporarily limited - showing Scripture context only.`)
 - Response aesthetics unified across providers (cards, collapsed original-language details, quote styling)
 
 ## 📦 Data Bundling & Optimization
