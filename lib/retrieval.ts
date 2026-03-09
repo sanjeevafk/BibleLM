@@ -33,7 +33,7 @@ const NT_BOOKS = new Set([
   'PHP', 'COL', '1TH', '2TH', '1TI', '2TI', 'TIT', 'PHM', 'HEB', 'JAS',
   '1PE', '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV'
 ]);
-const LOCAL_TRANSLATIONS = new Set(['KJV', 'WEB', 'ASV', 'NHEB']);
+const LOCAL_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB']);
 
 type VerseResult = { verseId: string };
 type VerseGenre = 'law' | 'historical' | 'poetic' | 'prophetic' | 'gospel' | 'epistle' | 'apocalyptic';

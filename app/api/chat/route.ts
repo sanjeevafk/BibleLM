@@ -171,7 +171,10 @@ function normalizeModelId(modelUsed: string | undefined): string {
 }
 
 function normalizeTranslation(_input: string | null | undefined): string {
-  return 'BSB';
+  if (!_input) return 'BSB';
+  const upper = String(_input).trim().toUpperCase();
+  const validTranslations = ['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'];
+  return validTranslations.includes(upper) ? upper : 'BSB';
 }
 
 function getMessageText(message: UIMessage | undefined): string {

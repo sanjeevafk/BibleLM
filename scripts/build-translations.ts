@@ -12,9 +12,9 @@ const INDEX_PATH = path.join(process.cwd(), 'data', 'translations-index.json');
 const HASH_PATH = path.join(OUTPUT_DIR, '.translations.hash');
 
 const TRANSLATION_FILES = [
+  { code: 'BSB', file: 'BSB.csv', required: true },
   { code: 'KJV', file: 'KJV.csv', required: true },
-  { code: 'WEB', file: 'WEB.csv', required: false },
-  { code: 'NHEB', file: 'NHEB.csv', required: true },
+  { code: 'NHEB', file: 'NHEB.csv', required: false },
   { code: 'ASV', file: 'ASV.csv', required: true }
 ];
 

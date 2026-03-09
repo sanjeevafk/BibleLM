@@ -8,6 +8,7 @@ import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { TranslationSelect } from './TranslationSelect';
 import { Github, Moon, Settings, Sun } from 'lucide-react';
 import {
   DropdownMenu,
@@ -98,6 +99,7 @@ function ChatInner({
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
   const [rateLimitWarning, setRateLimitWarning] = useState<string | null>(null);
+  const [selectedTranslation, setSelectedTranslation] = useState('BSB');
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialMessages = useMemo<UIMessage[]>(
     () => [
@@ -141,10 +143,13 @@ function ChatInner({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem(TRANSLATION_STORAGE_KEY, 'BSB');
-    const url = new URL(window.location.href);
-    url.searchParams.set('trans', 'BSB');
-    window.history.replaceState({}, '', url.toString());
+    const stored = localStorage.getItem(TRANSLATION_STORAGE_KEY);
+    if (stored && ['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'].includes(stored)) {
+      setSelectedTranslation(stored);
+    } else {
+      localStorage.setItem(TRANSLATION_STORAGE_KEY, 'BSB');
+      setSelectedTranslation('BSB');
+    }
   }, []);
 
   const scrollToBottom = useCallback((smooth = false) => {
@@ -177,6 +182,11 @@ function ChatInner({
     scrollToBottom();
   }, [scrollToBottom]);
 
+  const handleTranslationChange = useCallback((newTranslation: string) => {
+    setSelectedTranslation(newTranslation);
+    localStorage.setItem(TRANSLATION_STORAGE_KEY, newTranslation);
+  }, []);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = input.trim();
@@ -190,7 +200,7 @@ function ChatInner({
         { text: trimmed },
         {
           body: {
-            translation: 'BSB',
+            translation: selectedTranslation,
             customApiKey: customKey || undefined,
           },
         }
@@ -235,6 +245,12 @@ function ChatInner({
 
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <TranslationSelect 
+            value={selectedTranslation} 
+            onChange={handleTranslationChange}
+            disabled={isLoading}
+          />
+          
           <Button variant="ghost" size="icon" asChild className="rounded-full w-10 h-10 hover:bg-muted/80">
             <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
               <Github className="h-5 w-5" />
@@ -337,7 +353,7 @@ function ChatInner({
           </Button>
         </form>
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
-          BibleLM delivers exact Scripture quotes and original-language insights (Hebrew/Greek morphology, clause/poetic structure, alignments) using hybrid RAG retrieval. Translation: BSB. Cross-check references with your own Bible for full context.
+          BibleLM delivers exact Scripture quotes and original-language insights (Hebrew/Greek morphology, clause/poetic structure, alignments) using hybrid RAG retrieval. Translation: {selectedTranslation}. Cross-check references with your own Bible for full context.
         </div>
         <div className="text-center text-[10px] text-muted-foreground/80 mt-1 leading-relaxed">
           OpenHebrewBible layers (clause segmentation, poetic division, alignments, extended glosses) – CC BY-NC 4.0 – eliranwong/OpenHebrewBible
