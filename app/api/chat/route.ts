@@ -10,7 +10,7 @@ import { redis } from '@/lib/redis';
 
 // export const runtime = 'edge';
 
-const PRIMARY_MODEL = 'gemini-1.5-flash';
+const PRIMARY_MODEL = 'gemini-2.5-flash';
 const PRIMARY_MODEL_USED = `gemini:${PRIMARY_MODEL}`;
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct';
 const GROQ_FALLBACK_MODEL = 'llama-3.1-8b-instant';
@@ -170,10 +170,7 @@ function normalizeModelId(modelUsed: string | undefined): string {
   return modelUsed;
 }
 
-function normalizeTranslation(input: string | null | undefined): string {
-  if (!input) return 'BSB';
-  const upper = input.trim().toUpperCase();
-  if (['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'].includes(upper)) return upper;
+function normalizeTranslation(_input: string | null | undefined): string {
   return 'BSB';
 }
 
@@ -530,6 +527,11 @@ export async function POST(req: Request) {
       }
     }
 
+    if (cached?.response && /No supporting passages found/i.test(cached.response)) {
+      cached = null;
+      cachedKey = null;
+    }
+
     if (cached?.response) {
       debugLog('Cache HIT – returning stored response', cachedKey);
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
@@ -647,6 +649,9 @@ export async function POST(req: Request) {
         if (isAborted) return;
         const text = getMessageText(responseMessage);
         if (!text) return;
+        if (verses.length === 0 || /No supporting passages found/i.test(text)) {
+          return;
+        }
         await setCachedResponse(
           {
             query,

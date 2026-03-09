@@ -12,7 +12,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import type { VerseContext } from '@/lib/bible-fetch';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
-const PRIMARY_MODEL_USED = 'gemini:gemini-1.5-flash';
+const PRIMARY_MODEL_USED = 'gemini:gemini-2.5-flash';
 
 function getMessageText(message: UIMessage): string {
   const m = message as any;

@@ -8,7 +8,6 @@ import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { TranslationSelect } from '@/components/TranslationSelect';
 import { Github, Moon, Settings, Sun } from 'lucide-react';
 import {
   DropdownMenu,
@@ -28,30 +27,6 @@ type ChatInnerProps = {
 };
 
 const TRANSLATION_STORAGE_KEY = 'biblelm-translation';
-const VALID_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB']);
-
-function normalizeTranslation(input: string | null | undefined): string {
-  if (!input) return 'BSB';
-  const upper = input.trim().toUpperCase();
-  return VALID_TRANSLATIONS.has(upper) ? upper : 'BSB';
-}
-
-function extractMessageText(message: UIMessage): string {
-  const msg = message as any;
-  if (typeof msg.content === 'string') return msg.content;
-  if (typeof msg.text === 'string') return msg.text;
-  if (Array.isArray(msg.content)) {
-    return msg.content
-      .map((part: any) => (typeof part === 'string' ? part : part.text || part.value || ''))
-      .join('');
-  }
-  if (Array.isArray(msg.parts)) {
-    return msg.parts
-      .map((part: any) => part.text || part.value || (part.type === 'text' ? part.text : ''))
-      .join('');
-  }
-  return '';
-}
 
 export function Chat() {
   const mounted = useSyncExternalStore(
@@ -122,8 +97,6 @@ function ChatInner({
   onClearChat,
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
-  const [translation, setTranslation] = useState('BSB');
-  const [isSwitchingTranslation, setIsSwitchingTranslation] = useState(false);
   const [rateLimitWarning, setRateLimitWarning] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialMessages = useMemo<UIMessage[]>(
@@ -168,19 +141,9 @@ function ChatInner({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const paramValue = params.get('trans');
-    const storedValue = localStorage.getItem(TRANSLATION_STORAGE_KEY);
-    const initial = paramValue
-      ? normalizeTranslation(paramValue)
-      : storedValue
-        ? normalizeTranslation(storedValue)
-        : 'BSB';
-
-    setTranslation(initial);
-    localStorage.setItem(TRANSLATION_STORAGE_KEY, initial);
+    localStorage.setItem(TRANSLATION_STORAGE_KEY, 'BSB');
     const url = new URL(window.location.href);
-    url.searchParams.set('trans', initial);
+    url.searchParams.set('trans', 'BSB');
     window.history.replaceState({}, '', url.toString());
   }, []);
 
@@ -202,16 +165,6 @@ function ChatInner({
     }
   }, []);
 
-  const getLastUserText = useCallback(() => {
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i]?.role === 'user') {
-        const text = extractMessageText(messages[i]);
-        return text.trim();
-      }
-    }
-    return '';
-  }, [messages]);
-
   // Use useLayoutEffect to prevent flicker/jumps during renders
   useLayoutEffect(() => {
     if (shouldAutoScroll.current) {
@@ -223,41 +176,6 @@ function ChatInner({
   useEffect(() => {
     scrollToBottom();
   }, [scrollToBottom]);
-
-  const handleTranslationChange = async (nextValue: string) => {
-    const next = normalizeTranslation(nextValue);
-    if (next === translation) return;
-    console.log(`Translation switched to ${next}`);
-    setTranslation(next);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(TRANSLATION_STORAGE_KEY, next);
-      const url = new URL(window.location.href);
-      url.searchParams.set('trans', next);
-      window.history.replaceState({}, '', url.toString());
-    }
-
-    if (isLoading) return;
-    const lastUserText = getLastUserText();
-    if (!lastUserText) return;
-    shouldAutoScroll.current = true;
-    setIsSwitchingTranslation(true);
-    try {
-      await sendMessage(
-        { text: lastUserText },
-        {
-          body: {
-            translation: next,
-            customApiKey: customKey || undefined,
-          },
-        }
-      );
-    } catch (err) {
-      // Optionally revert or notify user
-      console.error('Failed to resend message with new translation:', err);
-    } finally {
-      setIsSwitchingTranslation(false);
-    }
-  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -272,7 +190,7 @@ function ChatInner({
         { text: trimmed },
         {
           body: {
-            translation,
+            translation: 'BSB',
             customApiKey: customKey || undefined,
           },
         }
@@ -317,11 +235,6 @@ function ChatInner({
 
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <TranslationSelect
-            value={translation}
-            onChange={handleTranslationChange}
-            disabled={isLoading || isSwitchingTranslation}
-          />
           <Button variant="ghost" size="icon" asChild className="rounded-full w-10 h-10 hover:bg-muted/80">
             <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
               <Github className="h-5 w-5" />
@@ -387,14 +300,6 @@ function ChatInner({
             </div>
           )}
 
-          {isSwitchingTranslation && (
-            <div className="flex justify-center my-2">
-              <div className="bg-muted/70 border rounded-lg px-3 py-2 text-xs text-muted-foreground">
-                Switching translation to {translation}...
-              </div>
-            </div>
-          )}
-
           {error && (
             <div className="mx-auto w-full max-w-md my-4 p-4 border border-destructive bg-destructive/10 text-destructive text-sm rounded-lg text-center">
               {error.message || 'An error occurred. Please try again.'}
@@ -432,7 +337,7 @@ function ChatInner({
           </Button>
         </form>
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
-          BibleLM delivers exact Scripture quotes and original-language insights (Hebrew/Greek morphology, clause/poetic structure, alignments) using hybrid RAG retrieval. Translation: {translation}. Cross-check references with your own Bible for full context.
+          BibleLM delivers exact Scripture quotes and original-language insights (Hebrew/Greek morphology, clause/poetic structure, alignments) using hybrid RAG retrieval. Translation: BSB. Cross-check references with your own Bible for full context.
         </div>
         <div className="text-center text-[10px] text-muted-foreground/80 mt-1 leading-relaxed">
           OpenHebrewBible layers (clause segmentation, poetic division, alignments, extended glosses) – CC BY-NC 4.0 – eliranwong/OpenHebrewBible

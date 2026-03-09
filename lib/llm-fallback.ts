@@ -14,7 +14,12 @@ type FallbackOptions = {
 export type FallbackResult =
   | { type: 'content'; content: string; modelUsed: string; finalFallback?: boolean; chunks?: string[] };
 
-const GEMINI_PRIMARY_MODEL = 'gemini-1.5-flash';
+const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL_CANDIDATES = [
+  GEMINI_PRIMARY_MODEL,
+  'gemini-2.5-flash',
+  'models/gemini-2.5-flash',
+];
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct';
 const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
@@ -30,6 +35,11 @@ function logModelFailure(model: string, error: unknown) {
       ? 'timeout'
       : 'error';
   console.warn(`[llm-fallback] ${label}: ${model}`, error);
+}
+
+function isModelNotFoundError(error: unknown): boolean {
+  const message = String((error as { message?: string })?.message || error || '').toLowerCase();
+  return message.includes('not_found') || message.includes('listmodels') || message.includes('404');
 }
 
 function extractOpenRouterDelta(payload: unknown): string {
@@ -295,24 +305,30 @@ export async function generateWithFallback(
 
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    try {
-      const result = await streamGeminiContent(
-        GEMINI_PRIMARY_MODEL,
-        prompt,
-        geminiKey,
-        temperature,
-        maxTokens,
-        options.onChunk
-      );
-      const text = result.text;
-      if (text) {
-        console.log('Primary LLM: Gemini');
-        console.log(`[llm-fallback] Using primary provider: gemini:${GEMINI_PRIMARY_MODEL}`);
-        return { type: 'content', content: text, modelUsed: `gemini:${GEMINI_PRIMARY_MODEL}`, chunks: result.chunks };
+    const candidates = Array.from(new Set(GEMINI_MODEL_CANDIDATES.filter(Boolean)));
+    for (const modelName of candidates) {
+      try {
+        const result = await streamGeminiContent(
+          modelName,
+          prompt,
+          geminiKey,
+          temperature,
+          maxTokens,
+          options.onChunk
+        );
+        const text = result.text;
+        if (text) {
+          console.log('Primary LLM: Gemini');
+          console.log(`[llm-fallback] Using primary provider: gemini:${modelName}`);
+          return { type: 'content', content: text, modelUsed: `gemini:${modelName}`, chunks: result.chunks };
+        }
+        throw new Error('Gemini returned empty output');
+      } catch (error) {
+        logModelFailure(`gemini:${modelName}`, error);
+        if (isModelNotFoundError(error)) {
+          console.warn(`[llm-fallback] Gemini model alias unavailable, trying next candidate: ${modelName}`);
+        }
       }
-      throw new Error('Gemini returned empty output');
-    } catch (error) {
-      logModelFailure(`gemini:${GEMINI_PRIMARY_MODEL}`, error);
     }
   } else {
     console.warn('[llm-fallback] GEMINI_API_KEY missing; skipping Gemini primary provider.');

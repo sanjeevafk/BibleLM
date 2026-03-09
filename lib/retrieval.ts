@@ -54,9 +54,76 @@ const LEXICAL_DOCS: LexicalDoc[] = Object.values(BIBLE_INDEX).map((verse) => ({
   text: verse.text
 }));
 
+const FALLBACK_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'what', 'when', 'where', 'which',
+  'can', 'could', 'should', 'would', 'does', 'did', 'are', 'is', 'to', 'of', 'in', 'on',
+  'a', 'an', 'about', 'christian', 'christians', 'bible', 'say'
+]);
+
 let lexicalFuse: Fuse<LexicalDoc> | null = null;
 let verseMetadataCache: Map<string, VerseMetadata> | null = null;
 let verseMetadataPromise: Promise<Map<string, VerseMetadata>> | null = null;
+
+function tokenizeFallbackQuery(query: string): string[] {
+  return Array.from(
+    new Set(
+      query
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 3 && !FALLBACK_STOPWORDS.has(token))
+    )
+  );
+}
+
+async function fallbackBundledLexicalSearch(query: string, translation: string, limit = 6): Promise<VerseContext[]> {
+  const tokens = tokenizeFallbackQuery(query);
+  if (tokens.length === 0) return [];
+
+  const ranked = Object.values(BIBLE_INDEX)
+    .map((verse) => {
+      const text = (verse.text || '').toLowerCase();
+      let score = 0;
+      for (const token of tokens) {
+        if (text.includes(token)) {
+          score += token.length;
+        }
+      }
+      return { verse, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  const output: VerseContext[] = [];
+  for (const hit of ranked) {
+    const ref = hit.verse.reference;
+    if (!ref) continue;
+
+    if (LOCAL_TRANSLATIONS.has(translation)) {
+      const localText = await getTranslationVerse(ref, translation);
+      if (localText) {
+        output.push({
+          reference: ref,
+          translation,
+          text: localText,
+          original: hit.verse.original ? hit.verse.original.map((orig) => ({ ...orig })) : [],
+        });
+        continue;
+      }
+    }
+
+    output.push({
+      reference: ref,
+      translation: 'WEB',
+      text: hit.verse.text,
+      original: hit.verse.original ? hit.verse.original.map((orig) => ({ ...orig })) : [],
+    });
+  }
+
+  return output;
+}
 
 function getLexicalFuse(): Fuse<LexicalDoc> {
   if (!lexicalFuse) {
@@ -989,7 +1056,11 @@ export async function retrieveContextForQuery(
   const limitedIds = orderedIds.slice(0, topK);
 
   let verses = await fetchVersesByIds(limitedIds, translation);
-  if (verses.length < Math.min(limitedIds.length, topK)) {
+  const shouldUseApiFallback =
+    verses.length === 0 ||
+    (limitedIds.length > 0 && verses.length < Math.min(limitedIds.length, topK));
+
+  if (shouldUseApiFallback) {
     try {
       const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
       verses = [...verses, ...apiVerses];
@@ -1251,6 +1322,10 @@ async function retrieveContextViaApis(
     const groqApiKey = apiKey || process.env.GROQ_API_KEY;
     if (!groqApiKey) {
       console.warn('Semantic retrieval skipped: GROQ_API_KEY is missing.');
+      const lexicalFallback = await fallbackBundledLexicalSearch(query, translation, 6);
+      if (lexicalFallback.length > 0) {
+        verses.push(...lexicalFallback);
+      }
       return enrichOriginalLanguages(verses);
     }
     const groq = createGroq({
@@ -1284,6 +1359,10 @@ async function retrieveContextViaApis(
 
     if (!text) {
       console.warn('Semantic retrieval failed', lastModelError);
+      const lexicalFallback = await fallbackBundledLexicalSearch(query, translation, 6);
+      if (lexicalFallback.length > 0) {
+        verses.push(...lexicalFallback);
+      }
       return enrichOriginalLanguages(verses);
     }
 
