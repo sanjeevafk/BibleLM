@@ -230,11 +230,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     !isUser &&
     Boolean(modelUsed && modelUsed !== PRIMARY_MODEL_USED);
 
-  React.useEffect(() => {
-    if (!isUser && modelUsed) {
-      console.log(`Rendering with model: ${modelUsed}`);
-    }
-  }, [isUser, modelUsed]);
+
 
   const handleCopy = () => {
     navigator.clipboard.writeText(messageText);
