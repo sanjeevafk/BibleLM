@@ -2,8 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import zlib from 'zlib';
+import bibleIndexData from '../data/bible-index.json';
 
 type TranslationBook = Record<string, Record<string, string>>;
+type IndexedVerse = { text?: string };
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'translations');
 const INDEX_PATH = path.join(process.cwd(), 'data', 'translations-index.json');
@@ -11,6 +13,7 @@ const INDEX_PATH = path.join(process.cwd(), 'data', 'translations-index.json');
 const indexCache: Record<string, Record<string, string>> = {};
 const bookCache = new Map<string, TranslationBook | null>();
 const inFlight = new Map<string, Promise<TranslationBook | null>>();
+const BIBLE_INDEX = bibleIndexData as Record<string, IndexedVerse>;
 
 const brotliDecompress = promisify(zlib.brotliDecompress);
 const gunzip = promisify(zlib.gunzip);
@@ -18,7 +21,7 @@ const gunzip = promisify(zlib.gunzip);
 const TRANSLATION_ALIASES: Record<string, string> = {
   BSB: 'BSB',
   KJV: 'KJV',
-  WEB: 'WEB',  // kept as alias; no WEB data in bible_databases — falls through to null gracefully
+  WEB: 'WEB',
   NHEB: 'NHEB',
   ASV: 'ASV'
 };
@@ -197,6 +200,7 @@ const BOOK_ALIASES: Record<string, string> = {
   matt: 'MAT',
   matthew: 'MAT',
   mrk: 'MRK',
+  mar: 'MRK',
   mark: 'MRK',
   luk: 'LUK',
   luke: 'LUK',
@@ -305,6 +309,7 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
 
   const file = indexCache[translation]?.[book];
   if (!file) {
+    console.warn(`[translations] Missing index mapping for ${translation} ${book}`);
     bookCache.set(key, null);
     return null;
   }
@@ -325,7 +330,7 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
       bookCache.set(key, data);
       return data;
     } catch (error) {
-      console.warn(`Translation book load failed for ${translation} ${book}`, error);
+      console.warn(`[translations] Translation book load failed for ${translation} ${book}`, error);
       bookCache.set(key, null);
       return null;
     } finally {
@@ -335,6 +340,26 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
 
   inFlight.set(key, loader);
   return loader;
+}
+
+function getWebIndexedVerse(reference: string): string | null {
+  const direct = BIBLE_INDEX[reference]?.text;
+  if (direct) return direct;
+
+  const dotted = reference.match(/^([A-Z0-9]{3})\s+(\d+):(\d+)(?:\s*-\s*(\d+))?$/i);
+  if (!dotted) return null;
+  const book = normalizeBook(dotted[1]);
+  const chapter = Number.parseInt(dotted[2], 10);
+  const start = Number.parseInt(dotted[3], 10);
+  const end = dotted[4] ? Number.parseInt(dotted[4], 10) : start;
+
+  const parts: string[] = [];
+  for (let verse = start; verse <= end; verse += 1) {
+    const key = `${book} ${chapter}:${verse}`;
+    const text = BIBLE_INDEX[key]?.text;
+    if (text) parts.push(text);
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
 }
 
 function parseReference(ref: string): { book: string; chapter: number; verse: number; endVerse?: number } | null {
@@ -367,13 +392,34 @@ export async function getTranslationVerse(
   if (!reference || !translation) return null;
   const parsed = parseReference(reference);
   if (!parsed) return null;
+
+  const normalizedTranslation = normalizeTranslation(translation);
+
+  if (normalizedTranslation === 'WEB') {
+    const indexed = getWebIndexedVerse(`${parsed.book} ${parsed.chapter}:${parsed.verse}${parsed.endVerse ? `-${parsed.endVerse}` : ''}`);
+    if (indexed) {
+      return indexed;
+    }
+    console.warn(`[translations] WEB indexed verse missing for ${reference}`);
+  }
+
   const data = await loadBook(translation, parsed.book);
-  if (!data) return null;
+  if (!data) {
+    console.warn(`[translations] No translation data for ${normalizedTranslation} ${parsed.book}`);
+    return null;
+  }
   const chapterData = data[String(parsed.chapter)];
-  if (!chapterData) return null;
+  if (!chapterData) {
+    console.warn(`[translations] Missing chapter ${parsed.chapter} for ${normalizedTranslation} ${parsed.book}`);
+    return null;
+  }
 
   if (!parsed.endVerse || parsed.endVerse === parsed.verse) {
-    return chapterData[String(parsed.verse)] || null;
+    const verseText = chapterData[String(parsed.verse)] || null;
+    if (!verseText) {
+      console.warn(`[translations] Missing verse ${parsed.book} ${parsed.chapter}:${parsed.verse} in ${normalizedTranslation}`);
+    }
+    return verseText;
   }
 
   const parts: string[] = [];
@@ -381,5 +427,9 @@ export async function getTranslationVerse(
     const text = chapterData[String(v)];
     if (text) parts.push(text);
   }
-  return parts.length > 0 ? parts.join(' ') : null;
+  if (parts.length === 0) {
+    console.warn(`[translations] Missing verse range ${reference} in ${normalizedTranslation}`);
+    return null;
+  }
+  return parts.join(' ');
 }

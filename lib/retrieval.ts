@@ -33,7 +33,7 @@ const NT_BOOKS = new Set([
   'PHP', 'COL', '1TH', '2TH', '1TI', '2TI', 'TIT', 'PHM', 'HEB', 'JAS',
   '1PE', '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV'
 ]);
-const LOCAL_TRANSLATIONS = new Set(['KJV', 'WEB', 'ASV']);
+const LOCAL_TRANSLATIONS = new Set(['KJV', 'WEB', 'ASV', 'NHEB']);
 
 type VerseResult = { verseId: string };
 type VerseGenre = 'law' | 'historical' | 'poetic' | 'prophetic' | 'gospel' | 'epistle' | 'apocalyptic';
@@ -472,7 +472,7 @@ async function resolveVerseText(
   verseId: string,
   translation: string
 ): Promise<VerseContext | null> {
-  const canUseIndex = translation === 'WEB' || LOCAL_TRANSLATIONS.has(translation);
+  const canUseIndex = translation === 'WEB';
   if (LOCAL_TRANSLATIONS.has(translation)) {
     const localText = await getTranslationVerse(verseId, translation);
     if (localText) {
@@ -1120,7 +1120,7 @@ async function retrieveContextViaApis(
 ): Promise<VerseContext[]> {
   const verses: VerseContext[] = [];
   const normalizedQuery = query.toLowerCase();
-  const canUseIndex = translation === 'WEB' || LOCAL_TRANSLATIONS.has(translation);
+  const canUseIndex = translation === 'WEB';
 
   const tenCommandments: VerseContext[] = [
     { reference: 'EXO 20:3', text: 'Thou shalt have no other gods before me.', translation: 'ASV', original: [] },

@@ -12,9 +12,10 @@ const INDEX_PATH = path.join(process.cwd(), 'data', 'translations-index.json');
 const HASH_PATH = path.join(OUTPUT_DIR, '.translations.hash');
 
 const TRANSLATION_FILES = [
-  { code: 'KJV', file: 'KJV.csv' },
-  { code: 'NHEB', file: 'NHEB.csv' },
-  { code: 'ASV', file: 'ASV.csv' }
+  { code: 'KJV', file: 'KJV.csv', required: true },
+  { code: 'WEB', file: 'WEB.csv', required: false },
+  { code: 'NHEB', file: 'NHEB.csv', required: true },
+  { code: 'ASV', file: 'ASV.csv', required: true }
 ];
 
 const BOOK_NUMBER_TO_CODE: Record<number, string> = {
@@ -494,12 +495,21 @@ async function main() {
     );
   }
 
-  const hash = crypto.createHash('sha256');
-  for (const entry of TRANSLATION_FILES) {
+  const availableEntries = TRANSLATION_FILES.filter((entry) => {
     const filePath = path.join(SOURCE_DIR, entry.file);
     if (!fs.existsSync(filePath)) {
-      throw new Error(`Missing translation file at ${filePath}`);
+      if (entry.required) {
+        throw new Error(`Missing translation file at ${filePath}`);
+      }
+      console.warn(`Optional translation source missing for ${entry.code}: ${filePath}`);
+      return false;
     }
+    return true;
+  });
+
+  const hash = crypto.createHash('sha256');
+  for (const entry of availableEntries) {
+    const filePath = path.join(SOURCE_DIR, entry.file);
     hash.update(fs.readFileSync(filePath));
   }
   const digest = hash.digest('hex');
@@ -514,7 +524,7 @@ async function main() {
 
   const index: Record<string, Record<string, string>> = {};
 
-  for (const entry of TRANSLATION_FILES) {
+  for (const entry of availableEntries) {
     const filePath = path.join(SOURCE_DIR, entry.file);
     const books = await parseTranslationFile(filePath);
     index[entry.code] = {};

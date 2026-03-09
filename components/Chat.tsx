@@ -28,7 +28,7 @@ type ChatInnerProps = {
 };
 
 const TRANSLATION_STORAGE_KEY = 'biblelm-translation';
-const VALID_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV']);
+const VALID_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB']);
 
 function normalizeTranslation(input: string | null | undefined): string {
   if (!input) return 'BSB';
@@ -123,6 +123,7 @@ function ChatInner({
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
   const [translation, setTranslation] = useState('BSB');
+  const [isSwitchingTranslation, setIsSwitchingTranslation] = useState(false);
   const [rateLimitWarning, setRateLimitWarning] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialMessages = useMemo<UIMessage[]>(
@@ -226,6 +227,7 @@ function ChatInner({
   const handleTranslationChange = async (nextValue: string) => {
     const next = normalizeTranslation(nextValue);
     if (next === translation) return;
+    console.log(`Translation switched to ${next}`);
     setTranslation(next);
     if (typeof window !== 'undefined') {
       localStorage.setItem(TRANSLATION_STORAGE_KEY, next);
@@ -238,6 +240,7 @@ function ChatInner({
     const lastUserText = getLastUserText();
     if (!lastUserText) return;
     shouldAutoScroll.current = true;
+    setIsSwitchingTranslation(true);
     try {
       await sendMessage(
         { text: lastUserText },
@@ -251,6 +254,8 @@ function ChatInner({
     } catch (err) {
       // Optionally revert or notify user
       console.error('Failed to resend message with new translation:', err);
+    } finally {
+      setIsSwitchingTranslation(false);
     }
   };
 
@@ -312,7 +317,11 @@ function ChatInner({
 
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <TranslationSelect value={translation} onChange={handleTranslationChange} />
+          <TranslationSelect
+            value={translation}
+            onChange={handleTranslationChange}
+            disabled={isLoading || isSwitchingTranslation}
+          />
           <Button variant="ghost" size="icon" asChild className="rounded-full w-10 h-10 hover:bg-muted/80">
             <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
               <Github className="h-5 w-5" />
@@ -374,6 +383,14 @@ function ChatInner({
             <div className="flex justify-start my-4">
               <div className="bg-muted border rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-muted-foreground">
                 Retrieving verses...
+              </div>
+            </div>
+          )}
+
+          {isSwitchingTranslation && (
+            <div className="flex justify-center my-2">
+              <div className="bg-muted/70 border rounded-lg px-3 py-2 text-xs text-muted-foreground">
+                Switching translation to {translation}...
               </div>
             </div>
           )}
