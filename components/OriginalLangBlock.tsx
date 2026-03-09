@@ -59,6 +59,7 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
       <PopoverTrigger asChild>
         <button
           type="button"
+          dir={isHebrew ? 'rtl' : 'ltr'}
           className={`${langClass} cursor-pointer underline underline-offset-4 decoration-dotted font-semibold text-primary/90 bg-transparent border-0 p-0 appearance-none`}
         >
           {word}
@@ -66,7 +67,7 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
       </PopoverTrigger>
       <PopoverContent className="w-[min(92vw,22rem)] max-h-[72vh] overflow-y-auto space-y-2 text-xs">
         <div className="flex items-center justify-between gap-2">
-          <span className={`${langClass} text-base font-bold bg-primary/5 px-2 py-1 rounded-md border border-primary/10`}>{word}</span>
+          <span dir={isHebrew ? 'rtl' : 'ltr'} className={`${langClass} text-base font-bold bg-primary/5 px-2 py-1 rounded-md border border-primary/10`}>{word}</span>
           <a
             href={bollsLink}
             target="_blank"

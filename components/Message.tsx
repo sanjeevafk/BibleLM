@@ -12,7 +12,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import type { VerseContext } from '@/lib/bible-fetch';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
-const PRIMARY_MODEL_USED = 'gemini:gemini-2.5-flash';
+const PRIMARY_MODEL_USED = 'gemini:gemini-1.5-flash';
 
 function getMessageText(message: UIMessage): string {
   const m = message as any;
@@ -46,6 +46,9 @@ type MessageMetadata = {
   fallbackUsed?: boolean;
   finalFallback?: boolean;
   verses?: VerseContext[];
+  metadata?: {
+    translation?: string;
+  };
 };
 
 function extractReference(lines: string[]): string | null {
@@ -226,6 +229,12 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
   const showFallbackBadge =
     !isUser &&
     Boolean(modelUsed && modelUsed !== PRIMARY_MODEL_USED);
+
+  React.useEffect(() => {
+    if (!isUser && modelUsed) {
+      console.log(`Rendering with model: ${modelUsed}`);
+    }
+  }, [isUser, modelUsed]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(messageText);
@@ -417,7 +426,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
         {!isUser && (showFallbackBadge || finalFallback) && (
           <div className="mb-2 inline-flex items-center gap-1 rounded-full border border-muted/60 bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
             {showFallbackBadge ? (
-              <div>Fallback model - formatting may vary ({modelUsed})</div>
+              <div>Fallback model - formatting may vary slightly ({modelUsed})</div>
             ) : null}
             {finalFallback ? (
               <div>All providers unavailable. Showing raw verses and original-language notes instead.</div>
