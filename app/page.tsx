@@ -42,16 +42,16 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-background flex flex-col items-center justify-start p-4 md:p-6 pt-16 md:pt-20 pb-20 md:pb-24 text-center space-y-12 md:space-y-16 relative overflow-hidden">
+    <main className="min-h-[100dvh] bg-background flex flex-col items-center justify-start px-4 sm:px-5 md:px-6 pt-14 sm:pt-16 md:pt-20 pb-10 sm:pb-16 md:pb-24 text-center space-y-8 sm:space-y-12 md:space-y-16 relative overflow-hidden">
       {/* Header Links */}
-      <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild className="rounded-full w-14 h-14 md:w-16 md:h-16">
+      <div className="absolute top-4 sm:top-6 right-4 sm:right-6 z-50 flex items-center gap-2 sm:gap-3">
+        <Button variant="ghost" size="icon" asChild className="rounded-full w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14">
           <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
-            <Github className="h-7 w-7 md:h-8 md:w-8" />
+            <Github className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" />
           </a>
         </Button>
-        <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full w-14 h-14 md:w-16 md:h-16">
-          {mounted ? (isDarkMode ? <Sun className="h-7 w-7 md:h-8 md:w-8" /> : <Moon className="h-7 w-7 md:h-8 md:w-8" />) : <div className="h-7 w-7 md:h-8 md:w-8" />}
+        <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14">
+          {mounted ? (isDarkMode ? <Sun className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" /> : <Moon className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" />) : <div className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" />}
         </Button>
       </div>
 
@@ -62,7 +62,7 @@ export default function Home() {
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] -z-10 animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] -z-10 animate-pulse"></div>
 
-      <div className="max-w-4xl space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
+      <div className="max-w-4xl w-full space-y-5 sm:space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
         <div className="flex flex-col items-center gap-6">
           <div className="p-3 bg-primary/10 rounded-2xl ring-1 ring-primary/20 shadow-xl shadow-primary/5">
             <BookOpen className="w-10 h-10 text-primary" />
@@ -91,7 +91,7 @@ export default function Home() {
           <Button
             size="lg"
             asChild
-            className="rounded-full px-10 h-14 text-base sm:text-lg font-semibold group relative overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
+            className="rounded-full px-6 sm:px-10 h-12 sm:h-14 text-sm sm:text-base md:text-lg font-semibold group relative overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
           >
             <a href="/chat">
               <span className="relative z-10 flex items-center gap-2">
@@ -104,10 +104,10 @@ export default function Home() {
         </div>
       </div>
 
-      <section className="max-w-5xl w-full space-y-6 pt-6 md:pt-10 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-300 ease-out">
+      <section className="max-w-5xl w-full space-y-4 sm:space-y-6 pt-2 sm:pt-6 md:pt-10 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-300 ease-out">
         <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">Core Strengths</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
+          <div className="group relative flex flex-col items-center p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
             <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
               <Search className="w-6 h-6 text-primary" />
             </div>
@@ -116,7 +116,7 @@ export default function Home() {
               Every answer quotes real verses with chapter:verse refs. No invented content.
             </p>
           </div>
-          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+          <div className="group relative flex flex-col items-center p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
             <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
               <Languages className="w-6 h-6 text-primary" />
             </div>
@@ -129,7 +129,7 @@ export default function Home() {
               Powered by MorphHB + OpenHebrewBible subset
             </p>
           </div>
-          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+          <div className="group relative flex flex-col items-center p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
             <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
               <Layers className="w-6 h-6 text-primary" />
             </div>
@@ -139,7 +139,7 @@ export default function Home() {
               Strict dedupe by verseId, with topK capped at 10–15.
             </p>
           </div>
-          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+          <div className="group relative flex flex-col items-center p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
             <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
               <BookOpen className="w-6 h-6 text-primary" />
             </div>
@@ -148,7 +148,7 @@ export default function Home() {
               Rigid system prompt bans interpretation, application, or bias. Handles controversial topics with raw text + guards (no dilution).
             </p>
           </div>
-          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+          <div className="group relative flex flex-col items-center p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
             <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
               <Sparkles className="w-6 h-6 text-primary" />
             </div>
@@ -157,7 +157,7 @@ export default function Home() {
               Vercel Hobby + free-tier providers + Upstash Redis + static bundles. Optional BYOK for larger models.
             </p>
           </div>
-          <div className="group relative flex flex-col items-center p-6 md:p-8 space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
+          <div className="group relative flex flex-col items-center p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4 rounded-3xl border bg-card/40 backdrop-blur-md transition-all hover:bg-card/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5">
             <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform">
               <Search className="w-6 h-6 text-primary" />
             </div>
@@ -169,8 +169,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="max-w-4xl w-full pt-2 md:pt-4">
-        <div className="rounded-3xl border bg-card/60 backdrop-blur-md px-6 py-6 md:px-10 md:py-8 shadow-xl shadow-primary/5">
+      <section className="max-w-4xl w-full">
+        <div className="rounded-3xl border bg-card/60 backdrop-blur-md px-4 py-5 sm:px-6 sm:py-6 md:px-10 md:py-8 shadow-xl shadow-primary/5">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">How It Works</h2>
           <ol className="mt-4 space-y-3 text-sm sm:text-base md:text-lg text-foreground/80">
             <li>Ask a question (e.g., &quot;What does the Bible say about divorce?&quot; or &quot;Break down John 1:1 in Greek&quot;).</li>
@@ -180,8 +180,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="max-w-4xl w-full pt-2 md:pt-4">
-        <div className="rounded-3xl border bg-card/60 backdrop-blur-md px-6 py-6 md:px-10 md:py-8 shadow-xl shadow-primary/5">
+      <section className="max-w-4xl w-full">
+        <div className="rounded-3xl border bg-card/60 backdrop-blur-md px-4 py-5 sm:px-6 sm:py-6 md:px-10 md:py-8 shadow-xl shadow-primary/5">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">Current Sources</h2>
           <ul className="mt-4 space-y-2 text-sm sm:text-base md:text-lg text-foreground/80">
             <li><span className="font-semibold">Default Translation:</span> Berean Study Bible (BSB)</li>
@@ -193,8 +193,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="max-w-4xl w-full pt-2 md:pt-4">
-        <div className="rounded-3xl border bg-card/60 backdrop-blur-md px-6 py-6 md:px-10 md:py-8 shadow-xl shadow-primary/5">
+      <section className="max-w-4xl w-full">
+        <div className="rounded-3xl border bg-card/60 backdrop-blur-md px-4 py-5 sm:px-6 sm:py-6 md:px-10 md:py-8 shadow-xl shadow-primary/5">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">Why BibleLM Stands Out</h2>
           <p className="mt-4 text-sm sm:text-base md:text-lg text-foreground/80 leading-relaxed">
             Most Bible AIs add commentary, balance, or &quot;helpful&quot; interpretation. BibleLM refuses to.
@@ -203,7 +203,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="pt-12 md:pt-16 pb-8 text-base sm:text-lg text-muted-foreground/80 font-semibold flex flex-col items-center gap-4">
+      <footer className="pt-8 sm:pt-12 md:pt-16 pb-8 text-sm sm:text-base text-muted-foreground/80 font-semibold flex flex-col items-center gap-3 w-full">
         <div className="flex items-center gap-4">
           <a 
             href="https://github.com/voidcommit-afk/BibleLM" 
