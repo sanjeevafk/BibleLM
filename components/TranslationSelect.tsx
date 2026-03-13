@@ -6,7 +6,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 
 const TRANSLATION_OPTIONS = [
@@ -26,14 +25,20 @@ export function TranslationSelect({
   onChange: (val: string) => void;
   disabled?: boolean;
 }) {
+  const selected = TRANSLATION_OPTIONS.find((option) => option.shortName === value);
+
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className="w-[160px] h-8 text-xs bg-background">
-        <SelectValue placeholder="Translation" />
+      <SelectTrigger className="h-8 min-w-[132px] w-[132px] sm:min-w-[200px] sm:w-[200px] text-xs bg-background">
+        <span className="flex w-full min-w-0 items-center">
+          <span className="truncate" title={selected ? `${selected.shortName} - ${selected.name}` : value}>
+            {selected ? `${selected.shortName} - ${selected.name}` : value}
+          </span>
+        </span>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="min-w-[260px]">
         {TRANSLATION_OPTIONS.map(t => (
-          <SelectItem key={t.shortName} value={t.shortName} className="text-xs">
+          <SelectItem key={t.shortName} value={t.shortName} className="text-xs py-2 whitespace-normal leading-snug">
             {t.shortName} - {t.name}
           </SelectItem>
         ))}

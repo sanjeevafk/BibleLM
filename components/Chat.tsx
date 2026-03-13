@@ -7,13 +7,11 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { TranslationSelect } from './TranslationSelect';
-import { Github, Moon, Settings, Sun } from 'lucide-react';
+import { Moon, Plus, Settings, Sun } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -24,7 +22,7 @@ type ChatInnerProps = {
   onCustomKeyChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
-  onClearChat: () => void;
+  onNewChat: () => void;
 };
 
 const TRANSLATION_STORAGE_KEY = 'biblelm-translation';
@@ -72,7 +70,7 @@ export function Chat() {
     document.documentElement.classList.toggle('dark');
   };
 
-  const resetChat = () => {
+  const handleNewChat = () => {
     setResetKey((prev) => prev + 1);
   };
 
@@ -85,7 +83,7 @@ export function Chat() {
       onCustomKeyChange={saveCustomKey}
       isDarkMode={isDarkMode}
       toggleDarkMode={toggleDarkMode}
-      onClearChat={resetChat}
+      onNewChat={handleNewChat}
     />
   );
 }
@@ -95,27 +93,13 @@ function ChatInner({
   onCustomKeyChange,
   isDarkMode,
   toggleDarkMode,
-  onClearChat,
+  onNewChat,
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
   const [rateLimitWarning, setRateLimitWarning] = useState<string | null>(null);
   const [selectedTranslation, setSelectedTranslation] = useState('BSB');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const initialMessages = useMemo<UIMessage[]>(
-    () => [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        parts: [
-          {
-            type: 'text',
-            text: 'Welcome to BibleLM. I provide neutral, direct quotes of Scripture along with original Greek and Hebrew word meanings. Ask me anything, such as *"What does the Bible say about creation?"*',
-          },
-        ],
-      },
-    ],
-    []
-  );
+  const contentContainerClass = 'w-full max-w-[720px] mx-auto px-3 sm:px-4';
 
   const chatFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await fetch(input, init);
@@ -132,8 +116,8 @@ function ChatInner({
     [chatFetch]
   );
 
-  const { messages, sendMessage, status, error, clearError } = useChat<UIMessage>({
-    messages: initialMessages,
+  const { messages, sendMessage, status, error } = useChat<UIMessage>({
+    messages: [],
     transport,
   });
 
@@ -213,151 +197,156 @@ function ChatInner({
     }
   };
 
-  const handleClearChat = () => {
-    clearError();
-    setRateLimitWarning(null);
-    onClearChat();
-  };
-
   return (
-    <div className="flex flex-col h-screen w-full max-w-4xl mx-auto md:border-x bg-background">
+    <div className="flex min-h-[100vh] min-h-[100dvh] h-[100dvh] flex-col bg-background">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:border-x">
       {/* Header */}
-      <header className="flex items-center justify-between px-3 sm:px-4 md:px-6 py-3 md:py-4 border-b bg-card/80 backdrop-blur-md sticky top-0 z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="bg-primary text-primary-foreground p-1.5 rounded-lg shadow-md ring-1 ring-primary-foreground/10 flex items-center justify-center shrink-0">
-            <svg 
-              viewBox="0 0 24 24" 
-              fill="currentColor" 
-              className="h-5 w-5"
+      <header className="shrink-0 border-b bg-card/80 backdrop-blur-md">
+        <div className={`${contentContainerClass} grid grid-cols-[auto_1fr_auto] items-center py-2.5 sm:py-3 md:py-4`}>
+          <div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onNewChat}
+              className="h-8 w-8 rounded-md border border-border bg-background hover:bg-muted/70"
+              aria-label="Start new chat"
+              title="New chat"
             >
-              <path d="M13 3h-2v6H5v2h6v10h2V11h6V9h-6V3z" />
-            </svg>
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
 
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-baseline gap-1 min-w-0">
-              <span className="font-serif text-lg sm:text-xl font-bold tracking-tight">BibleLM</span>
-              <span className="text-[10px] text-muted-foreground font-bold italic opacity-70 lowercase">in beta</span>
-            </div>
-            <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-widest leading-none">Scriptural Reporter</span>
+          <div className="justify-self-center text-center leading-tight">
+            <span className="block font-serif text-lg sm:text-xl font-bold tracking-tight">BibleLM</span>
+            <span className="block text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-widest">Scriptural Reporter</span>
           </div>
-        </div>
 
+          <div className="justify-self-end flex items-center gap-3 shrink-0">
+            <TranslationSelect
+              value={selectedTranslation}
+              onChange={handleTranslationChange}
+              disabled={isLoading}
+            />
 
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <TranslationSelect 
-            value={selectedTranslation} 
-            onChange={handleTranslationChange}
-            disabled={isLoading}
-          />
-          
-          <Button variant="ghost" size="icon" asChild className="rounded-full w-10 h-10 hover:bg-muted/80">
-            <a href="https://github.com/voidcommit-afk/BibleLM" target="_blank" rel="noopener noreferrer" title="View on GitHub">
-              <Github className="h-5 w-5" />
-            </a>
-          </Button>
+            <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full w-9 h-9 hover:bg-muted/80">
+              {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
 
-          <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full w-10 h-10 hover:bg-muted/80">
-            {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </Button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full w-10 h-10 hover:bg-muted/80">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 mt-2">
-              <DropdownMenuLabel className="font-serif text-lg px-3 pt-3">Settings</DropdownMenuLabel>
-              <DropdownMenuSeparator className="mx-2" />
-              <div className="p-3 space-y-4">
-                <div className="space-y-1.5 text-xs text-muted-foreground leading-normal">
-                  <p>
-                    The Librarian currently operates on a free, rate-limited resource. 
-                  </p>
-                  <p>
-                    To ensure uninterrupted service and deeper research capabilities, you may provide your own API key.
-                  </p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 hover:bg-muted/80">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72 mt-2">
+                <DropdownMenuLabel className="font-serif text-lg px-3 pt-3">Settings</DropdownMenuLabel>
+                <DropdownMenuSeparator className="mx-2" />
+                <div className="p-3 space-y-4">
+                  <div className="space-y-1.5 text-xs text-muted-foreground leading-normal">
+                    <p>
+                      The Librarian currently operates on a free, rate-limited resource.
+                    </p>
+                    <p>
+                      To ensure uninterrupted service and deeper research capabilities, you may provide your own API key.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">API Key (Stored Locally)</label>
+                    <Input
+                      type="password"
+                      placeholder="Enter Groq API key..."
+                      value={customKey}
+                      onChange={onCustomKeyChange}
+                      className="h-10 text-sm rounded-lg"
+                    />
+                    <p className="text-[10px] text-muted-foreground italic">Your key never leaves your browser.</p>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">API Key (Stored Locally)</label>
-                  <Input 
-                    type="password" 
-                    placeholder="Enter Groq API key..." 
-                    value={customKey} 
-                    onChange={onCustomKeyChange}
-                    className="h-10 text-sm rounded-lg"
-                  />
-                  <p className="text-[10px] text-muted-foreground italic">Your key never leaves your browser.</p>
-                </div>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
-
       {/* Messages */}
-      <ScrollArea 
-        className="flex-1 p-3 sm:p-4" 
-        ref={scrollRef} 
+      <section
+        className="flex-1 min-h-0 overflow-y-auto"
+        ref={scrollRef}
         onScroll={handleScroll}
       >
-        <div className="flex flex-col gap-2 pb-4">
-          {messages.map((message) => (
-            <Message key={message.id} message={message} />
-          ))}
-          
-          {isLoading && messages[messages.length - 1]?.role === 'user' && (
-            <div className="flex justify-start my-4">
-              <div className="bg-muted border rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-muted-foreground">
-                Retrieving verses...
+        {messages.length === 0 ? (
+          <div className="flex min-h-full items-center justify-center py-6">
+            <div className={`${contentContainerClass}`}>
+              <div className="mx-auto rounded-2xl border bg-card/70 px-5 py-6 text-center shadow-sm">
+                <h2 className="font-serif text-xl font-semibold tracking-tight">Welcome to BibleLM</h2>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  I provide neutral, direct quotes of Scripture along with original Greek and Hebrew word meanings.
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                  Ask me anything, such as <span className="italic">&quot;What does the Bible say about creation?&quot;</span>
+                </p>
               </div>
             </div>
-          )}
+          </div>
+        ) : (
+          <div className={`${contentContainerClass} py-3 sm:py-4`}>
+            <div className="flex flex-col gap-2 pb-4">
+              {messages.map((message) => (
+                <Message key={message.id} message={message} />
+              ))}
 
-          {error && (
-            <div className="mx-auto w-full max-w-md my-4 p-4 border border-destructive bg-destructive/10 text-destructive text-sm rounded-lg text-center">
-              {error.message || 'An error occurred. Please try again.'}
+              {isLoading && messages[messages.length - 1]?.role === 'user' && (
+                <div className="flex justify-start my-4">
+                  <div className="bg-muted border rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-muted-foreground">
+                    Retrieving verses...
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="mx-auto w-full max-w-md my-4 p-4 border border-destructive bg-destructive/10 text-destructive text-sm rounded-lg text-center">
+                  {error.message || 'An error occurred. Please try again.'}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </ScrollArea>
-
-      {/* Input Form */}
-      <div className="p-3 sm:p-4 bg-background border-t">
-        {rateLimitWarning && (
-          <div className="mx-auto mb-2 w-full max-w-3xl rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            {rateLimitWarning}
           </div>
         )}
-        <form 
-          onSubmit={handleSubmit}
-          className="relative max-w-3xl mx-auto flex items-center shadow-sm"
-        >
-          <Input 
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="Ask a question..."
-            disabled={isLoading}
-            className="pr-12 py-5 sm:py-6 rounded-full text-sm sm:text-base"
-          />
-          <Button 
-            type="submit" 
-            disabled={isLoading || !input.trim()}
-            size="icon"
-            aria-label="Send message"
-            className="absolute right-1.5 rounded-full h-9 w-9 sm:h-10 sm:w-10"
+      </section>
+
+      {/* Input Form */}
+      <div className="sticky bottom-0 z-20 shrink-0 border-t bg-background/95 backdrop-blur">
+        <div className={`${contentContainerClass} py-3 sm:py-4`}>
+          {rateLimitWarning && (
+            <div className="mb-2 w-full rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              {rateLimitWarning}
+            </div>
+          )}
+          <form
+            onSubmit={handleSubmit}
+            className="relative flex items-center shadow-sm"
           >
-            ✓
-          </Button>
-        </form>
-        <div className="text-center text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
-          BibleLM delivers exact Scripture quotes and original-language insights (Hebrew/Greek morphology, clause/poetic structure, alignments) using hybrid RAG retrieval. Translation: {selectedTranslation}. Cross-check references with your own Bible for full context.
+            <Input
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="Ask a question..."
+              disabled={isLoading}
+              className="pr-12 py-3 sm:py-5 rounded-full text-sm sm:text-base"
+            />
+            <Button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              size="icon"
+              aria-label="Send message"
+              className="absolute right-1.5 rounded-full h-9 w-9 sm:h-10 sm:w-10"
+            >
+              ✓
+            </Button>
+          </form>
+          <p className="text-center text-[10px] text-muted-foreground/70 mt-1.5">
+            Translation: {selectedTranslation} · Exact quotes, no commentary · OpenHebrewBible CC BY-NC 4.0
+          </p>
         </div>
-        <div className="text-center text-[10px] text-muted-foreground/80 mt-1 leading-relaxed">
-          OpenHebrewBible layers (clause segmentation, poetic division, alignments, extended glosses) – CC BY-NC 4.0 – eliranwong/OpenHebrewBible
-        </div>
+      </div>
       </div>
     </div>
   );
