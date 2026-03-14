@@ -9,6 +9,7 @@ type FallbackOptions = {
   apiKey?: string;
   fallbackContent?: string;
   onChunk?: (chunk: string) => void | Promise<void>;
+  onTiming?: (durationMs: number) => void;
 };
 
 export type FallbackResult =
@@ -26,6 +27,10 @@ const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
 const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.1;
+
+function roundDurationMs(durationMs: number): number {
+  return Number(durationMs.toFixed(2));
+}
 
 function logModelFailure(model: string, error: unknown) {
   const message = String((error as { message?: string })?.message || error || '');
@@ -299,131 +304,137 @@ export async function generateWithFallback(
   prompt: string,
   options: FallbackOptions
 ): Promise<FallbackResult> {
-  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const temperature = options.temperature ?? DEFAULT_TEMPERATURE;
-  const groqApiKey = options.apiKey || process.env.GROQ_API_KEY;
+  const startedAt = performance.now();
 
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey) {
-    const candidates = Array.from(new Set(GEMINI_MODEL_CANDIDATES.filter(Boolean)));
-    for (const modelName of candidates) {
+  try {
+    const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+    const temperature = options.temperature ?? DEFAULT_TEMPERATURE;
+    const groqApiKey = options.apiKey || process.env.GROQ_API_KEY;
+
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (geminiKey) {
+      const candidates = Array.from(new Set(GEMINI_MODEL_CANDIDATES.filter(Boolean)));
+      for (const modelName of candidates) {
+        try {
+          const result = await streamGeminiContent(
+            modelName,
+            prompt,
+            geminiKey,
+            temperature,
+            maxTokens,
+            options.onChunk
+          );
+          const text = result.text;
+          if (text) {
+            console.log('Primary LLM: Gemini');
+            console.log(`[llm-fallback] Using primary provider: gemini:${modelName}`);
+            return { type: 'content', content: text, modelUsed: `gemini:${modelName}`, chunks: result.chunks };
+          }
+          throw new Error('Gemini returned empty output');
+        } catch (error) {
+          logModelFailure(`gemini:${modelName}`, error);
+          if (isModelNotFoundError(error)) {
+            console.warn(`[llm-fallback] Gemini model alias unavailable, trying next candidate: ${modelName}`);
+          }
+        }
+      }
+    } else {
+      console.warn('[llm-fallback] GEMINI_API_KEY missing; skipping Gemini primary provider.');
+    }
+
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    if (openRouterKey) {
       try {
-        const result = await streamGeminiContent(
-          modelName,
+        console.log('Fallback to OpenRouter');
+        const result = await streamOpenRouterContent(
           prompt,
-          geminiKey,
+          openRouterKey,
           temperature,
           maxTokens,
           options.onChunk
         );
         const text = result.text;
         if (text) {
-          console.log('Primary LLM: Gemini');
-          console.log(`[llm-fallback] Using primary provider: gemini:${modelName}`);
-          return { type: 'content', content: text, modelUsed: `gemini:${modelName}`, chunks: result.chunks };
+          console.log(`[llm-fallback] Using fallback provider: openrouter:${OPENROUTER_MODEL}`);
+          return { type: 'content', content: text, modelUsed: `openrouter:${OPENROUTER_MODEL}`, chunks: result.chunks };
         }
-        throw new Error('Gemini returned empty output');
+        throw new Error('OpenRouter returned empty output');
       } catch (error) {
-        logModelFailure(`gemini:${modelName}`, error);
-        if (isModelNotFoundError(error)) {
-          console.warn(`[llm-fallback] Gemini model alias unavailable, trying next candidate: ${modelName}`);
+        logModelFailure(`openrouter:${OPENROUTER_MODEL}`, error);
+      }
+    } else {
+      console.warn('[llm-fallback] OPENROUTER_API_KEY missing; skipping OpenRouter fallback.');
+    }
+
+    if (groqApiKey) {
+      const groq = createGroq({ apiKey: groqApiKey });
+      const groqModels = [GROQ_PRIMARY_MODEL, GROQ_SECONDARY_MODEL];
+
+      for (const modelName of groqModels) {
+        try {
+          const result = await generateText({
+            model: groq(modelName) as any,
+            prompt,
+            temperature,
+            maxOutputTokens: maxTokens,
+          });
+          const text = result.text?.trim();
+          if (text) {
+            console.log(`[llm-fallback] Using fallback provider: groq:${modelName}`);
+            return { type: 'content', content: text, modelUsed: `groq:${modelName}` };
+          }
+          throw new Error('Groq returned empty output');
+        } catch (error) {
+          logModelFailure(`groq:${modelName}`, error);
         }
       }
+    } else {
+      console.warn('[llm-fallback] GROQ_API_KEY missing; skipping Groq fallback.');
     }
-  } else {
-    console.warn('[llm-fallback] GEMINI_API_KEY missing; skipping Gemini primary provider.');
-  }
 
-  const openRouterKey = process.env.OPENROUTER_API_KEY;
-  if (openRouterKey) {
-    try {
-      console.log('Fallback to OpenRouter');
-      const result = await streamOpenRouterContent(
-        prompt,
-        openRouterKey,
-        temperature,
-        maxTokens,
-        options.onChunk
-      );
-      const text = result.text;
-      if (text) {
-        console.log(`[llm-fallback] Using fallback provider: openrouter:${OPENROUTER_MODEL}`);
-        return { type: 'content', content: text, modelUsed: `openrouter:${OPENROUTER_MODEL}`, chunks: result.chunks };
-      }
-      throw new Error('OpenRouter returned empty output');
-    } catch (error) {
-      logModelFailure(`openrouter:${OPENROUTER_MODEL}`, error);
-    }
-  } else {
-    console.warn('[llm-fallback] OPENROUTER_API_KEY missing; skipping OpenRouter fallback.');
-  }
-
-  if (groqApiKey) {
-    const groq = createGroq({ apiKey: groqApiKey });
-    const groqModels = [GROQ_PRIMARY_MODEL, GROQ_SECONDARY_MODEL];
-
-    for (const modelName of groqModels) {
+    const hfToken = process.env.HF_TOKEN;
+    if (hfToken) {
       try {
-        const result = await generateText({
-          model: groq(modelName) as any,
-          prompt,
-          temperature,
-          maxOutputTokens: maxTokens,
+        const hf = new InferenceClient(hfToken);
+        const hfResult = await hf.textGeneration({
+          model: HF_MODEL,
+          provider: 'hf-inference',
+          inputs: prompt,
+          parameters: {
+            max_new_tokens: maxTokens,
+            temperature,
+            return_full_text: false,
+          },
+          options: { wait_for_model: true },
         });
-        const text = result.text?.trim();
-        if (text) {
-          console.log(`[llm-fallback] Using fallback provider: groq:${modelName}`);
-          return { type: 'content', content: text, modelUsed: `groq:${modelName}` };
+
+        const hfText =
+          typeof hfResult === 'string'
+            ? hfResult
+            : Array.isArray(hfResult)
+              ? hfResult[0]?.generated_text
+              : hfResult.generated_text;
+
+        if (hfText && hfText.trim()) {
+          console.log(`[llm-fallback] Using fallback provider: hf:${HF_MODEL}`);
+          return { type: 'content', content: hfText.trim(), modelUsed: `hf:${HF_MODEL}` };
         }
-        throw new Error('Groq returned empty output');
+        throw new Error('HF inference returned empty output');
       } catch (error) {
-        logModelFailure(`groq:${modelName}`, error);
+        logModelFailure(`hf:${HF_MODEL}`, error);
       }
     }
-  } else {
-    console.warn('[llm-fallback] GROQ_API_KEY missing; skipping Groq fallback.');
+
+    const fallbackContent =
+      options.fallbackContent ?? buildContextOnlyContent(prompt);
+
+    return {
+      type: 'content',
+      content: fallbackContent,
+      modelUsed: 'context-only',
+      finalFallback: true,
+    };
+  } finally {
+    options.onTiming?.(roundDurationMs(performance.now() - startedAt));
   }
-
-  const hfToken = process.env.HF_TOKEN;
-  if (hfToken) {
-    try {
-      const hf = new InferenceClient(hfToken);
-      const hfResult = await hf.textGeneration({
-        model: HF_MODEL,
-        provider: 'hf-inference',
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: maxTokens,
-          temperature,
-          return_full_text: false,
-        },
-        options: { wait_for_model: true },
-      });
-
-      const hfText =
-        typeof hfResult === 'string'
-          ? hfResult
-          : Array.isArray(hfResult)
-            ? hfResult[0]?.generated_text
-            : hfResult.generated_text;
-
-      if (hfText && hfText.trim()) {
-        console.log(`[llm-fallback] Using fallback provider: hf:${HF_MODEL}`);
-        return { type: 'content', content: hfText.trim(), modelUsed: `hf:${HF_MODEL}` };
-      }
-      throw new Error('HF inference returned empty output');
-    } catch (error) {
-      logModelFailure(`hf:${HF_MODEL}`, error);
-    }
-  }
-
-  const fallbackContent =
-    options.fallbackContent ?? buildContextOnlyContent(prompt);
-
-  return {
-    type: 'content',
-    content: fallbackContent,
-    modelUsed: 'context-only',
-    finalFallback: true,
-  };
 }

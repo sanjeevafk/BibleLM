@@ -1,18 +1,35 @@
 import { generateText } from 'ai';
 import { createGroq } from '@ai-sdk/groq';
+import { InferenceClient } from '@huggingface/inference';
 import Fuse from 'fuse.js';
 import { Pool } from 'pg';
-import { fetchVerseHelloAO, fetchVerseFallback, fetchStrongsDefinition, VerseContext } from './bible-fetch';
+import {
+  fetchExternalWithTimeoutBudget,
+  fetchVerseTextWithFallback,
+  fetchStrongsDefinition,
+  VerseContext
+} from './bible-fetch';
 import { ensureDbReady, getDbPool } from './db';
 import bibleIndexData from '../data/bible-index.json';
 import strongsDictData from '../data/strongs-dict.json';
 
+import {
+  getCachedEmbedding,
+  getCachedRetrievalContext,
+  setCachedEmbedding,
+  setCachedRetrievalContext,
+} from './cache';
 import { redis } from './redis';
 import { getMorphhbWords } from './morphhb';
 import { getOpenHebrewBibleLayers, OpenHebrewVerseLayers } from './openhebrewbible';
 import { getOpenGNTLayers, OpenGntVerseLayers } from './opengnt';
 import { classifyAndExpand, type QueryDomain } from './query-utils';
 import { getTranslationVerse } from './translations';
+import {
+  ENABLE_RETRIEVAL_DEBUG,
+  ENABLE_SEMANTIC_RERANKER,
+  ENABLE_TSK_EXPANSION_GATING,
+} from './feature-flags';
 
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
 const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
@@ -20,7 +37,6 @@ const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
 const HF_EMBEDDING_MODEL = process.env.HF_EMBEDDING_MODEL || 'intfloat/multilingual-e5-small';
 const HF_ENDPOINT = `https://router.huggingface.co/hf-inference/models/${HF_EMBEDDING_MODEL}/pipeline/feature-extraction`;
 const VECTOR_LIMIT = 6;
-const CACHE_TTL_SECONDS = 3600; // 1 hour persistent cache
 const CONTEXT_CACHE_VERSION = 'v2';
 const OT_BOOKS = new Set([
   'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI',
@@ -60,9 +76,38 @@ const FALLBACK_STOPWORDS = new Set([
   'a', 'an', 'about', 'christian', 'christians', 'bible', 'say'
 ]);
 
+const RETRIEVAL_CONFIG = {
+  fuse: {
+    lexicalThreshold: 0.32,
+    candidateLimit: 18,
+    minMatchCharLength: 3,
+  },
+  semantic: {
+    candidateLimit: 18,
+  },
+  finalCandidateWindow: {
+    default: 10,
+    min: 8,
+    max: 12,
+  },
+  rrfK: 45,
+  reranker: {
+    fusedScoreWeight: 1,
+    directReferenceWeight: 0.15,
+    metadataConfidenceWeight: 0.1,
+    crossReferenceWeight: 0.05,
+    metadataConfidenceScale: 0.5,
+  },
+  semanticReranker: {
+    candidateWindow: 20,
+    latencyBudgetMs: 50,
+  },
+} as const;
+
 let lexicalFuse: Fuse<LexicalDoc> | null = null;
 let verseMetadataCache: Map<string, VerseMetadata> | null = null;
 let verseMetadataPromise: Promise<Map<string, VerseMetadata>> | null = null;
+let semanticRerankerClient: InferenceClient | null = null;
 
 function tokenizeFallbackQuery(query: string): string[] {
   return Array.from(
@@ -130,8 +175,8 @@ function getLexicalFuse(): Fuse<LexicalDoc> {
     lexicalFuse = new Fuse(LEXICAL_DOCS, {
       keys: ['text'],
       includeScore: true,
-      threshold: 0.4,
-      minMatchCharLength: 3,
+      threshold: RETRIEVAL_CONFIG.fuse.lexicalThreshold,
+      minMatchCharLength: RETRIEVAL_CONFIG.fuse.minMatchCharLength,
       ignoreLocation: true
     });
   }
@@ -143,8 +188,8 @@ async function getVerseMetadata(): Promise<Map<string, VerseMetadata>> {
   if (verseMetadataPromise) return verseMetadataPromise;
   verseMetadataPromise = (async () => {
     try {
-      const module = await import('../data/verse-metadata.json');
-      const data = (module.default ?? module) as VerseMetadata[];
+      const metadataModule = await import('../data/verse-metadata.json');
+      const data = (metadataModule.default ?? metadataModule) as VerseMetadata[];
       const map = new Map<string, VerseMetadata>();
       if (Array.isArray(data)) {
         for (const entry of data) {
@@ -384,20 +429,68 @@ const CURATED_TOPICAL_LISTS: Record<string, CuratedTopicalList> = {
 /**
  * Checks if the query matches a curated topical list and returns it if so.
  */
-function applyCuratedTopicalLists(query: string, verses: VerseContext[]): VerseContext[] {
+function applyCuratedTopicalLists(
+  query: string,
+  verses: VerseContext[],
+  debugState?: RetrievalDebugState,
+  source: 'api_fallback' | 'db' = 'api_fallback'
+): VerseContext[] {
   const normalizedQuery = query.toLowerCase();
   for (const [key, list] of Object.entries(CURATED_TOPICAL_LISTS)) {
     if (list.keywords.some(k => normalizedQuery.includes(k))) {
+      const clonedCuratedVerses = cloneVerses(list.verses);
+      const curatedRefs = list.verses.map((verse) => verse.reference);
+
       // For curated lists, we often want to prioritize these above all else.
       // Special logic for canaanite_conquest: replace or strongly prepend.
       if (key === 'canaanite_conquest') {
-        return list.verses;
+        if (debugState) {
+          debugState.curationStageLogged = true;
+          addRetrievalStageTrace(debugState, {
+            stage: 'curation',
+            action: 'applied',
+            source,
+            list: key,
+            mode: 'replace',
+            curated_refs: curatedRefs,
+            displaced_refs: verses.map((verse) => verse.reference).filter((reference) => !curatedRefs.includes(reference)),
+          });
+          clonedCuratedVerses.forEach((verse) => {
+            addDecisionTrace(debugState, verse.reference, `curation:selected_replace:${key}`);
+          });
+        }
+        return clonedCuratedVerses;
       }
-      
-      const curatedRefs = list.verses.map(v => v.reference);
+
       const filteredRetrieved = verses.filter(v => !curatedRefs.includes(v.reference));
-      return [...list.verses, ...filteredRetrieved];
+      if (debugState) {
+        debugState.curationStageLogged = true;
+        addRetrievalStageTrace(debugState, {
+          stage: 'curation',
+          action: 'applied',
+          source,
+          list: key,
+          mode: 'prepend',
+          curated_refs: curatedRefs,
+          displaced_refs: verses
+            .map((verse) => verse.reference)
+            .filter((reference) => curatedRefs.includes(reference)),
+        });
+        clonedCuratedVerses.forEach((verse) => {
+          addDecisionTrace(debugState, verse.reference, `curation:prepended:${key}`);
+        });
+      }
+      return [...clonedCuratedVerses, ...filteredRetrieved];
     }
+  }
+
+  if (debugState) {
+    debugState.curationStageLogged = true;
+    addRetrievalStageTrace(debugState, {
+      stage: 'curation',
+      action: 'no_match',
+      source,
+    });
   }
   return verses;
 }
@@ -408,75 +501,113 @@ function applyCuratedTopicalLists(query: string, verses: VerseContext[]): VerseC
  * 2. Collects priority verses to prepend (avoiding duplicates).
  * 3. Filters out excluded patterns from the retrieved verses.
  */
-function applyTopicGuards(query: string, verses: VerseContext[]): VerseContext[] {
+function applyTopicGuards(
+  query: string,
+  verses: VerseContext[],
+  debugState?: RetrievalDebugState,
+  source: 'api_fallback' | 'db' = 'api_fallback'
+): VerseContext[] {
   const normalizedQuery = query.toLowerCase();
   let priorityToPrepend: VerseContext[] = [];
   let combinedExclusions: string[] = [];
+  const matchedGuards: Array<{
+    guard: string;
+    priority_refs: string[];
+    conditional_priority_refs: string[];
+    exclusion_patterns: string[];
+  }> = [];
 
-  for (const guard of Object.values(TOPIC_GUARDS)) {
+  for (const [guardKey, guard] of Object.entries(TOPIC_GUARDS)) {
     if (guard.keywords.some(k => normalizedQuery.includes(k))) {
+      const guardPriorityRefs: string[] = [];
+
       // Add regular priority verses
       guard.priority.forEach(pv => {
         if (!priorityToPrepend.some(v => v.reference === pv.reference)) {
-          priorityToPrepend.push(pv);
+          priorityToPrepend.push(cloneVerses([pv])[0]);
+          guardPriorityRefs.push(pv.reference);
         }
       });
 
       // Add conditional priority verses if applicable
+      const conditionalPriorityRefs: string[] = [];
       if (guard.conditionalPriority) {
         guard.conditionalPriority(query).forEach(pv => {
           if (!priorityToPrepend.some(v => v.reference === pv.reference)) {
-            priorityToPrepend.push(pv);
+            priorityToPrepend.push(cloneVerses([pv])[0]);
+            conditionalPriorityRefs.push(pv.reference);
           }
         });
       }
 
       // Collect exclusion patterns
       combinedExclusions.push(...guard.excludePatterns);
+      matchedGuards.push({
+        guard: guardKey,
+        priority_refs: guardPriorityRefs,
+        conditional_priority_refs: conditionalPriorityRefs,
+        exclusion_patterns: guard.excludePatterns,
+      });
     }
   }
 
+  if (debugState) {
+    debugState.topicGuardStageLogged = true;
+  }
+
   if (priorityToPrepend.length === 0 && combinedExclusions.length === 0) {
+    if (debugState) {
+      addRetrievalStageTrace(debugState, {
+        stage: 'topic_guard',
+        action: 'no_match',
+        source,
+      });
+    }
     return verses;
   }
 
   const priorityRefs = priorityToPrepend.map(p => p.reference);
+  const duplicatePriorityRefs: string[] = [];
+  const excludedRefs: string[] = [];
 
   // Filter out existing versions of priority refs and verses matching exclusion patterns
   const filteredRetrieved = verses.filter(v => {
     const isAlreadyPriority = priorityRefs.includes(v.reference);
     const lowerText = v.text.toLowerCase();
-    const isExcluded = combinedExclusions.some(pattern => lowerText.includes(pattern));
+    const exclusionPatterns = combinedExclusions.filter(pattern => lowerText.includes(pattern));
+    const isExcluded = exclusionPatterns.length > 0;
+
+    if (debugState) {
+      if (isAlreadyPriority) {
+        duplicatePriorityRefs.push(v.reference);
+        addDecisionTrace(debugState, v.reference, 'topic_guard:replaced_by_priority');
+      }
+      if (isExcluded) {
+        excludedRefs.push(v.reference);
+        addDecisionTrace(debugState, v.reference, `topic_guard:excluded:${exclusionPatterns.join('|')}`);
+      }
+    }
+
     return !isAlreadyPriority && !isExcluded;
   });
 
+  if (debugState) {
+    addRetrievalStageTrace(debugState, {
+      stage: 'topic_guard',
+      action: 'applied',
+      source,
+      guards: matchedGuards,
+      prepended_refs: priorityRefs,
+      duplicate_priority_refs: duplicatePriorityRefs,
+      excluded_refs: excludedRefs,
+    });
+    priorityToPrepend.forEach((verse) => {
+      addDecisionTrace(debugState, verse.reference, 'topic_guard:prepended_priority');
+    });
+  }
+
   return [...priorityToPrepend, ...filteredRetrieved];
 }
-
-
-async function getCached<T>(key: string): Promise<T | null> {
-  if (!redis) {
-    return null;
-  }
-  try {
-    return await redis.get<T>(key);
-  } catch (error) {
-    console.warn(`Redis get failed for key ${key}:`, error);
-    return null;
-  }
-}
-
-async function setCached<T>(key: string, value: T, ttlSeconds: number = CACHE_TTL_SECONDS): Promise<void> {
-  if (!redis) {
-    return;
-  }
-  try {
-    await redis.set(key, value, { ex: ttlSeconds });
-  } catch (error) {
-    console.warn(`Redis set failed for key ${key}:`, error);
-  }
-}
-
 function cloneVerses(verses: VerseContext[]): VerseContext[] {
   return verses.map((verse) => ({
     ...verse,
@@ -561,8 +692,13 @@ async function resolveVerseText(
 
   const parsed = parseReferenceKey(verseId);
   if (parsed) {
-    const fetched = await fetchVerseHelloAO(translation, parsed.book, parsed.chapter, parsed.verse)
-      || await fetchVerseFallback(verseId, translation);
+    const fetched = await fetchVerseTextWithFallback({
+      translation,
+      reference: verseId,
+      book: parsed.book,
+      chapter: parsed.chapter,
+      startVerse: parsed.verse
+    });
     if (fetched) {
       return { reference: verseId, translation, text: fetched, original: [] };
     }
@@ -596,13 +732,23 @@ async function fetchVersesByIds(
     }
   }
 
-  for (const verseId of verseIds) {
-    if (byId.has(verseId)) continue;
-    const resolved = await resolveVerseText(verseId, translation);
+  const unresolvedVerseIds = verseIds.filter((verseId) => !byId.has(verseId));
+  const resolvedVerses = await Promise.all(
+    unresolvedVerseIds.map(async (verseId) => {
+      try {
+        return await resolveVerseText(verseId, translation);
+      } catch (error) {
+        console.warn('Verse hydration failed; continuing with remaining verses', { verseId, error });
+        return null;
+      }
+    })
+  );
+
+  resolvedVerses.forEach((resolved) => {
     if (resolved) {
-      byId.set(verseId, resolved);
+      byId.set(resolved.reference, resolved);
     }
-  }
+  });
 
   return verseIds.map((id) => byId.get(id)).filter((v): v is VerseContext => Boolean(v));
 }
@@ -705,9 +851,16 @@ function normalizeEmbedding(raw: unknown): number[] {
   throw new Error('Unexpected embedding response shape');
 }
 
+function normalizeEmbeddingCacheQuery(query: string): string {
+  return query.trim().toLowerCase();
+}
+
 async function embedQuery(query: string): Promise<number[]> {
-  const cacheKey = `embed:${HF_EMBEDDING_MODEL}:${query.trim().toLowerCase()}`;
-  const cached = await getCached<number[]>(cacheKey);
+  const normalizedQuery = normalizeEmbeddingCacheQuery(query);
+  const cached = await getCachedEmbedding({
+    normalizedQuery,
+    model: HF_EMBEDDING_MODEL
+  });
   if (cached) {
     return cached;
   }
@@ -740,7 +893,13 @@ async function embedQuery(query: string): Promise<number[]> {
     if (embedding.length !== 384) {
       throw new Error(`Embedding dimension mismatch; expected 384, got ${embedding.length}`);
     }
-    await setCached(cacheKey, embedding);
+    await setCachedEmbedding(
+      {
+        normalizedQuery,
+        model: HF_EMBEDDING_MODEL
+      },
+      embedding
+    );
     return embedding;
   }
 
@@ -824,33 +983,315 @@ type RankedVerse = {
   rankLexical?: number;
   rankSemantic?: number;
   score: number;
+  metadataBoostFactor?: number;
 };
 
-const RRF_K = 60;
-const HYBRID_CANDIDATE_LIMIT = 30;
-const DEFAULT_HYBRID_TOPK = 12;
-const MIN_HYBRID_TOPK = 10;
-const MAX_HYBRID_TOPK = 15;
+const RETRIEVAL_DEBUG = ENABLE_RETRIEVAL_DEBUG;
+const TSK_MIN_CORE_VERSE_COUNT = 4;
+const TSK_MIN_TOPICAL_COVERAGE = 0.6;
+const TSK_MIN_RETRIEVAL_CONFIDENCE = 0.75;
+const HF_SEMANTIC_RERANKER_MODEL =
+  process.env.HF_SEMANTIC_RERANKER_MODEL || 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2';
+
+type RetrievalLatencyMetricName =
+  | 'embed_ms'
+  | 'vector_ms'
+  | 'fetch_verses_db_ms'
+  | 'fetch_verses_api_ms'
+  | 'enrich_ms';
+
+type RetrievalInstrumentation = {
+  requestId?: string;
+  onMetric?: (metric: RetrievalLatencyMetricName, durationMs: number) => void;
+};
+
+type RetrievalConfidenceDiagnostics = {
+  top1_score: number;
+  top5_score_range: number;
+  retrieval_entropy: number;
+  candidate_count: number;
+};
+
+type SemanticSimilarityProvider = (
+  query: string,
+  verseIds: string[],
+  signal?: AbortSignal
+) => Promise<number[]>;
+
+type RetrievalCandidateDiagnostics = {
+  reference: string;
+  lexical_rank: number | null;
+  semantic_rank: number | null;
+  fused_score: number;
+  boost_factor: number;
+  reference_boost: number;
+  metadata_confidence: number;
+  cross_reference_signal: number;
+  semantic_score: number | null;
+  previous_rank: number | null;
+  reranked_position: number | null;
+  final_score: number;
+  final_rank: number | null;
+};
+
+type RetrievalStageTrace = Record<string, unknown>;
+
+type TskExpansionDecision = {
+  shouldExpand: boolean;
+  reason:
+    | 'gating_disabled'
+    | 'insufficient_core_verses'
+    | 'insufficient_topical_coverage'
+    | 'low_retrieval_confidence'
+    | 'strong_primary_evidence';
+  metrics: {
+    core_verse_count: number;
+    topical_coverage: number;
+    retrieval_confidence: number;
+  };
+};
+
+type RetrievalDebugState = {
+  candidateTraces: Map<string, RetrievalCandidateDiagnostics>;
+  boostFactors: Map<string, number>;
+  decisionTraceByReference: Map<string, string[]>;
+  stageTraces: RetrievalStageTrace[];
+  hybridTopKRefs: string[];
+  topicGuardStageLogged: boolean;
+  curationStageLogged: boolean;
+};
+
+function recordRetrievalMetric(
+  instrumentation: RetrievalInstrumentation | undefined,
+  metric: RetrievalLatencyMetricName,
+  startedAt: number
+): void {
+  instrumentation?.onMetric?.(metric, performance.now() - startedAt);
+}
+
+function createRetrievalDebugState(): RetrievalDebugState {
+  return {
+    candidateTraces: new Map(),
+    boostFactors: new Map(),
+    decisionTraceByReference: new Map(),
+    stageTraces: [],
+    hybridTopKRefs: [],
+    topicGuardStageLogged: false,
+    curationStageLogged: false,
+  };
+}
+
+function addRetrievalStageTrace(
+  debugState: RetrievalDebugState | undefined,
+  trace: RetrievalStageTrace
+): void {
+  if (!debugState) return;
+  debugState.stageTraces.push(trace);
+}
+
+function addDecisionTrace(
+  debugState: RetrievalDebugState | undefined,
+  reference: string,
+  trace: string
+): void {
+  if (!debugState) return;
+  const traces = debugState.decisionTraceByReference.get(reference) || [];
+  traces.push(trace);
+  debugState.decisionTraceByReference.set(reference, traces);
+}
+
+function getCandidateDecisionTrace(
+  debugState: RetrievalDebugState,
+  reference: string
+): string[] {
+  const traces = [...(debugState.decisionTraceByReference.get(reference) || [])];
+  if (!traces.some((trace) => trace.startsWith('topic_guard:'))) {
+    traces.push(debugState.topicGuardStageLogged ? 'topic_guard:unchanged' : 'topic_guard:not_invoked');
+  }
+  if (!traces.some((trace) => trace.startsWith('curation:'))) {
+    traces.push(debugState.curationStageLogged ? 'curation:unchanged' : 'curation:not_invoked');
+  }
+  return traces;
+}
+
+function getFinalSelectionTrace(
+  debugState: RetrievalDebugState,
+  reference: string
+): string[] {
+  const traces = getCandidateDecisionTrace(debugState, reference);
+  const candidate = debugState.candidateTraces.get(reference);
+  if (candidate?.final_rank) {
+    traces.unshift(`hybrid_final_rank:${candidate.final_rank}`);
+  } else if (debugState.hybridTopKRefs.length > 0) {
+    traces.unshift('selected_outside_hybrid_ranked_candidates');
+  } else {
+    traces.unshift('selected_without_hybrid_candidates');
+  }
+  return traces;
+}
+
+function logRetrievalDiagnostics(
+  debugState: RetrievalDebugState,
+  options: {
+    translation: string;
+    domain: QueryDomain;
+    topK: number;
+    finalVerses: VerseContext[];
+  }
+): void {
+  if (!debugState.topicGuardStageLogged) {
+    addRetrievalStageTrace(debugState, {
+      stage: 'topic_guard',
+      action: 'not_invoked',
+      source: 'hybrid',
+    });
+  }
+  if (!debugState.curationStageLogged) {
+    addRetrievalStageTrace(debugState, {
+      stage: 'curation',
+      action: 'not_invoked',
+      source: 'hybrid',
+    });
+  }
+
+  const candidates = Array.from(debugState.candidateTraces.values())
+    .sort((left, right) => (left.final_rank ?? Number.MAX_SAFE_INTEGER) - (right.final_rank ?? Number.MAX_SAFE_INTEGER))
+    .map((candidate) => ({
+      ...candidate,
+      decision_trace: getCandidateDecisionTrace(debugState, candidate.reference),
+    }));
+
+  const finalSelection = options.finalVerses.map((verse, index) => ({
+    reference: verse.reference,
+    output_rank: index + 1,
+    decision_trace: getFinalSelectionTrace(debugState, verse.reference),
+  }));
+
+  console.info(JSON.stringify({
+    event: 'retrieval_diagnostics',
+    translation: options.translation,
+    domain: options.domain,
+    topK: options.topK,
+    candidates,
+    stage_traces: debugState.stageTraces,
+    final_selection: finalSelection,
+  }));
+}
+
+function roundRetrievalDiagnostic(value: number): number {
+  return Number(value.toFixed(6));
+}
+
+function computeRetrievalEntropy(scored: RankedVerse[]): number {
+  if (scored.length <= 1) {
+    return 0;
+  }
+
+  const totalScore = scored.reduce((sum, hit) => sum + hit.score, 0);
+  if (totalScore <= 0) {
+    return 0;
+  }
+
+  let entropy = 0;
+  for (const hit of scored) {
+    const probability = hit.score / totalScore;
+    if (probability <= 0) continue;
+    entropy -= probability * Math.log2(probability);
+  }
+
+  const maxEntropy = Math.log2(scored.length);
+  if (maxEntropy <= 0) {
+    return 0;
+  }
+
+  return entropy / maxEntropy;
+}
+
+function buildRetrievalConfidenceDiagnostics(scored: RankedVerse[]): RetrievalConfidenceDiagnostics {
+  const topScores = scored.slice(0, 5).map((hit) => hit.score);
+  const top1Score = topScores[0] ?? 0;
+  const top5Floor = topScores[topScores.length - 1] ?? top1Score;
+
+  return {
+    top1_score: roundRetrievalDiagnostic(top1Score),
+    top5_score_range: roundRetrievalDiagnostic(top1Score - top5Floor),
+    retrieval_entropy: roundRetrievalDiagnostic(computeRetrievalEntropy(scored)),
+    candidate_count: scored.length,
+  };
+}
+
+function getSemanticRerankerClient(): InferenceClient {
+  if (!semanticRerankerClient) {
+    semanticRerankerClient = new InferenceClient(process.env.HF_TOKEN);
+  }
+  return semanticRerankerClient;
+}
+
+function getSemanticRerankerText(verseId: string): string {
+  const verse = BIBLE_INDEX[verseId];
+  if (!verse?.text) {
+    console.warn(`Semantic reranker: verse text not found for ${verseId}`);
+  }
+  return verse?.text || verseId;
+}
+
+let semanticSimilarityProvider: SemanticSimilarityProvider = async (query, verseIds, signal) => {
+  const semanticScores = await getSemanticRerankerClient().sentenceSimilarity({
+    model: HF_SEMANTIC_RERANKER_MODEL,
+    inputs: {
+      source_sentence: query,
+      sentences: verseIds.map((verseId) => getSemanticRerankerText(verseId)),
+    },
+  }, { signal });
+  if (!Array.isArray(semanticScores) || semanticScores.length !== verseIds.length) {
+    throw new Error('semantic_scores_invalid');
+  }
+  return semanticScores.map((score) => Number(score ?? 0));
+};
+
+function logRetrievalConfidenceDiagnostics(
+  scored: RankedVerse[],
+  options?: { domain?: QueryDomain; translation?: string }
+): void {
+  const diagnostics = buildRetrievalConfidenceDiagnostics(scored);
+
+  console.info(JSON.stringify({
+    event: 'retrieval_confidence',
+    translation: options?.translation || 'BSB',
+    domain: options?.domain || 'general',
+    metrics: diagnostics,
+  }));
+}
 
 function clampTopK(topK?: number): number {
-  const desired = Number.isFinite(topK) ? Math.floor(topK as number) : DEFAULT_HYBRID_TOPK;
-  return Math.min(Math.max(desired, MIN_HYBRID_TOPK), MAX_HYBRID_TOPK);
+  const desired = Number.isFinite(topK)
+    ? Math.floor(topK as number)
+    : RETRIEVAL_CONFIG.finalCandidateWindow.default;
+  return Math.min(
+    Math.max(desired, RETRIEVAL_CONFIG.finalCandidateWindow.min),
+    RETRIEVAL_CONFIG.finalCandidateWindow.max
+  );
 }
 
 async function semanticSearch(
   query: string,
   translation: string,
-  limit: number
+  limit: number,
+  instrumentation?: RetrievalInstrumentation
 ): Promise<Array<{ verseId: string; rank: number }>> {
   if (limit <= 0) return [];
   let embedding: number[] | null = null;
+  const embedStartedAt = performance.now();
   try {
     embedding = await embedQuery(query);
   } catch (error) {
     console.warn('Query embedding failed; semantic search skipped', error);
     return [];
+  } finally {
+    recordRetrievalMetric(instrumentation, 'embed_ms', embedStartedAt);
   }
 
+  const vectorStartedAt = performance.now();
   try {
     await ensureDbReady();
     const pool = getDbPool();
@@ -859,10 +1300,37 @@ async function semanticSearch(
   } catch (error) {
     console.warn('Semantic vector search failed', error);
     return [];
+  } finally {
+    recordRetrievalMetric(instrumentation, 'vector_ms', vectorStartedAt);
   }
 }
 
-async function applyMetadataBoosts(scored: RankedVerse[], domain: QueryDomain): Promise<RankedVerse[]> {
+function getMetadataBoostFactor(meta: VerseMetadata | undefined, domain: QueryDomain): number {
+  if (!meta || domain === 'general') {
+    return 1;
+  }
+
+  let multiplier = 1;
+  if (domain === 'messianic') {
+    if (meta.genre === 'prophetic') multiplier *= 1.3;
+    if (meta.testament === 'OT') multiplier *= 1.15;
+    if (meta.themeTags.includes('messianic')) multiplier *= 1.4;
+  } else if (domain === 'covenants') {
+    if (meta.genre === 'law') multiplier *= 1.2;
+    if (meta.genre === 'epistle') multiplier *= 1.15;
+  } else if (domain === 'eschatology') {
+    if (meta.genre === 'apocalyptic') multiplier *= 1.3;
+    if (meta.genre === 'prophetic') multiplier *= 1.2;
+  }
+
+  return multiplier;
+}
+
+async function applyMetadataBoosts(
+  scored: RankedVerse[],
+  domain: QueryDomain,
+  debugState?: RetrievalDebugState
+): Promise<RankedVerse[]> {
   if (domain === 'general' || scored.length === 0) return scored;
 
   const metadata = await getVerseMetadata();
@@ -870,35 +1338,273 @@ async function applyMetadataBoosts(scored: RankedVerse[], domain: QueryDomain): 
 
   return scored.map((hit) => {
     const meta = metadata.get(hit.verseId);
-    if (!meta) return hit;
-
-    let multiplier = 1;
-    if (domain === 'messianic') {
-      if (meta.genre === 'prophetic') multiplier *= 1.3;
-      if (meta.testament === 'OT') multiplier *= 1.15;
-      if (meta.themeTags.includes('messianic')) multiplier *= 1.4;
-    } else if (domain === 'covenants') {
-      if (meta.genre === 'law') multiplier *= 1.2;
-      if (meta.genre === 'epistle') multiplier *= 1.15;
-    } else if (domain === 'eschatology') {
-      if (meta.genre === 'apocalyptic') multiplier *= 1.3;
-      if (meta.genre === 'prophetic') multiplier *= 1.2;
+    const multiplier = getMetadataBoostFactor(meta, domain);
+    if (debugState) {
+      debugState.boostFactors.set(hit.verseId, multiplier);
     }
 
-    if (multiplier === 1) return hit;
-    return { ...hit, score: hit.score * multiplier };
+    if (multiplier === 1) {
+      return { ...hit, metadataBoostFactor: 1 };
+    }
+    return { ...hit, score: hit.score * multiplier, metadataBoostFactor: multiplier };
   });
+}
+
+function getMetadataConfidence(hit: RankedVerse): number {
+  const multiplier = hit.metadataBoostFactor ?? 1;
+  const scale = RETRIEVAL_CONFIG.reranker.metadataConfidenceScale;
+  if (multiplier <= 1 || scale <= 0) {
+    return 0;
+  }
+  return Math.min((multiplier - 1) / scale, 1);
+}
+
+async function getCrossReferenceSignalMap(
+  directReferenceIds: string[],
+  candidateIds: string[]
+): Promise<Map<string, number>> {
+  const signals = new Map<string, number>();
+  if (directReferenceIds.length === 0 || candidateIds.length === 0 || RETRIEVAL_CONFIG.reranker.crossReferenceWeight <= 0) {
+    return signals;
+  }
+
+  const sourceRefs = directReferenceIds
+    .map((reference) => parseReferenceKey(reference))
+    .filter((ref): ref is { book: string; chapter: number; verse: number } => Boolean(ref));
+  const targetRefs = candidateIds
+    .map((reference) => parseReferenceKey(reference))
+    .filter((ref): ref is { book: string; chapter: number; verse: number } => Boolean(ref));
+
+  if (sourceRefs.length === 0 || targetRefs.length === 0) {
+    return signals;
+  }
+
+  try {
+    await ensureDbReady();
+    const pool = getDbPool();
+
+    const values: Array<string | number> = [];
+    const sourceTuples: string[] = [];
+    sourceRefs.forEach((ref, index) => {
+      const base = index * 3;
+      sourceTuples.push(`($${base + 1}::text, $${base + 2}::int, $${base + 3}::int)`);
+      values.push(ref.book, ref.chapter, ref.verse);
+    });
+
+    const targetOffset = values.length;
+    const targetTuples: string[] = [];
+    targetRefs.forEach((ref, index) => {
+      const base = targetOffset + index * 3;
+      targetTuples.push(`($${base + 1}::text, $${base + 2}::int, $${base + 3}::int)`);
+      values.push(ref.book, ref.chapter, ref.verse);
+    });
+
+    const result = await pool.query<{
+      target_book: string;
+      target_chapter: number;
+      target_verse: number;
+    }>(
+      `SELECT DISTINCT target_book, target_chapter, target_verse
+       FROM cross_references
+       WHERE (source_book, source_chapter, source_verse) IN (VALUES ${sourceTuples.join(', ')})
+       AND (target_book, target_chapter, target_verse) IN (VALUES ${targetTuples.join(', ')})`,
+      values
+    );
+
+    result.rows.forEach((row) => {
+      signals.set(`${row.target_book} ${row.target_chapter}:${row.target_verse}`, 1);
+    });
+  } catch (error) {
+    console.warn('Cross-reference signal lookup failed; continuing without reranker cross-reference signals', error);
+  }
+
+  return signals;
+}
+
+async function applyDeterministicReranker(
+  scored: RankedVerse[],
+  options: {
+    topK: number;
+    directReferenceIds: string[];
+  },
+  debugState?: RetrievalDebugState
+): Promise<RankedVerse[]> {
+  if (scored.length === 0) {
+    return scored;
+  }
+
+  const directReferenceSet = new Set(options.directReferenceIds.map((reference) => reference.trim().toUpperCase()));
+  const crossReferenceSignals = await getCrossReferenceSignalMap(
+    Array.from(directReferenceSet),
+    scored.map((hit) => hit.verseId)
+  );
+
+  const reranked = scored.map((hit, index) => {
+    const fusedScore = hit.score;
+    const referenceBoost = directReferenceSet.has(hit.verseId.trim().toUpperCase()) ? 1 : 0;
+    const metadataConfidence = getMetadataConfidence(hit);
+    const crossReferenceSignal = crossReferenceSignals.get(hit.verseId) ?? 0;
+    const finalScore =
+      (RETRIEVAL_CONFIG.reranker.fusedScoreWeight * fusedScore) +
+      (RETRIEVAL_CONFIG.reranker.directReferenceWeight * referenceBoost) +
+      (RETRIEVAL_CONFIG.reranker.metadataConfidenceWeight * metadataConfidence) +
+      (RETRIEVAL_CONFIG.reranker.crossReferenceWeight * crossReferenceSignal);
+
+    if (debugState) {
+      const candidate = debugState.candidateTraces.get(hit.verseId);
+      if (candidate) {
+        candidate.reference_boost = roundRetrievalDiagnostic(referenceBoost);
+        candidate.metadata_confidence = roundRetrievalDiagnostic(metadataConfidence);
+        candidate.cross_reference_signal = roundRetrievalDiagnostic(crossReferenceSignal);
+        candidate.final_score = roundRetrievalDiagnostic(finalScore);
+      }
+    }
+
+    return {
+      hit,
+      originalIndex: index,
+      finalScore,
+      fusedScore,
+    };
+  });
+
+  reranked.sort((left, right) => {
+    if (right.finalScore !== left.finalScore) {
+      return right.finalScore - left.finalScore;
+    }
+    if (right.fusedScore !== left.fusedScore) {
+      return right.fusedScore - left.fusedScore;
+    }
+    if (left.originalIndex !== right.originalIndex) {
+      return left.originalIndex - right.originalIndex;
+    }
+    return left.hit.verseId.localeCompare(right.hit.verseId);
+  });
+
+  const finalHits = reranked.map((entry) => entry.hit);
+  if (debugState) {
+    debugState.hybridTopKRefs = finalHits.slice(0, options.topK).map((hit) => hit.verseId);
+    finalHits.forEach((hit, index) => {
+      const candidate = debugState.candidateTraces.get(hit.verseId);
+      if (!candidate) return;
+      candidate.final_rank = index + 1;
+    });
+  }
+
+  return finalHits;
+}
+
+async function applySemanticReranker(
+  query: string,
+  scored: RankedVerse[],
+  options: {
+    topK: number;
+  },
+  debugState?: RetrievalDebugState
+): Promise<RankedVerse[]> {
+  if (!ENABLE_SEMANTIC_RERANKER || scored.length === 0) {
+    return scored;
+  }
+
+  if (!process.env.HF_TOKEN) {
+    return scored;
+  }
+
+  const candidateWindow = Math.min(RETRIEVAL_CONFIG.semanticReranker.candidateWindow, scored.length);
+  if (candidateWindow <= 1) {
+    return scored;
+  }
+
+  const previousOrder = scored.slice(0, candidateWindow);
+  const startedAt = performance.now();
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    timeoutController.abort();
+  }, RETRIEVAL_CONFIG.semanticReranker.latencyBudgetMs);
+
+  try {
+    const semanticScores = await semanticSimilarityProvider(
+      query,
+      previousOrder.map((hit) => hit.verseId),
+      timeoutController.signal
+    );
+
+    const rerankedWindow = previousOrder
+      .map((hit, index) => ({
+        hit,
+        previousRank: index + 1,
+        semanticScore: semanticScores[index] ?? 0,
+      }))
+      .sort((left, right) => {
+        if (right.semanticScore !== left.semanticScore) {
+          return right.semanticScore - left.semanticScore;
+        }
+        if (left.previousRank !== right.previousRank) {
+          return left.previousRank - right.previousRank;
+        }
+        return left.hit.verseId.localeCompare(right.hit.verseId);
+      });
+
+    const finalHits = rerankedWindow.map((entry) => entry.hit).concat(scored.slice(candidateWindow));
+    if (debugState) {
+      addRetrievalStageTrace(debugState, {
+        stage: 'semantic_reranker',
+        action: 'applied',
+        candidate_window: candidateWindow,
+        latency_ms: roundRetrievalDiagnostic(performance.now() - startedAt),
+        latency_budget_ms: RETRIEVAL_CONFIG.semanticReranker.latencyBudgetMs,
+      });
+      debugState.hybridTopKRefs = finalHits.slice(0, options.topK).map((hit) => hit.verseId);
+      rerankedWindow.forEach((entry, index) => {
+        const candidate = debugState.candidateTraces.get(entry.hit.verseId);
+        if (!candidate) return;
+        candidate.semantic_score = roundRetrievalDiagnostic(entry.semanticScore);
+        candidate.previous_rank = entry.previousRank;
+        candidate.reranked_position = index + 1;
+      });
+      finalHits.forEach((hit, index) => {
+        const candidate = debugState.candidateTraces.get(hit.verseId);
+        if (!candidate) return;
+        candidate.final_rank = index + 1;
+      });
+    }
+
+    return finalHits;
+  } catch (error) {
+    const isAbortError = error instanceof Error && error.name === 'AbortError';
+    if (debugState) {
+      addRetrievalStageTrace(debugState, {
+        stage: 'semantic_reranker',
+        action: 'fallback',
+        reason: isAbortError
+          ? 'latency_budget_exceeded'
+          : String((error as { message?: string })?.message || error || 'unknown_error'),
+      });
+    }
+    if (!isAbortError) {
+      console.warn(JSON.stringify({
+        event: 'semantic_reranker_failed',
+        reason: String((error as { message?: string })?.message || error || 'unknown_error'),
+        model: HF_SEMANTIC_RERANKER_MODEL,
+      }));
+    }
+    return scored;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function hybridSearch(
   query: string,
-  options?: { topK?: number; domain?: QueryDomain; translation?: string }
+  options?: { topK?: number; domain?: QueryDomain; translation?: string; directReferenceIds?: string[] },
+  instrumentation?: RetrievalInstrumentation,
+  debugState?: RetrievalDebugState
 ): Promise<VerseResult[]> {
   const topK = clampTopK(options?.topK);
   const translation = options?.translation || 'BSB';
 
   const fuse = getLexicalFuse();
-  const lexicalHits = fuse.search(query, { limit: HYBRID_CANDIDATE_LIMIT });
+  const lexicalHits = fuse.search(query, { limit: RETRIEVAL_CONFIG.fuse.candidateLimit });
   const lexicalRanks = new Map<string, number>();
   const verseById = new Map<string, VerseResult>();
 
@@ -912,7 +1618,12 @@ async function hybridSearch(
     }
   });
 
-  const semanticHits = await semanticSearch(query, translation, HYBRID_CANDIDATE_LIMIT);
+  const semanticHits = await semanticSearch(
+    query,
+    translation,
+    RETRIEVAL_CONFIG.semantic.candidateLimit,
+    instrumentation
+  );
   const semanticRanks = new Map<string, number>();
   for (const hit of semanticHits) {
     semanticRanks.set(hit.verseId, hit.rank);
@@ -927,26 +1638,81 @@ async function hybridSearch(
     const rankSemantic = semanticRanks.get(verseId);
     let score = 0;
     if (typeof rankLexical === 'number') {
-      score += 1 / (RRF_K + rankLexical);
+      score += 1 / (RETRIEVAL_CONFIG.rrfK + rankLexical);
     }
     if (typeof rankSemantic === 'number') {
-      score += 1 / (RRF_K + rankSemantic);
+      score += 1 / (RETRIEVAL_CONFIG.rrfK + rankSemantic);
     }
     scored.push({
       verseId,
       verse: { reference: verseId, translation, text: '', original: [] },
       rankLexical,
       rankSemantic,
-      score
+      score,
+      metadataBoostFactor: 1,
+    });
+    if (debugState) {
+      debugState.candidateTraces.set(verseId, {
+        reference: verseId,
+        lexical_rank: typeof rankLexical === 'number' ? rankLexical : null,
+        semantic_rank: typeof rankSemantic === 'number' ? rankSemantic : null,
+        fused_score: roundRetrievalDiagnostic(score),
+        boost_factor: 1,
+        reference_boost: 0,
+        metadata_confidence: 0,
+        cross_reference_signal: 0,
+        semantic_score: null,
+        previous_rank: null,
+        reranked_position: null,
+        final_score: roundRetrievalDiagnostic(score),
+        final_rank: null,
+      });
+    }
+  }
+
+  if (scored.length === 0) {
+    if (debugState) {
+      debugState.hybridTopKRefs = [];
+    }
+    return [];
+  }
+
+  const boosted = options?.domain ? await applyMetadataBoosts(scored, options.domain, debugState) : scored;
+  boosted.sort((a, b) => b.score - a.score);
+  const reranked = await applyDeterministicReranker(
+    boosted,
+    {
+      topK,
+      directReferenceIds: options?.directReferenceIds ?? [],
+    },
+    debugState
+  );
+  const finalRanked = await applySemanticReranker(
+    query,
+    reranked,
+    { topK },
+    debugState
+  );
+
+  if (debugState) {
+    finalRanked.forEach((hit) => {
+      const candidate = debugState.candidateTraces.get(hit.verseId);
+      if (!candidate) return;
+      candidate.boost_factor = roundRetrievalDiagnostic(debugState.boostFactors.get(hit.verseId) ?? 1);
+      if (candidate.final_score === 0) {
+        candidate.final_score = roundRetrievalDiagnostic(hit.score);
+      }
     });
   }
 
-  if (scored.length === 0) return [];
+  if (RETRIEVAL_DEBUG) {
+    logRetrievalConfidenceDiagnostics(finalRanked, {
+      domain: options?.domain,
+      translation,
+    });
+  }
 
-  const boosted = options?.domain ? await applyMetadataBoosts(scored, options.domain) : scored;
-  boosted.sort((a, b) => b.score - a.score);
-
-  return boosted.slice(0, topK).map((hit) => ({ verseId: hit.verseId }));
+  return finalRanked.slice(0, topK).map((hit) => ({ verseId: hit.verseId }));
 }
 
 /**
@@ -1024,30 +1790,142 @@ async function getTskCrossReferences(
   return crossRefVerses.map((v) => ({ ...v, isCrossReference: true }));
 }
 
+function computeTskTopicalCoverage(query: string, verses: VerseContext[]): number {
+  const tokens = tokenizeFallbackQuery(query);
+  if (tokens.length === 0) {
+    return 1;
+  }
+
+  const coveredTokens = tokens.filter((token) =>
+    verses.some((verse) => verse.text.toLowerCase().includes(token))
+  );
+
+  return coveredTokens.length / tokens.length;
+}
+
+function buildTskExpansionDecision(query: string, coreVerses: VerseContext[]): TskExpansionDecision {
+  const coreVerseCount = coreVerses.length;
+  const topicalCoverage = roundRetrievalDiagnostic(computeTskTopicalCoverage(query, coreVerses));
+  const countConfidence = Math.min(coreVerseCount / TSK_MIN_CORE_VERSE_COUNT, 1);
+  const retrievalConfidence = roundRetrievalDiagnostic((countConfidence + topicalCoverage) / 2);
+  const metrics = {
+    core_verse_count: coreVerseCount,
+    topical_coverage: topicalCoverage,
+    retrieval_confidence: retrievalConfidence,
+  };
+
+  if (!ENABLE_TSK_EXPANSION_GATING) {
+    return {
+      shouldExpand: true,
+      reason: 'gating_disabled',
+      metrics,
+    };
+  }
+
+  if (coreVerseCount < TSK_MIN_CORE_VERSE_COUNT) {
+    return {
+      shouldExpand: true,
+      reason: 'insufficient_core_verses',
+      metrics,
+    };
+  }
+
+  if (topicalCoverage < TSK_MIN_TOPICAL_COVERAGE) {
+    return {
+      shouldExpand: true,
+      reason: 'insufficient_topical_coverage',
+      metrics,
+    };
+  }
+
+  if (retrievalConfidence < TSK_MIN_RETRIEVAL_CONFIDENCE) {
+    return {
+      shouldExpand: true,
+      reason: 'low_retrieval_confidence',
+      metrics,
+    };
+  }
+
+  return {
+    shouldExpand: false,
+    reason: 'strong_primary_evidence',
+    metrics,
+  };
+}
+
 export async function retrieveContextForQuery(
   query: string,
   translation: string,
-  apiKey?: string
+  apiKey?: string,
+  instrumentation?: RetrievalInstrumentation
 ): Promise<VerseContext[]> {
-  const cacheKey = `context:${CONTEXT_CACHE_VERSION}:${translation}:${query.trim().toLowerCase()}`;
-  const cached = await getCached<VerseContext[]>(cacheKey);
+  const debugState = RETRIEVAL_DEBUG ? createRetrievalDebugState() : undefined;
+  const cached = await getCachedRetrievalContext({
+    query,
+    translation,
+    version: CONTEXT_CACHE_VERSION,
+  });
   if (cached) {
     return cloneVerses(normalizeVerses(dedupeByVerseId(cached)));
   }
 
   const topK = clampTopK();
-  const { domain, expandedQuery } = classifyAndExpand(query);
+  const { domain, intent, expandedQuery, normalizedQuery } = classifyAndExpand(query);
+  const directRefs = extractDirectReferences(normalizedQuery);
+  const hasRangedDirectRefs = directRefs.some(
+    (ref) => typeof ref.endVerse === 'number' && ref.endVerse > ref.verse
+  );
+  const directRefIds = directRefs
+    .filter((ref) => !(typeof ref.endVerse === 'number' && ref.endVerse > ref.verse))
+    .map((ref) => `${ref.book} ${ref.chapter}:${ref.verse}`);
+
+  if (
+    !hasRangedDirectRefs &&
+    (intent === 'DIRECT_REFERENCE' || intent === 'VERSE_EXPLANATION') &&
+    directRefIds.length > 0
+  ) {
+    const exactVerses = await fetchVersesByIds(directRefIds.slice(0, topK), translation);
+    let focusedVerses = exactVerses;
+
+    if (intent === 'VERSE_EXPLANATION' && exactVerses.length > 0) {
+      try {
+        await ensureDbReady();
+        const pool = getDbPool();
+        const tskVerses = await getTskCrossReferences(pool, exactVerses, translation);
+        focusedVerses = [...exactVerses, ...tskVerses];
+      } catch (error) {
+        console.warn('Explanation cross-reference retrieval failed; continuing with target verses only', error);
+      }
+    }
+
+    attachIndexedOriginals(focusedVerses);
+    const enrichStartedAt = performance.now();
+    const enriched = await enrichOriginalLanguages(focusedVerses);
+    recordRetrievalMetric(instrumentation, 'enrich_ms', enrichStartedAt);
+    const translated = await applyTranslationOverride(enriched, translation);
+    const deduped = dedupeByVerseId(translated);
+    const normalized = normalizeVerses(deduped).slice(0, topK);
+    await setCachedRetrievalContext(
+      {
+        query,
+        translation,
+        version: CONTEXT_CACHE_VERSION,
+      },
+      normalized
+    );
+    return cloneVerses(normalized);
+  }
+
   const hybridResults = await hybridSearch(expandedQuery, {
     topK,
     domain,
-    translation
-  });
+    translation,
+    directReferenceIds: directRefIds,
+  }, instrumentation, debugState);
 
-  const directRefs = extractDirectReferences(query)
-    .map((ref) => `${ref.book} ${ref.chapter}:${ref.verse}`);
   const orderedIds: string[] = [];
   const seenIds = new Set<string>();
-  for (const verseId of [...directRefs, ...hybridResults.map((result) => result.verseId)]) {
+  for (const verseId of [...directRefIds, ...hybridResults.map((result) => result.verseId)]) {
     const key = verseId.trim().toUpperCase();
     if (seenIds.has(key)) continue;
     seenIds.add(key);
@@ -1055,26 +1933,67 @@ export async function retrieveContextForQuery(
   }
   const limitedIds = orderedIds.slice(0, topK);
 
+  const fetchVersesStartedAt = performance.now();
   let verses = await fetchVersesByIds(limitedIds, translation);
+  recordRetrievalMetric(instrumentation, 'fetch_verses_db_ms', fetchVersesStartedAt);
   const shouldUseApiFallback =
     verses.length === 0 ||
     (limitedIds.length > 0 && verses.length < Math.min(limitedIds.length, topK));
 
+  addRetrievalStageTrace(debugState, {
+    stage: 'api_fallback',
+    action: shouldUseApiFallback ? 'used' : 'skipped',
+    reason: shouldUseApiFallback
+      ? (verses.length === 0 ? 'no_verses_after_hybrid_fetch' : 'partial_hybrid_fetch')
+      : 'hybrid_fetch_sufficient',
+  });
+
   if (shouldUseApiFallback) {
+    const apiFetchStartedAt = performance.now();
     try {
-      const apiVerses = await retrieveContextViaApis(query, translation, apiKey);
+      const apiVerses = await retrieveContextViaApis(normalizedQuery, translation, apiKey, debugState);
       verses = [...verses, ...apiVerses];
     } catch (error) {
       console.warn('API retrieval failed; continuing with available verses', error);
+    } finally {
+      recordRetrievalMetric(instrumentation, 'fetch_verses_api_ms', apiFetchStartedAt);
     }
   }
 
-  attachIndexedOriginals(verses);
-  const enriched = await enrichOriginalLanguages(verses);
+  const postProcessed = applyCuratedTopicalLists(
+    normalizedQuery,
+    applyTopicGuards(
+      normalizedQuery,
+      verses,
+      debugState,
+      shouldUseApiFallback ? 'api_fallback' : 'db'
+    ),
+    debugState,
+    shouldUseApiFallback ? 'api_fallback' : 'db'
+  );
+  attachIndexedOriginals(postProcessed);
+  const enrichStartedAt = performance.now();
+  const enriched = await enrichOriginalLanguages(postProcessed);
+  recordRetrievalMetric(instrumentation, 'enrich_ms', enrichStartedAt);
   const translated = await applyTranslationOverride(enriched, translation);
   const deduped = dedupeByVerseId(translated);
   const normalized = normalizeVerses(deduped).slice(0, topK);
-  await setCached(cacheKey, normalized);
+  if (debugState) {
+    logRetrievalDiagnostics(debugState, {
+      translation,
+      domain,
+      topK,
+      finalVerses: normalized,
+    });
+  }
+  await setCachedRetrievalContext(
+    {
+      query,
+      translation,
+      version: CONTEXT_CACHE_VERSION,
+    },
+    normalized
+  );
   return cloneVerses(normalized);
 }
 
@@ -1158,16 +2077,19 @@ async function retrieveContextFromDb(
     }
   }
 
-  const guarded = applyTopicGuards(query, verses);
-  const coreVerses = applyCuratedTopicalLists(query, guarded);
+  const guarded = applyTopicGuards(query, verses, undefined, 'db');
+  const coreVerses = applyCuratedTopicalLists(query, guarded, undefined, 'db');
+  const tskDecision = buildTskExpansionDecision(query, coreVerses);
   
   // TSK Cross-References (Anchor Retrieval)
   let finalVerses = coreVerses;
-  try {
-    const tskVerses = await getTskCrossReferences(pool, coreVerses, translation);
-    finalVerses = [...coreVerses, ...tskVerses];
-  } catch (error) {
-    console.warn('TSK retrieval failed', error);
+  if (tskDecision.shouldExpand) {
+    try {
+      const tskVerses = await getTskCrossReferences(pool, coreVerses, translation);
+      finalVerses = [...coreVerses, ...tskVerses];
+    } catch (error) {
+      console.warn('TSK retrieval failed', error);
+    }
   }
 
   attachIndexedOriginals(finalVerses);
@@ -1187,7 +2109,8 @@ function attachIndexedOriginals(verses: VerseContext[]): void {
 async function retrieveContextViaApis(
   query: string,
   translation: string,
-  apiKey?: string
+  apiKey?: string,
+  debugState?: RetrievalDebugState
 ): Promise<VerseContext[]> {
   const verses: VerseContext[] = [];
   const normalizedQuery = query.toLowerCase();
@@ -1277,44 +2200,59 @@ async function retrieveContextViaApis(
   const directRefs = extractDirectReferences(query);
   
   if (directRefs.length > 0) {
-    // Attempt rapid direct fetch for parsed references
-    for (const ref of directRefs) {
-      const refKey = `${ref.book} ${ref.chapter}:${ref.verse}`;
-      const refStr = `${ref.book} ${ref.chapter}:${ref.verse}${ref.endVerse ? '-' + ref.endVerse : ''}`;
-      if (verses.some((v) => v.reference.startsWith(refKey))) {
-        continue;
-      }
-      const dbMatch = BIBLE_INDEX[`${ref.book} ${ref.chapter}:${ref.verse}`];
-      if (dbMatch && canUseIndex) {
-        verses.push(cloneVerses([dbMatch])[0]);
-        continue;
-      }
+    const directVerseResults = await Promise.all(
+      directRefs.map(async (ref) => {
+        const refKey = `${ref.book} ${ref.chapter}:${ref.verse}`;
+        const refStr = `${ref.book} ${ref.chapter}:${ref.verse}${ref.endVerse ? '-' + ref.endVerse : ''}`;
+        if (verses.some((v) => v.reference === refKey || v.reference.startsWith(refKey + '-'))) {
+          return null;
+        }
 
-      if (LOCAL_TRANSLATIONS.has(translation)) {
-        const localText = await getTranslationVerse(refStr, translation);
-        if (localText) {
-          verses.push({
+        const dbMatch = BIBLE_INDEX[`${ref.book} ${ref.chapter}:${ref.verse}`];
+        if (dbMatch && canUseIndex) {
+          return cloneVerses([dbMatch])[0];
+        }
+
+        if (LOCAL_TRANSLATIONS.has(translation)) {
+          const localText = await getTranslationVerse(refStr, translation);
+          if (localText) {
+            return {
+              reference: refStr,
+              translation,
+              text: localText,
+              original: []
+            } satisfies VerseContext;
+          }
+        }
+
+        try {
+          const vText = await fetchVerseTextWithFallback({
+            translation,
+            reference: refStr,
+            book: ref.book,
+            chapter: ref.chapter,
+            startVerse: ref.verse,
+            endVerse: ref.endVerse
+          });
+
+          if (!vText) {
+            return null;
+          }
+
+          return {
             reference: refStr,
             translation,
-            text: localText,
-            original: []
-          });
-          continue;
+            text: vText,
+            original: [] // Filled in enrichment phase
+          } satisfies VerseContext;
+        } catch (error) {
+          console.warn('Direct verse hydration failed; continuing with remaining verses', { reference: refStr, error });
+          return null;
         }
-      }
-      
-      const vText = await fetchVerseHelloAO(translation, ref.book, ref.chapter, ref.verse, ref.endVerse) 
-                    || await fetchVerseFallback(refStr, translation);
-      
-      if (vText) {
-        verses.push({
-          reference: refStr,
-          translation: translation,
-          text: vText,
-          original: [] // Filled in enrichment phase
-        });
-      }
-    }
+      })
+    );
+
+    verses.push(...directVerseResults.filter((verse): verse is VerseContext => Boolean(verse)));
   }
 
   // 2. Semantic Hint via Groq (only if direct parsing yields few results)
@@ -1326,7 +2264,9 @@ async function retrieveContextViaApis(
       if (lexicalFallback.length > 0) {
         verses.push(...lexicalFallback);
       }
-      return enrichOriginalLanguages(verses);
+      const guarded = applyTopicGuards(query, verses, debugState, 'api_fallback');
+      const finalVerses = applyCuratedTopicalLists(query, guarded, debugState, 'api_fallback');
+      return enrichOriginalLanguages(finalVerses);
     }
     const groq = createGroq({
       apiKey: groqApiKey,
@@ -1363,7 +2303,9 @@ async function retrieveContextViaApis(
       if (lexicalFallback.length > 0) {
         verses.push(...lexicalFallback);
       }
-      return enrichOriginalLanguages(verses);
+      const guarded = applyTopicGuards(query, verses, debugState, 'api_fallback');
+      const finalVerses = applyCuratedTopicalLists(query, guarded, debugState, 'api_fallback');
+      return enrichOriginalLanguages(finalVerses);
     }
 
     const lines = text
@@ -1371,44 +2313,57 @@ async function retrieveContextViaApis(
       .map((line) => line.trim())
       .filter((line) => line && line.toUpperCase() !== 'NONE');
 
-    for (const line of lines) {
-      const match = line.match(/^([A-Z0-9]{3})\s+(\d+):(\d+)$/i);
-      if (!match) continue;
-      const book = match[1].toUpperCase();
-      const chapter = Number.parseInt(match[2], 10);
-      const verse = Number.parseInt(match[3], 10);
-      const refStr = `${book} ${chapter}:${verse}`;
-      
-      // Skip if we already got it
-      if (verses.some(v => v.reference.startsWith(refStr))) continue;
+    const semanticVerseResults = await Promise.all(
+      lines.map(async (line) => {
+        const match = line.match(/^([A-Z0-9]{3})\s+(\d+):(\d+)$/i);
+        if (!match) return null;
+        const book = match[1].toUpperCase();
+        const chapter = Number.parseInt(match[2], 10);
+        const verse = Number.parseInt(match[3], 10);
+        const refStr = `${book} ${chapter}:${verse}`;
 
-      // Try bundled index first
-      const indexed = BIBLE_INDEX[refStr];
-      if (indexed && canUseIndex) {
-        const cloned = cloneVerses([indexed])[0];
-        cloned.translation = 'WEB'; // Index text is WEB
-        verses.push(cloned);
-        continue;
-      }
+        if (verses.some((v) => v.reference === refStr)) {
+          return null;
+        }
 
-      // Fallback to fetch
-      const vText = await fetchVerseHelloAO(translation, book, chapter, verse)
-                    || await fetchVerseFallback(refStr, translation);
-                    
-      if (vText) {
-        verses.push({
-          reference: refStr,
-          translation,
-          text: vText,
-          original: []
-        });
-      }
-    }
+        const indexed = BIBLE_INDEX[refStr];
+        if (indexed && translation === 'WEB') {
+          const cloned = cloneVerses([indexed])[0];
+          return cloned;
+        }
+
+        try {
+          const vText = await fetchVerseTextWithFallback({
+            translation,
+            reference: refStr,
+            book,
+            chapter,
+            startVerse: verse
+          });
+
+          if (!vText) {
+            return null;
+          }
+
+          return {
+            reference: refStr,
+            translation,
+            text: vText,
+            original: []
+          } satisfies VerseContext;
+        } catch (error) {
+          console.warn('Semantic verse hydration failed; continuing with remaining verses', { reference: refStr, error });
+          return null;
+        }
+      })
+    );
+
+    verses.push(...semanticVerseResults.filter((verse): verse is VerseContext => Boolean(verse)));
   }
 
   // 3. Enrichment Phase (add Strong's dictionary data)
-  const guarded = applyTopicGuards(query, verses);
-  const finalVerses = applyCuratedTopicalLists(query, guarded);
+  const guarded = applyTopicGuards(query, verses, debugState, 'api_fallback');
+  const finalVerses = applyCuratedTopicalLists(query, guarded, debugState, 'api_fallback');
   return enrichOriginalLanguages(finalVerses);
 }
 
@@ -1536,9 +2491,15 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
         const [chapter, vNumStr] = cv.split(':');
         
         const bollsRef = bkbToBollsPath(book, parseInt(chapter, 10));
-        const res = await fetch(`https://bolls.life/get-chapter/${trans}/${bollsRef}/`);
-        
-        if (res.ok) {
+        const res = await fetchExternalWithTimeoutBudget(
+          `https://bolls.life/get-chapter/${trans}/${bollsRef}/`,
+          {},
+          {
+            label: `bolls-tagged-chapter:${trans}:${bollsRef}`
+          }
+        );
+
+        if (res?.ok) {
            const chapterData = await res.json();
            const matchV = chapterData.find((v: { verse: number, text: string }) => v.verse === parseInt(vNumStr, 10));
            if (matchV) {

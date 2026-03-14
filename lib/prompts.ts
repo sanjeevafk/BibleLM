@@ -3,6 +3,81 @@
 import { VerseContext } from './bible-fetch';   // adjust path if needed
 import { decodeMorph } from './morph-utils';
 
+const DEFAULT_CONTEXT_TOKEN_BUDGET = 1500;
+const PROMPT_CONTEXT_TOKEN_BUDGET = Math.max(
+  1200,
+  Number.parseInt(process.env.PROMPT_CONTEXT_TOKEN_BUDGET || '', 10) || DEFAULT_CONTEXT_TOKEN_BUDGET
+);
+
+const BOOK_CODE_TO_NAME: Record<string, string> = {
+  GEN: 'Genesis',
+  EXO: 'Exodus',
+  LEV: 'Leviticus',
+  NUM: 'Numbers',
+  DEU: 'Deuteronomy',
+  JOS: 'Joshua',
+  JDG: 'Judges',
+  RUT: 'Ruth',
+  '1SA': '1 Samuel',
+  '2SA': '2 Samuel',
+  '1KI': '1 Kings',
+  '2KI': '2 Kings',
+  '1CH': '1 Chronicles',
+  '2CH': '2 Chronicles',
+  EZR: 'Ezra',
+  NEH: 'Nehemiah',
+  EST: 'Esther',
+  JOB: 'Job',
+  PSA: 'Psalms',
+  PRO: 'Proverbs',
+  ECC: 'Ecclesiastes',
+  SNG: 'Song of Songs',
+  ISA: 'Isaiah',
+  JER: 'Jeremiah',
+  LAM: 'Lamentations',
+  EZK: 'Ezekiel',
+  DAN: 'Daniel',
+  HOS: 'Hosea',
+  JOL: 'Joel',
+  AMO: 'Amos',
+  OBA: 'Obadiah',
+  JON: 'Jonah',
+  MIC: 'Micah',
+  NAM: 'Nahum',
+  HAB: 'Habakkuk',
+  ZEP: 'Zephaniah',
+  HAG: 'Haggai',
+  ZEC: 'Zechariah',
+  MAL: 'Malachi',
+  MAT: 'Matthew',
+  MRK: 'Mark',
+  LUK: 'Luke',
+  JHN: 'John',
+  ACT: 'Acts',
+  ROM: 'Romans',
+  '1CO': '1 Corinthians',
+  '2CO': '2 Corinthians',
+  GAL: 'Galatians',
+  EPH: 'Ephesians',
+  PHP: 'Philippians',
+  COL: 'Colossians',
+  '1TH': '1 Thessalonians',
+  '2TH': '2 Thessalonians',
+  '1TI': '1 Timothy',
+  '2TI': '2 Timothy',
+  TIT: 'Titus',
+  PHM: 'Philemon',
+  HEB: 'Hebrews',
+  JAS: 'James',
+  '1PE': '1 Peter',
+  '2PE': '2 Peter',
+  '1JN': '1 John',
+  '2JN': '2 John',
+  '3JN': '3 John',
+  JUD: 'Jude',
+  REV: 'Revelation',
+};
+
 export const SYSTEM_PROMPT = `You are a precise Bible reference librarian. Your task is to report what the biblical text actually says — without modern reinterpretation, without denominational bias, and without unnecessary softening.
 
 Core rules — you MUST obey all of them:
@@ -68,6 +143,101 @@ Stay extremely close to what the verses actually say. Use low temperature. Be di
 ## Supporting Cross-References (TSK)
 These verses are historically linked to the primary passages. Use them ONLY to clarify the meanings of words or themes in the primary context. Do not let them distract from the primary query.`;
 
+export function expandCitationReference(reference: string): string {
+  const match = reference.trim().match(/^([1-3]?[A-Z]{2,3})\s+(\d+:\d+(?:[-–]\d+)?)$/i);
+  if (!match) {
+    return reference.trim();
+  }
+
+  const bookCode = match[1].toUpperCase();
+  const expandedBook = BOOK_CODE_TO_NAME[bookCode] || bookCode;
+  return `${expandedBook} ${match[2]}`;
+}
+
+export function buildCitationWhitelist(verses: VerseContext[]): string[] {
+  return Array.from(
+    new Set(
+      verses
+        .map((verse) => expandCitationReference(verse.reference))
+        .filter(Boolean)
+    )
+  );
+}
+
+function estimateTokenCount(value: string): number {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return 0;
+  }
+  // Use a conservative approximation so prompt context stays under budget in practice.
+  return Math.ceil(normalized.length / 3);
+}
+
+function renderVerseContext(
+  verse: VerseContext,
+  translation: string
+): string {
+  let output = `Reference: ${verse.reference}\n`;
+  output += `Text (${verse.translation || translation}): ${verse.text}\n`;
+
+  if (verse.original && verse.original.length > 0) {
+    output += `Original language data (use these words in plain markdown, no XML tags):\n`;
+    const meaningful = verse.original.filter(
+      (entry) => entry.gloss && entry.gloss.length > 2 && !['and', 'the', 'of', 'to'].includes(entry.gloss.toLowerCase())
+    ).slice(0, 6);
+
+    meaningful.forEach((entry) => {
+      const transliteration = (entry as { transliteration?: string }).transliteration;
+      const morph = (entry as { morph?: string }).morph;
+      const parts: string[] = [];
+      if (transliteration) parts.push(transliteration);
+      parts.push(`Strong's ${entry.strongs} - ${entry.gloss || ''}`);
+      if (morph) {
+        const decoded = decodeMorph(morph);
+        const morphDetail = decoded ? `${decoded.code} (${decoded.description})` : morph;
+        parts.push(`Morph: ${morphDetail}`);
+      }
+      output += `- ${entry.word} (${parts.join(', ')})\n`;
+    });
+  } else {
+    output += `No original-language tagging available for this verse.\n`;
+  }
+
+  if (verse.openHebrew) {
+    output += `OpenHebrewBible layers: ${verse.openHebrew}\n`;
+  }
+  if (verse.openGnt) {
+    output += `OpenGNT layers: ${verse.openGnt}\n`;
+  }
+
+  return `${output}\n`;
+}
+
+function applyContextBudget(
+  verses: VerseContext[],
+  translation: string,
+  tokenBudget: number,
+  options?: { forceIncludeFirst: boolean }
+): { included: VerseContext[]; omittedCount: number; usedTokens: number } {
+  const included: VerseContext[] = [];
+  let usedTokens = 0;
+
+  for (const verse of verses) {
+    const verseTokens = estimateTokenCount(renderVerseContext(verse, translation));
+    if (included.length > 0 && usedTokens + verseTokens > tokenBudget) {
+      break;
+    }
+    included.push(verse);
+    usedTokens += verseTokens;
+  }
+
+  return {
+    included,
+    omittedCount: Math.max(verses.length - included.length, 0),
+    usedTokens,
+  };
+}
+
 export function buildContextPrompt(
   query: string,
   verses: VerseContext[],
@@ -78,82 +248,83 @@ export function buildContextPrompt(
   );
 
   if (!verses || verses.length === 0) {
-    return `User query: ${query}
+    return `SYSTEM INSTRUCTION
+${SYSTEM_PROMPT}
 
-Translation requested: ${translation}
+QUERY
+${query}
 
-Context: No verses were retrieved.
+RETRIEVED SCRIPTURE CONTEXT
+No verses were retrieved.
+
+ALLOWED CITATIONS
+None
+
+RESPONSE FORMAT
 Respond: "No supporting passages found in the authoritative sources."
 Do not speculate or add external information.`;
   }
 
   const primaryVerses = verses.filter(v => !v.isCrossReference);
-  const supportingVerses = verses.filter(v => v.isCrossReference);
+  const orderedContextVerses = [
+    ...primaryVerses,
+    ...verses.filter(v => v.isCrossReference),
+  ];
+  const budgetedContext = applyContextBudget(orderedContextVerses, translation, PROMPT_CONTEXT_TOKEN_BUDGET, {
+    forceIncludeFirst: true,
+  });
+  const citationWhitelist = buildCitationWhitelist(budgetedContext.included);
+  const includedVerseSet = new Set(budgetedContext.included.map((verse) => verse.reference));
+  const budgetedPrimary = primaryVerses.filter((verse) => includedVerseSet.has(verse.reference));
+  const budgetedSupporting = verses
+    .filter(v => v.isCrossReference)
+    .filter((verse) => includedVerseSet.has(verse.reference));
 
-  let contextStr = `Primary Biblical Context:\n\n`;
+  let contextStr = '';
 
-  const renderVerse = (v: VerseContext) => {
-    let s = `Reference: ${v.reference}\n`;
-    s += `Text (${v.translation || translation}): ${v.text}\n`;
-
-    if (v.original && v.original.length > 0) {
-      s += `Original language data (use these words in plain markdown, no XML tags):\n`;
-      const meaningful = v.original.filter(
-        (o) => o.gloss && o.gloss.length > 2 && !['and', 'the', 'of', 'to'].includes(o.gloss.toLowerCase())
-      ).slice(0, 6);
-
-      meaningful.forEach((org) => {
-        const transliteration = (org as { transliteration?: string }).transliteration;
-        const morph = (org as { morph?: string }).morph;
-        const parts: string[] = [];
-        if (transliteration) parts.push(transliteration);
-        parts.push(`Strong's ${org.strongs} - ${org.gloss || ''}`);
-        if (morph) {
-          const decoded = decodeMorph(morph);
-          const morphDetail = decoded ? `${decoded.code} (${decoded.description})` : morph;
-          parts.push(`Morph: ${morphDetail}`);
-        }
-        s += `- ${org.word} (${parts.join(', ')})\n`;
-      });
-    } else {
-      s += `No original-language tagging available for this verse.\n`;
-    }
-    if (v.openHebrew) {
-      s += `OpenHebrewBible layers: ${v.openHebrew}\n`;
-    }
-    if (v.openGnt) {
-      s += `OpenGNT layers: ${v.openGnt}\n`;
-    }
-    s += '\n';
-    return s;
-  };
-
-  primaryVerses.forEach((v) => {
-    contextStr += renderVerse(v);
+  budgetedPrimary.forEach((v) => {
+    contextStr += renderVerseContext(v, translation);
   });
 
-  if (supportingVerses.length > 0) {
+  if (budgetedSupporting.length > 0) {
     contextStr += `## Supporting Cross-References (TSK)\n\n`;
-    supportingVerses.forEach((v) => {
-      contextStr += renderVerse(v);
+    budgetedSupporting.forEach((v) => {
+      contextStr += renderVerseContext(v, translation);
     });
     contextStr += `Instruction: These verses are historically linked to the primary passages. Use them to clarify the theological meaning or word usage of the primary text. Do not let them distract from the primary query.\n\n`;
   }
 
-  contextStr += `Requested translation: ${translation}\n\n`;
-
-  contextStr += `Reminder:
+  const responseFormat = `Reminder:
 - When verses contain strong prohibitive language (abomination, death penalty, shall not inherit the kingdom, contrary to nature, sin lists, etc.) → include a clear "Textual conclusion" sentence that reflects the strength of the language used in Scripture.
 - Do NOT soften, balance or relativize clear prohibitions.
 - Never add external commentary or modern application.
-- If the COSMOLOGY REMINDER is not present below, do NOT include the cosmology disclaimer sentence.`;
+- If the COSMOLOGY REMINDER is not present below, do NOT include the cosmology disclaimer sentence.
+- Cite only verses from the ALLOWED CITATIONS list.
+- Do not mention any verse reference that is not in the whitelist.`;
 
   if (isCosmologyQuery) {
-    contextStr += `\n\nCOSMOLOGY REMINDER (earth shape, sun movement, geocentrism, firmament, etc.):
+    contextStr += `COSMOLOGY REMINDER (earth shape, sun movement, geocentrism, firmament, etc.):
 - Always include this statement in the summary or as the first line: "The Bible is a theological source of Truth from God; scientific perspectives in its poetic or descriptive language are not to be taken in a literal, modern scientific context."
 - Do not argue for or against modern science (heliocentrism, round earth, etc.) — only report what the verses say and their theological/poetic intent.
-- If no verses directly address the query as a scientific fact, say so plainly without hedging or implying conflict.`;
+- If no verses directly address the query as a scientific fact, say so plainly without hedging or implying conflict.
+
+`;
   }
 
-  return `${SYSTEM_PROMPT}\n\n${contextStr}`;
+  return `SYSTEM INSTRUCTION
+${SYSTEM_PROMPT}
+
+QUERY
+${query}
+
+RETRIEVED SCRIPTURE CONTEXT
+Requested translation: ${translation}
+
+${contextStr.trim()}
+
+ALLOWED CITATIONS
+${citationWhitelist.map((citation) => `- ${citation}`).join('\n')}
+
+RESPONSE FORMAT
+${responseFormat}`;
 }

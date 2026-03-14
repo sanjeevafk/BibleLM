@@ -1,12 +1,13 @@
 import { simulateReadableStream, streamText } from 'ai';
-import type { UIMessage } from 'ai';
+import { createHash, randomUUID } from 'crypto';
 import { retrieveContextForQuery } from '@/lib/retrieval';
-import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
+import { buildCitationWhitelist, buildContextPrompt, expandCitationReference, SYSTEM_PROMPT } from '@/lib/prompts';
 import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache';
 import { generateWithFallback } from '@/lib/llm-fallback';
 import { validateDataIntegrity } from '@/lib/validate-data';
 import type { VerseContext } from '@/lib/bible-fetch';
 import { redis } from '@/lib/redis';
+import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
 
 // export const runtime = 'edge';
 
@@ -35,10 +36,58 @@ type NormalizedChatResponse = {
   };
 };
 
-const DEBUG_LLM = process.env.DEBUG_LLM === '1';
+type LatencyMetricName =
+  | 'cache_lookup_ms'
+  | 'retrieve_total_ms'
+  | 'embed_ms'
+  | 'vector_ms'
+  | 'fetch_verses_db_ms'
+  | 'fetch_verses_api_ms'
+  | 'enrich_ms'
+  | 'prompt_build_ms'
+  | 'llm_ms'
+  | 'post_normalize_ms'
+  | 'total_ms';
+
+type LatencyMetrics = Record<LatencyMetricName, number>;
+
+type CacheLookupResult = {
+  cacheKey: string;
+  modelKey: string;
+  response: Awaited<ReturnType<typeof getCachedResponse>>;
+};
+
+type PipelineExecutionResult = {
+  normalizedResponse: NormalizedChatResponse;
+  finalPrompt: string;
+  preferredChunks?: string[];
+  fallbackUsed: boolean;
+  finalFallback: boolean;
+  pipelineMetrics: Partial<LatencyMetrics>;
+};
+
+type ModelHistoryMessage = {
+  role: 'system' | 'assistant' | 'user';
+  content: string;
+};
+
+const DEBUG_LLM = ENABLE_RETRIEVAL_DEBUG;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 const RATE_LIMIT_MAX_REQUESTS = 60;
 const RATE_LIMIT_WARN_THRESHOLD = 50;
+const EMPTY_LATENCY_METRICS: LatencyMetrics = {
+  cache_lookup_ms: 0,
+  retrieve_total_ms: 0,
+  embed_ms: 0,
+  vector_ms: 0,
+  fetch_verses_db_ms: 0,
+  fetch_verses_api_ms: 0,
+  enrich_ms: 0,
+  prompt_build_ms: 0,
+  llm_ms: 0,
+  post_normalize_ms: 0,
+  total_ms: 0,
+};
 const RATE_LIMIT_SCRIPT = `
 local current = redis.call("INCR", KEYS[1])
 if current == 1 then
@@ -46,11 +95,77 @@ if current == 1 then
 end
 return current
 `;
+const inflightRequests = new Map<string, Promise<PipelineExecutionResult>>();
 
 function debugLog(...args: unknown[]) {
   if (DEBUG_LLM) {
     console.log(...args);
   }
+}
+
+function roundLatencyMs(durationMs: number): number {
+  return Number(durationMs.toFixed(2));
+}
+
+function createLatencyMetrics(): LatencyMetrics {
+  return { ...EMPTY_LATENCY_METRICS };
+}
+
+function addLatencyMetric(metrics: LatencyMetrics, metric: LatencyMetricName, durationMs: number): void {
+  metrics[metric] = roundLatencyMs(metrics[metric] + durationMs);
+}
+
+function setLatencyMetric(metrics: LatencyMetrics, metric: LatencyMetricName, durationMs: number): void {
+  metrics[metric] = roundLatencyMs(durationMs);
+}
+
+function normalizeInflightQuery(query: string): string {
+  return query.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function buildInflightRequestKey(query: string, translation: string, model: string): string {
+  return `${normalizeInflightQuery(query)}\u0000${translation}\u0000${model}`;
+}
+
+function hashModelHistory(modelHistory: ModelHistoryMessage[]): string {
+  return createHash('sha256').update(JSON.stringify(modelHistory)).digest('hex');
+}
+
+function buildInflightRequestKeyWithHistory(
+  query: string,
+  translation: string,
+  model: string,
+  modelHistory: ModelHistoryMessage[]
+): string {
+  return `${buildInflightRequestKey(query, translation, model)}\u0000${hashModelHistory(modelHistory)}`;
+}
+
+async function findPreferredCachedResponse(
+  query: string,
+  translation: string
+): Promise<CacheLookupResult | null> {
+  const cacheCandidates = CACHE_MODEL_CANDIDATES.map((modelKey) => ({
+    modelKey,
+    cacheKey: buildCacheKey({
+      query,
+      translation,
+      model: modelKey,
+    }),
+  }));
+
+  const results = await Promise.all(
+    cacheCandidates.map(async ({ modelKey, cacheKey }) => ({
+      modelKey,
+      cacheKey,
+      response: await getCachedResponse({
+        query,
+        translation,
+        model: modelKey,
+      }),
+    }))
+  );
+
+  return results.find((result) => result.response?.response) ?? null;
 }
 
 function isValidIPv4(value: string): boolean {
@@ -177,32 +292,9 @@ function normalizeTranslation(_input: string | null | undefined): string {
   return validTranslations.includes(upper) ? upper : 'BSB';
 }
 
-function getMessageText(message: UIMessage | undefined): string {
-  if (!message) return '';
-  const msg = message as any;
-
-  if (typeof msg.content === 'string') return msg.content;
-  if (typeof msg.text === 'string') return msg.text;
-
-  if (Array.isArray(msg.content)) {
-    return msg.content
-      .map((part: any) => (typeof part === 'string' ? part : part.text || part.value || ''))
-      .join('');
-  }
-
-  if (Array.isArray(msg.parts)) {
-    return msg.parts
-      .map((part: any) => part.text || part.value || (part.type === 'text' ? part.text : ''))
-      .join('');
-  }
-
-  return '';
-}
-
 function buildPrompt(
   finalPrompt: string,
-  history: Array<{ role: 'system' | 'assistant' | 'user'; content: string }>,
-  query: string
+  history: Array<{ role: 'system' | 'assistant' | 'user'; content: string }>
 ): string {
   const historyLines = history
     .filter((message) => message.role !== 'system')
@@ -210,10 +302,121 @@ function buildPrompt(
     .join('\n');
 
   if (historyLines.trim()) {
-    return `${finalPrompt}\n\nConversation so far:\n${historyLines}\n\nUser: ${query}`;
+    return `${finalPrompt}\n\nCONVERSATION HISTORY\n${historyLines}`;
   }
 
-  return `${finalPrompt}\n\nUser: ${query}`;
+  return finalPrompt;
+}
+
+function normalizeCitationToken(citation: string): string {
+  return citation
+    .trim()
+    .replace(/[()[\],.;:!?]+$/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function buildCitationWhitelistSet(verses: VerseContext[]): Set<string> {
+  const whitelist = new Set<string>();
+  for (const citation of buildCitationWhitelist(verses)) {
+    const normalized = normalizeCitationToken(citation);
+    if (normalized) {
+      whitelist.add(normalized.toLowerCase());
+    }
+  }
+  return whitelist;
+}
+
+function extractCitations(content: string): string[] {
+  const matches = content.match(
+    /(?<![1-3]\s)\b(?:[1-3][A-Z]{2}|[A-Z]{2,3}|[1-3]\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+\d+:\d+(?:[-–]\d+)?\b/g
+  );
+  return matches ? matches.map((match) => normalizeCitationToken(match)) : [];
+}
+
+function isAllowedCitation(citation: string, whitelist: Set<string>): boolean {
+  const normalized = normalizeCitationToken(citation);
+  if (!normalized) {
+    return true;
+  }
+
+  const expanded = expandCitationReference(normalized);
+  return whitelist.has(normalized.toLowerCase()) || whitelist.has(expanded.toLowerCase());
+}
+
+function scrubInvalidCitations(content: string, verses: VerseContext[]): string {
+  const whitelist = buildCitationWhitelistSet(verses);
+  if (whitelist.size === 0) {
+    return content;
+  }
+
+  const citations = extractCitations(content);
+  const invalidCitations = Array.from(
+    new Set(citations.filter((citation) => !isAllowedCitation(citation, whitelist)))
+  );
+
+  if (invalidCitations.length === 0) {
+    return content;
+  }
+
+  let sanitized = content;
+  for (const citation of invalidCitations) {
+    const escaped = citation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    sanitized = sanitized
+      .replace(new RegExp(`\\((?:[^()]*?)${escaped}(?:[^()]*?)\\)`, 'g'), '')
+      .replace(new RegExp(`\\[(?:[^\\]]*?)${escaped}(?:[^\\]]*?)\\]`, 'g'), '')
+      .replace(new RegExp(`\\b${escaped}\\b`, 'g'), '');
+  }
+
+  sanitized = sanitized
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .trim();
+
+  console.info(JSON.stringify({
+    event: 'citation_whitelist_enforced',
+    removedCitations: invalidCitations,
+    allowedCitations: Array.from(whitelist),
+  }));
+
+  return sanitized;
+}
+
+function logContextUtilizationDiagnostics(
+  content: string,
+  verses: VerseContext[],
+  options?: {
+    requestId?: string;
+    modelUsed?: string | null;
+    cacheHit?: boolean;
+  }
+): void {
+  if (!DEBUG_LLM) {
+    return;
+  }
+
+  const retrievedWhitelist = buildCitationWhitelistSet(verses);
+  const citedWhitelist = new Set(
+    extractCitations(content)
+      .map((citation) => expandCitationReference(normalizeCitationToken(citation)).toLowerCase())
+      .filter((citation) => retrievedWhitelist.has(citation))
+  );
+
+  const retrievedCount = retrievedWhitelist.size;
+  const citedCount = citedWhitelist.size;
+  const citationUtilization = retrievedCount > 0
+    ? Number((citedCount / retrievedCount).toFixed(2))
+    : 0;
+
+  console.info(JSON.stringify({
+    event: 'context_utilization',
+    requestId: options?.requestId,
+    modelUsed: options?.modelUsed,
+    cacheHit: options?.cacheHit ?? false,
+    retrieved_count: retrievedCount,
+    cited_count: citedCount,
+    citation_utilization: citationUtilization,
+  }));
 }
 
 function ensureFallbackBanner(
@@ -392,7 +595,106 @@ async function streamTextFromContent(
   });
 }
 
+async function executeUncachedPipeline(options: {
+  query: string;
+  requestedTranslation: string;
+  groqApiKey?: string;
+  modelHistory: ModelHistoryMessage[];
+  requestId: string;
+}): Promise<PipelineExecutionResult> {
+  const pipelineMetrics: Partial<LatencyMetrics> = {};
+
+  const retrieveStartedAt = performance.now();
+  const verses = await retrieveContextForQuery(options.query, options.requestedTranslation, options.groqApiKey, {
+    requestId: options.requestId,
+    onMetric: (metric, durationMs) => {
+      pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
+    },
+  });
+  pipelineMetrics.retrieve_total_ms = roundLatencyMs(performance.now() - retrieveStartedAt);
+
+  const promptBuildStartedAt = performance.now();
+  const finalPrompt = buildContextPrompt(options.query, verses, options.requestedTranslation);
+  const context = finalPrompt.startsWith(SYSTEM_PROMPT)
+    ? finalPrompt.slice(SYSTEM_PROMPT.length).trim()
+    : finalPrompt;
+  const prompt = buildPrompt(finalPrompt, options.modelHistory);
+  pipelineMetrics.prompt_build_ms = roundLatencyMs(performance.now() - promptBuildStartedAt);
+
+  const generation = await generateWithFallback(prompt, {
+    maxTokens: 2048,
+    temperature: 0.1,
+    apiKey: options.groqApiKey,
+    onTiming: (durationMs) => {
+      pipelineMetrics.llm_ms = roundLatencyMs(durationMs);
+    },
+  });
+
+  const postNormalizeStartedAt = performance.now();
+  const normalizedModelUsed = normalizeModelId(generation.modelUsed);
+  const fallbackUsed = normalizedModelUsed !== PRIMARY_MODEL_USED;
+  const finalFallback = generation.finalFallback === true || normalizedModelUsed === 'context-only';
+  const normalizedContent = scrubInvalidCitations(
+    normalizeResponseContent(generation.content, verses),
+    verses
+  );
+  const streamedContent = ensureFallbackBanner(
+    normalizedContent,
+    normalizedModelUsed,
+    fallbackUsed,
+    finalFallback
+  );
+  const normalizedResponse: NormalizedChatResponse = {
+    content: streamedContent,
+    modelUsed: normalizedModelUsed,
+    verses,
+    metadata: {
+      translation: options.requestedTranslation,
+    },
+  };
+  logContextUtilizationDiagnostics(normalizedResponse.content, normalizedResponse.verses, {
+    requestId: options.requestId,
+    modelUsed: normalizedResponse.modelUsed,
+    cacheHit: false,
+  });
+  pipelineMetrics.post_normalize_ms = roundLatencyMs(performance.now() - postNormalizeStartedAt);
+
+  if (verses.length > 0 && !/No supporting passages found/i.test(normalizedResponse.content)) {
+    await setCachedResponse(
+      {
+        query: options.query,
+        translation: options.requestedTranslation,
+        model: normalizedModelUsed,
+      },
+      {
+        verses,
+        context,
+        prompt: finalPrompt,
+        response: normalizedResponse.content,
+        modelUsed: normalizedResponse.modelUsed,
+      }
+    );
+  }
+
+  return {
+    normalizedResponse,
+    finalPrompt,
+    preferredChunks: generation.chunks,
+    fallbackUsed,
+    finalFallback,
+    pipelineMetrics,
+  };
+}
+
 export async function POST(req: Request) {
+  const requestId = randomUUID();
+  const requestStartedAt = performance.now();
+  const latencyMetrics = createLatencyMetrics();
+  let statusCode = 200;
+  let translationForLog = 'unknown';
+  let cacheHit = false;
+  let modelUsedForLog: string | null = null;
+
   try {
     await dataValidationPromise;
     const { messages, translation, customApiKey } = await req.json();
@@ -464,12 +766,14 @@ export async function POST(req: Request) {
     }
 
     if (!lastUserMessage) {
-      return new Response('Missing user query', { status: 400 });
+      statusCode = 400;
+      return new Response('Missing user query', { status: statusCode });
     }
 
     const query = typeof lastUserMessage.content === 'string' ? lastUserMessage.content.trim() : '';
     if (!query) {
-      return new Response('Missing user query', { status: 400 });
+      statusCode = 400;
+      return new Response('Missing user query', { status: statusCode });
     }
 
     const rawTranslation =
@@ -477,6 +781,7 @@ export async function POST(req: Request) {
         ? translation
         : queryTranslation || headerTranslation;
     const requestedTranslation = normalizeTranslation(rawTranslation);
+    translationForLog = requestedTranslation;
     console.log(`Translation switched to ${requestedTranslation}`);
     debugLog('Using translation:', requestedTranslation);
 
@@ -493,9 +798,10 @@ export async function POST(req: Request) {
             rateLimitWarning = `Approaching rate limit (${count}/${RATE_LIMIT_MAX_REQUESTS} req/min)`;
           }
           if (count > RATE_LIMIT_MAX_REQUESTS) {
+            statusCode = 429;
             return new Response(JSON.stringify({ 
               error: 'Rate limit exceeded (60 req/min). Try again in 60s.' 
-            }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+            }), { status: statusCode, headers: { 'Content-Type': 'application/json' } });
           }
         }
       } else {
@@ -513,22 +819,13 @@ export async function POST(req: Request) {
 
     let cached = null as Awaited<ReturnType<typeof getCachedResponse>>;
     let cachedKey: string | null = null;
-    for (const modelKey of CACHE_MODEL_CANDIDATES) {
-      const cacheKey = buildCacheKey({
-        query,
-        translation: requestedTranslation,
-        model: modelKey,
-      });
-      cached = await getCachedResponse({
-        query,
-        translation: requestedTranslation,
-        model: modelKey,
-      });
-      if (cached?.response) {
-        cachedKey = cacheKey;
-        break;
-      }
+    const cacheLookupStartedAt = performance.now();
+    const preferredCachedResult = await findPreferredCachedResponse(query, requestedTranslation);
+    if (preferredCachedResult) {
+      cached = preferredCachedResult.response;
+      cachedKey = preferredCachedResult.cacheKey;
     }
+    setLatencyMetric(latencyMetrics, 'cache_lookup_ms', performance.now() - cacheLookupStartedAt);
 
     if (cached?.response && /No supporting passages found/i.test(cached.response)) {
       cached = null;
@@ -536,17 +833,23 @@ export async function POST(req: Request) {
     }
 
     if (cached?.response) {
+      cacheHit = true;
       debugLog('Cache HIT – returning stored response', cachedKey);
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
       const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
       const finalFallback = cachedModelUsed === 'context-only';
-      const normalizedCachedContent = normalizeResponseContent(cached.response, cached.verses || []);
+      const postNormalizeStartedAt = performance.now();
+      const normalizedCachedContent = scrubInvalidCitations(
+        normalizeResponseContent(cached.response, cached.verses || []),
+        cached.verses || []
+      );
       const cachedStreamedContent = ensureFallbackBanner(
         normalizedCachedContent,
         cachedModelUsed,
         fallbackUsed,
         finalFallback
       );
+      setLatencyMetric(latencyMetrics, 'post_normalize_ms', performance.now() - postNormalizeStartedAt);
       const cachedResponse: NormalizedChatResponse = {
         content: cachedStreamedContent,
         modelUsed: cachedModelUsed,
@@ -555,6 +858,12 @@ export async function POST(req: Request) {
           translation: requestedTranslation,
         },
       };
+      logContextUtilizationDiagnostics(cachedResponse.content, cachedResponse.verses, {
+        requestId,
+        modelUsed: cachedResponse.modelUsed,
+        cacheHit: true,
+      });
+      modelUsedForLog = cachedResponse.modelUsed;
 
       const cachedResult = await streamTextFromContent(cachedResponse.content, [
         { role: 'system', content: cached.prompt },
@@ -570,7 +879,7 @@ export async function POST(req: Request) {
         cachedHeaders['x-rate-limit-warning'] = rateLimitWarning;
       }
 
-      return cachedResult.toUIMessageStreamResponse({
+      const response = cachedResult.toUIMessageStreamResponse({
         headers: Object.keys(cachedHeaders).length > 0 ? cachedHeaders : undefined,
         messageMetadata: ({ part }) => {
           if (part.type === 'start' || part.type === 'finish') {
@@ -585,6 +894,8 @@ export async function POST(req: Request) {
           return undefined;
         },
       });
+      statusCode = response.status;
+      return response;
     }
 
     const missKey = buildCacheKey({
@@ -594,46 +905,44 @@ export async function POST(req: Request) {
     });
     debugLog('Cache MISS – proceeding to LLM', missKey);
 
-    // RAG Retrieval
-    const verses = await retrieveContextForQuery(query, requestedTranslation, groqApiKey);
-
-    // Build context-aware prompt
-    const finalPrompt = buildContextPrompt(query, verses, requestedTranslation);
-    const context = finalPrompt.startsWith(SYSTEM_PROMPT)
-      ? finalPrompt.slice(SYSTEM_PROMPT.length).trim()
-      : finalPrompt;
-
-    const prompt = buildPrompt(finalPrompt, modelHistory, query);
-
-    const generation = await generateWithFallback(prompt, {
-      maxTokens: 2048,
-      temperature: 0.1,
-      apiKey: groqApiKey,
-    } as any);
-
-    const normalizedModelUsed = normalizeModelId(generation.modelUsed);
-    const fallbackUsed = normalizedModelUsed !== PRIMARY_MODEL_USED;
-    const finalFallback = generation.finalFallback === true || normalizedModelUsed === 'context-only';
-    const normalizedContent = normalizeResponseContent(generation.content, verses);
-    const streamedContent = ensureFallbackBanner(
-      normalizedContent,
-      normalizedModelUsed,
-      fallbackUsed,
-      finalFallback
+    const inflightKey = buildInflightRequestKeyWithHistory(
+      query,
+      requestedTranslation,
+      PRIMARY_MODEL_USED,
+      modelHistory
     );
-    const normalizedResponse: NormalizedChatResponse = {
-      content: streamedContent,
-      modelUsed: normalizedModelUsed,
-      verses,
-      metadata: {
-        translation: requestedTranslation,
-      },
-    };
-    debugLog(`Model selected for response: ${normalizedModelUsed}`);
+    let pipelinePromise = inflightRequests.get(inflightKey);
+    if (pipelinePromise) {
+      debugLog('In-flight dedup HIT – awaiting active pipeline', inflightKey);
+    } else {
+      debugLog('In-flight dedup MISS – starting pipeline', inflightKey);
+      pipelinePromise = executeUncachedPipeline({
+        query,
+        requestedTranslation,
+        groqApiKey,
+        modelHistory,
+        requestId,
+      }).finally(() => {
+        if (inflightRequests.get(inflightKey) === pipelinePromise) {
+          inflightRequests.delete(inflightKey);
+        }
+      });
+      inflightRequests.set(inflightKey, pipelinePromise);
+    }
+
+    const pipelineResult = await pipelinePromise;
+    for (const [metric, durationMs] of Object.entries(pipelineResult.pipelineMetrics) as Array<[LatencyMetricName, number]>) {
+      setLatencyMetric(latencyMetrics, metric, durationMs);
+    }
+    const normalizedResponse = pipelineResult.normalizedResponse;
+    const fallbackUsed = pipelineResult.fallbackUsed;
+    const finalFallback = pipelineResult.finalFallback;
+    modelUsedForLog = normalizedResponse.modelUsed;
+    debugLog(`Model selected for response: ${normalizedResponse.modelUsed}`);
 
     const responseInit = {
       headers: {
-        ...(fallbackUsed ? { 'x-model-used': normalizedModelUsed } : {}),
+        ...(fallbackUsed ? { 'x-model-used': normalizedResponse.modelUsed } : {}),
         ...(rateLimitWarning ? { 'x-rate-limit-warning': rateLimitWarning } : {}),
       },
       messageMetadata: ({ part }: { part: { type: string } }) => {
@@ -648,53 +957,46 @@ export async function POST(req: Request) {
         }
         return undefined;
       },
-      onFinish: async ({ responseMessage, isAborted }: { responseMessage: UIMessage; isAborted: boolean }) => {
-        if (isAborted) return;
-        const text = getMessageText(responseMessage);
-        if (!text) return;
-        if (verses.length === 0 || /No supporting passages found/i.test(text)) {
-          return;
-        }
-        await setCachedResponse(
-          {
-            query,
-            translation: requestedTranslation,
-            model: normalizedModelUsed,
-          },
-          {
-            verses,
-            context,
-            prompt: finalPrompt,
-            response: text,
-            modelUsed: normalizedResponse.modelUsed
-          }
-        );
-      }
     };
 
     const fallbackResult = await streamTextFromContent(
       normalizedResponse.content,
       [
-        { role: 'system', content: finalPrompt },
+        { role: 'system', content: pipelineResult.finalPrompt },
         ...modelHistory,
         { role: 'user', content: query }
       ] as Array<{ role: string; content: string }>,
-      generation.chunks
+      pipelineResult.preferredChunks
     );
 
-    return fallbackResult.toUIMessageStreamResponse(responseInit);
+    const response = fallbackResult.toUIMessageStreamResponse(responseInit);
+    statusCode = response.status;
+    return response;
   } catch (e: unknown) {
     console.error('API Error:', e);
     const error = e as Error;
     const errorMsg = error?.message?.toLowerCase() || '';
     if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
+      statusCode = 429;
       return new Response(JSON.stringify({ 
         error: 'Rate limit exceeded. The shared resource is currently overloaded. Please wait a moment or provide your own API key in the settings.' 
-      }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+      }), { status: statusCode, headers: { 'Content-Type': 'application/json' } });
     }
 
+    statusCode = 500;
     return new Response(JSON.stringify({ 
       error: 'An unexpected error occurred while processing your request.' 
-    }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }), { status: statusCode, headers: { 'Content-Type': 'application/json' } });
+  } finally {
+    setLatencyMetric(latencyMetrics, 'total_ms', performance.now() - requestStartedAt);
+    console.info(JSON.stringify({
+      event: 'chat_request_latency',
+      requestId,
+      statusCode,
+      translation: translationForLog,
+      cacheHit,
+      modelUsed: modelUsedForLog,
+      metrics: latencyMetrics,
+    }));
   }
 }
