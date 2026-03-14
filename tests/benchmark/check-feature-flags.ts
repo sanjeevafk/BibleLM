@@ -1,0 +1,11 @@
+import {
+  ENABLE_RETRIEVAL_DEBUG,
+  ENABLE_SEMANTIC_RERANKER,
+  ENABLE_TSK_EXPANSION_GATING,
+} from '../../lib/feature-flags';
+
+console.log(JSON.stringify({
+  ENABLE_RETRIEVAL_DEBUG,
+  ENABLE_SEMANTIC_RERANKER,
+  ENABLE_TSK_EXPANSION_GATING,
+}, null, 2));

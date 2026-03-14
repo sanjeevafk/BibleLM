@@ -1,0 +1,255 @@
+{
+  "generated_at": "2026-03-14T07:45:23.002Z",
+  "mode": "sample",
+  "scenarios": [
+    {
+      "id": "direct-verse-cache-miss",
+      "category": "direct_verse_query",
+      "cacheMode": "miss",
+      "query": "John 3:16",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JHN 3:16"
+      ]
+    },
+    {
+      "id": "direct-verse-cache-hit",
+      "category": "direct_verse_query",
+      "cacheMode": "hit",
+      "query": "John 3:16",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JHN 3:16"
+      ]
+    },
+    {
+      "id": "verse-explanation",
+      "category": "verse_explanation_query",
+      "cacheMode": "miss",
+      "query": "Explain Romans 8:28",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "ROM 8:28",
+        "GEN 50:20",
+        "JAS 1:2-4"
+      ]
+    },
+    {
+      "id": "topical-cache-miss",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "query": "What does the Bible say about forgiveness?",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 6:12",
+        "COL 3:13",
+        "ACT 10:43",
+        "2CO 2:10",
+        "JHN 20:23"
+      ]
+    },
+    {
+      "id": "topical-cache-hit",
+      "category": "topical_query",
+      "cacheMode": "hit",
+      "query": "What does the Bible say about forgiveness?",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 6:12",
+        "COL 3:13",
+        "ACT 10:43",
+        "2CO 2:10",
+        "JHN 20:23"
+      ]
+    }
+  ],
+  "baseline_metrics": {
+    "total_latency_ms": 1434,
+    "retrieval_latency_ms": 484.8,
+    "llm_latency_ms": 702.47,
+    "p50_latency": 1180,
+    "p95_latency": 2740,
+    "precision_at_5": 0.8,
+    "citation_validity_rate": 0.98
+  },
+  "post_optimization_metrics": {
+    "total_latency_ms": 1120,
+    "retrieval_latency_ms": 292.07,
+    "llm_latency_ms": 599.47,
+    "p50_latency": 950,
+    "p95_latency": 2160,
+    "precision_at_5": 0.88,
+    "citation_validity_rate": 1
+  },
+  "performance_deltas": {
+    "total_latency_ms": -314,
+    "retrieval_latency_ms": -192.73,
+    "llm_latency_ms": -103,
+    "p50_latency": -230,
+    "p95_latency": -580,
+    "precision_at_5": 0.08,
+    "citation_validity_rate": 0.02
+  },
+  "per_scenario": [
+    {
+      "id": "direct-verse-cache-miss",
+      "category": "direct_verse_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 1176.67,
+        "retrieval_latency_ms": 316.67,
+        "llm_latency_ms": 720,
+        "p50_latency": 1180,
+        "p95_latency": 1210,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1
+      },
+      "optimized": {
+        "total_latency_ms": 950,
+        "retrieval_latency_ms": 218.33,
+        "llm_latency_ms": 608.33,
+        "p50_latency": 950,
+        "p95_latency": 970,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1
+      },
+      "delta": {
+        "total_latency_ms": -226.67,
+        "retrieval_latency_ms": -98.34,
+        "llm_latency_ms": -111.67,
+        "p50_latency": -230,
+        "p95_latency": -240,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0
+      }
+    },
+    {
+      "id": "direct-verse-cache-hit",
+      "category": "direct_verse_query",
+      "cacheMode": "hit",
+      "baseline": {
+        "total_latency_ms": 420,
+        "retrieval_latency_ms": 89,
+        "llm_latency_ms": 179,
+        "p50_latency": 420,
+        "p95_latency": 430,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1
+      },
+      "optimized": {
+        "total_latency_ms": 290,
+        "retrieval_latency_ms": 39.33,
+        "llm_latency_ms": 129,
+        "p50_latency": 290,
+        "p95_latency": 300,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1
+      },
+      "delta": {
+        "total_latency_ms": -130,
+        "retrieval_latency_ms": -49.67,
+        "llm_latency_ms": -50,
+        "p50_latency": -130,
+        "p95_latency": -130,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0
+      }
+    },
+    {
+      "id": "verse-explanation",
+      "category": "verse_explanation_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 1990,
+        "retrieval_latency_ms": 738.33,
+        "llm_latency_ms": 988.33,
+        "p50_latency": 1990,
+        "p95_latency": 2020,
+        "precision_at_5": 0.8,
+        "citation_validity_rate": 1
+      },
+      "optimized": {
+        "total_latency_ms": 1593.33,
+        "retrieval_latency_ms": 470,
+        "llm_latency_ms": 895,
+        "p50_latency": 1590,
+        "p95_latency": 1610,
+        "precision_at_5": 0.8,
+        "citation_validity_rate": 1
+      },
+      "delta": {
+        "total_latency_ms": -396.67,
+        "retrieval_latency_ms": -268.33,
+        "llm_latency_ms": -93.33,
+        "p50_latency": -400,
+        "p95_latency": -410,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0
+      }
+    },
+    {
+      "id": "topical-cache-miss",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 2703.33,
+        "retrieval_latency_ms": 1101.67,
+        "llm_latency_ms": 1236.67,
+        "p50_latency": 2710,
+        "p95_latency": 2740,
+        "precision_at_5": 0.6,
+        "citation_validity_rate": 0.96
+      },
+      "optimized": {
+        "total_latency_ms": 2130,
+        "retrieval_latency_ms": 638.33,
+        "llm_latency_ms": 1086.67,
+        "p50_latency": 2140,
+        "p95_latency": 2160,
+        "precision_at_5": 0.8,
+        "citation_validity_rate": 1
+      },
+      "delta": {
+        "total_latency_ms": -573.33,
+        "retrieval_latency_ms": -463.34,
+        "llm_latency_ms": -150,
+        "p50_latency": -570,
+        "p95_latency": -580,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 0.04
+      }
+    },
+    {
+      "id": "topical-cache-hit",
+      "category": "topical_query",
+      "cacheMode": "hit",
+      "baseline": {
+        "total_latency_ms": 880,
+        "retrieval_latency_ms": 178.33,
+        "llm_latency_ms": 388.33,
+        "p50_latency": 880,
+        "p95_latency": 900,
+        "precision_at_5": 0.6,
+        "citation_validity_rate": 0.96
+      },
+      "optimized": {
+        "total_latency_ms": 636.67,
+        "retrieval_latency_ms": 94.33,
+        "llm_latency_ms": 278.33,
+        "p50_latency": 640,
+        "p95_latency": 650,
+        "precision_at_5": 0.8,
+        "citation_validity_rate": 1
+      },
+      "delta": {
+        "total_latency_ms": -243.33,
+        "retrieval_latency_ms": -84,
+        "llm_latency_ms": -110,
+        "p50_latency": -240,
+        "p95_latency": -250,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 0.04
+      }
+    }
+  ]
+}

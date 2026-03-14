@@ -40,5 +40,10 @@ yarn-error.log*
 next-env.d.ts
 
 #local-files
-project-docs/
 datasets/
+bibleLM-analysis.md
+Dataset&RetrievalEnrichment.md
+
+# generated benchmark outputs
+project-docs/benchmark/latest-report.json
+project-docs/benchmark/latest-report.md

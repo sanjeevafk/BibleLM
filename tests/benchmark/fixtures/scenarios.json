@@ -1,0 +1,42 @@
+[
+  {
+    "id": "direct-verse-cache-miss",
+    "category": "direct_verse_query",
+    "cacheMode": "miss",
+    "query": "John 3:16",
+    "translation": "BSB",
+    "expectedTopRefs": ["JHN 3:16"]
+  },
+  {
+    "id": "direct-verse-cache-hit",
+    "category": "direct_verse_query",
+    "cacheMode": "hit",
+    "query": "John 3:16",
+    "translation": "BSB",
+    "expectedTopRefs": ["JHN 3:16"]
+  },
+  {
+    "id": "verse-explanation",
+    "category": "verse_explanation_query",
+    "cacheMode": "miss",
+    "query": "Explain Romans 8:28",
+    "translation": "BSB",
+    "expectedTopRefs": ["ROM 8:28", "GEN 50:20", "JAS 1:2-4"]
+  },
+  {
+    "id": "topical-cache-miss",
+    "category": "topical_query",
+    "cacheMode": "miss",
+    "query": "What does the Bible say about forgiveness?",
+    "translation": "BSB",
+    "expectedTopRefs": ["MAT 6:12", "COL 3:13", "ACT 10:43", "2CO 2:10", "JHN 20:23"]
+  },
+  {
+    "id": "topical-cache-hit",
+    "category": "topical_query",
+    "cacheMode": "hit",
+    "query": "What does the Bible say about forgiveness?",
+    "translation": "BSB",
+    "expectedTopRefs": ["MAT 6:12", "COL 3:13", "ACT 10:43", "2CO 2:10", "JHN 20:23"]
+  }
+]

@@ -12,5 +12,5 @@
       "module": "commonjs"
     }
   },
-  "include": ["scripts/**/*"]
+  "include": ["scripts/**/*", "tests/benchmark/**/*"]
 }

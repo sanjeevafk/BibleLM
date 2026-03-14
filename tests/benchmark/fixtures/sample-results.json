@@ -1,0 +1,56 @@
+{
+  "baseline": {
+    "direct-verse-cache-miss": [
+      { "total_latency_ms": 1040, "retrieval_latency_ms": 320, "llm_latency_ms": 720, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1010, "retrieval_latency_ms": 300, "llm_latency_ms": 710, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1060, "retrieval_latency_ms": 330, "llm_latency_ms": 730, "precision_at_5": 1, "citation_validity_rate": 1 }
+    ],
+    "direct-verse-cache-hit": [
+      { "total_latency_ms": 270, "retrieval_latency_ms": 90, "llm_latency_ms": 180, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 260, "retrieval_latency_ms": 85, "llm_latency_ms": 175, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 274, "retrieval_latency_ms": 92, "llm_latency_ms": 182, "precision_at_5": 1, "citation_validity_rate": 1 }
+    ],
+    "verse-explanation": [
+      { "total_latency_ms": 1700, "retrieval_latency_ms": 720, "llm_latency_ms": 980, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1755, "retrieval_latency_ms": 760, "llm_latency_ms": 995, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1725, "retrieval_latency_ms": 735, "llm_latency_ms": 990, "precision_at_5": 0.8, "citation_validity_rate": 1 }
+    ],
+    "topical-cache-miss": [
+      { "total_latency_ms": 2340, "retrieval_latency_ms": 1100, "llm_latency_ms": 1240, "precision_at_5": 0.6, "citation_validity_rate": 0.96 },
+      { "total_latency_ms": 2290, "retrieval_latency_ms": 1080, "llm_latency_ms": 1210, "precision_at_5": 0.6, "citation_validity_rate": 0.96 },
+      { "total_latency_ms": 2385, "retrieval_latency_ms": 1125, "llm_latency_ms": 1260, "precision_at_5": 0.6, "citation_validity_rate": 0.96 }
+    ],
+    "topical-cache-hit": [
+      { "total_latency_ms": 570, "retrieval_latency_ms": 180, "llm_latency_ms": 390, "precision_at_5": 0.6, "citation_validity_rate": 0.96 },
+      { "total_latency_ms": 550, "retrieval_latency_ms": 170, "llm_latency_ms": 380, "precision_at_5": 0.6, "citation_validity_rate": 0.96 },
+      { "total_latency_ms": 580, "retrieval_latency_ms": 185, "llm_latency_ms": 395, "precision_at_5": 0.6, "citation_validity_rate": 0.96 }
+    ]
+  },
+  "optimized": {
+    "direct-verse-cache-miss": [
+      { "total_latency_ms": 830, "retrieval_latency_ms": 220, "llm_latency_ms": 610, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 810, "retrieval_latency_ms": 210, "llm_latency_ms": 600, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 840, "retrieval_latency_ms": 225, "llm_latency_ms": 615, "precision_at_5": 1, "citation_validity_rate": 1 }
+    ],
+    "direct-verse-cache-hit": [
+      { "total_latency_ms": 170, "retrieval_latency_ms": 40, "llm_latency_ms": 130, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 161, "retrieval_latency_ms": 36, "llm_latency_ms": 125, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 174, "retrieval_latency_ms": 42, "llm_latency_ms": 132, "precision_at_5": 1, "citation_validity_rate": 1 }
+    ],
+    "verse-explanation": [
+      { "total_latency_ms": 1350, "retrieval_latency_ms": 460, "llm_latency_ms": 890, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1380, "retrieval_latency_ms": 480, "llm_latency_ms": 900, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1365, "retrieval_latency_ms": 470, "llm_latency_ms": 895, "precision_at_5": 0.8, "citation_validity_rate": 1 }
+    ],
+    "topical-cache-miss": [
+      { "total_latency_ms": 1730, "retrieval_latency_ms": 640, "llm_latency_ms": 1090, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1690, "retrieval_latency_ms": 620, "llm_latency_ms": 1070, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1755, "retrieval_latency_ms": 655, "llm_latency_ms": 1100, "precision_at_5": 0.8, "citation_validity_rate": 1 }
+    ],
+    "topical-cache-hit": [
+      { "total_latency_ms": 375, "retrieval_latency_ms": 95, "llm_latency_ms": 280, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 360, "retrieval_latency_ms": 90, "llm_latency_ms": 270, "precision_at_5": 0.8, "citation_validity_rate": 1 },
+      { "total_latency_ms": 383, "retrieval_latency_ms": 98, "llm_latency_ms": 285, "precision_at_5": 0.8, "citation_validity_rate": 1 }
+    ]
+  }
+}
