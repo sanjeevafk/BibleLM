@@ -111,10 +111,6 @@ function createLatencyMetrics(): LatencyMetrics {
   return { ...EMPTY_LATENCY_METRICS };
 }
 
-function addLatencyMetric(metrics: LatencyMetrics, metric: LatencyMetricName, durationMs: number): void {
-  metrics[metric] = roundLatencyMs(metrics[metric] + durationMs);
-}
-
 function setLatencyMetric(metrics: LatencyMetrics, metric: LatencyMetricName, durationMs: number): void {
   metrics[metric] = roundLatencyMs(durationMs);
 }
@@ -309,10 +305,159 @@ function buildPrompt(
 }
 
 function normalizeCitationToken(citation: string): string {
-  return citation
-    .trim()
-    .replace(/[()[\],.;:!?]+$/g, '')
-    .replace(/\s+/g, ' ');
+  const trimmed = citation.trim();
+  let end = trimmed.length;
+
+  while (end > 0) {
+    const char = trimmed[end - 1];
+    if (!'()[],.;:!?'.includes(char)) {
+      break;
+    }
+    end -= 1;
+  }
+
+  return collapseCitationWhitespace(trimmed.slice(0, end));
+}
+
+function collapseCitationWhitespace(value: string): string {
+  let result = '';
+  let previousWasWhitespace = false;
+
+  for (const char of value) {
+    const isWhitespace =
+      char === ' ' ||
+      char === '\n' ||
+      char === '\r' ||
+      char === '\t' ||
+      char === '\f' ||
+      char === '\v';
+
+    if (isWhitespace) {
+      if (!previousWasWhitespace && result.length > 0) {
+        result += ' ';
+      }
+      previousWasWhitespace = true;
+      continue;
+    }
+
+    result += char;
+    previousWasWhitespace = false;
+  }
+
+  return result.trim();
+}
+
+function removeAllOccurrences(value: string, target: string): string {
+  if (!target) return value;
+
+  let result = value;
+  let index = result.indexOf(target);
+  while (index !== -1) {
+    result = `${result.slice(0, index)}${result.slice(index + target.length)}`;
+    index = result.indexOf(target);
+  }
+  return result;
+}
+
+function stripBracketedCitationSegments(content: string, citation: string, opening: string, closing: string): string {
+  if (!citation) return content;
+
+  let result = content;
+  let searchStart = 0;
+
+  while (searchStart < result.length) {
+    const citationIndex = result.indexOf(citation, searchStart);
+    if (citationIndex === -1) {
+      break;
+    }
+
+    const openingIndex = result.lastIndexOf(opening, citationIndex);
+    const closingIndex = result.indexOf(closing, citationIndex + citation.length);
+    if (openingIndex !== -1 && closingIndex !== -1) {
+      const segment = result.slice(openingIndex + 1, closingIndex);
+      if (segment.includes(citation)) {
+        result = `${result.slice(0, openingIndex)}${result.slice(closingIndex + 1)}`;
+        searchStart = openingIndex;
+        continue;
+      }
+    }
+
+    searchStart = citationIndex + citation.length;
+  }
+
+  return result;
+}
+
+function stripEmptyCitationDelimiters(content: string): string {
+  let result = content;
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const pair of ['()', '[]']) {
+      const next = removeAllOccurrences(result, pair);
+      if (next !== result) {
+        result = next;
+        changed = true;
+      }
+    }
+  }
+
+  return result;
+}
+
+function collapseRepeatedSpacesPerLine(value: string): string {
+  let result = '';
+  let previousWasSpace = false;
+
+  for (const char of value) {
+    if (char === ' ' || char === '\t') {
+      if (!previousWasSpace) {
+        result += ' ';
+      }
+      previousWasSpace = true;
+      continue;
+    }
+
+    result += char;
+    previousWasSpace = false;
+  }
+
+  return result;
+}
+
+function collapseBlankLines(value: string): string {
+  let result = '';
+  let consecutiveNewlines = 0;
+
+  for (const char of value) {
+    if (char === '\n') {
+      consecutiveNewlines += 1;
+      if (consecutiveNewlines <= 2) {
+        result += char;
+      }
+      continue;
+    }
+
+    consecutiveNewlines = 0;
+    result += char;
+  }
+
+  return result;
+}
+
+function removeSpaceBeforeCitationPunctuation(value: string): string {
+  let result = '';
+
+  for (const char of value) {
+    if (',.;:!?'.includes(char) && result.endsWith(' ')) {
+      result = result.slice(0, -1);
+    }
+    result += char;
+  }
+
+  return result;
 }
 
 function buildCitationWhitelistSet(verses: VerseContext[]): Set<string> {
@@ -360,18 +505,15 @@ function scrubInvalidCitations(content: string, verses: VerseContext[]): string 
 
   let sanitized = content;
   for (const citation of invalidCitations) {
-    const escaped = citation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    sanitized = sanitized
-      .replace(new RegExp(`\\((?:[^()]*?)${escaped}(?:[^()]*?)\\)`, 'g'), '')
-      .replace(new RegExp(`\\[(?:[^\\]]*?)${escaped}(?:[^\\]]*?)\\]`, 'g'), '')
-      .replace(new RegExp(`\\b${escaped}\\b`, 'g'), '');
+    sanitized = stripBracketedCitationSegments(sanitized, citation, '(', ')');
+    sanitized = stripBracketedCitationSegments(sanitized, citation, '[', ']');
+    sanitized = removeAllOccurrences(sanitized, citation);
   }
 
-  sanitized = sanitized
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/\s+([,.;:!?])/g, '$1')
-    .trim();
+  sanitized = stripEmptyCitationDelimiters(sanitized);
+  sanitized = collapseRepeatedSpacesPerLine(sanitized);
+  sanitized = collapseBlankLines(sanitized);
+  sanitized = removeSpaceBeforeCitationPunctuation(sanitized).trim();
 
   console.info(JSON.stringify({
     event: 'citation_whitelist_enforced',

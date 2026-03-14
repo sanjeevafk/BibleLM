@@ -12,9 +12,14 @@ const EXTERNAL_VERSE_FETCH_TIMEOUT_MS = 1500;
 const EXTERNAL_VERSE_FETCH_TOTAL_BUDGET_MS = 2000;
 const EXTERNAL_VERSE_FETCH_MAX_RETRIES = 1;
 const EXTERNAL_VERSE_FETCH_BACKOFF_MS = 150;
+const EXTERNAL_FETCH_SOURCES = {
+  helloao: 'https://bible.helloao.org',
+  bibleApi: 'https://bible-api.com',
+  bolls: 'https://bolls.life',
+} as const;
 
 type ExternalFetchBudgetOptions = {
-  label: string;
+  source: keyof typeof EXTERNAL_FETCH_SOURCES;
   timeoutMs?: number;
   totalBudgetMs?: number;
   maxRetries?: number;
@@ -29,11 +34,44 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function buildExternalUrl(
+  source: keyof typeof EXTERNAL_FETCH_SOURCES,
+  pathname: string,
+  query?: Record<string, string>
+): URL {
+  const url = new URL(EXTERNAL_FETCH_SOURCES[source]);
+  url.pathname = pathname.startsWith('/') ? pathname : `/${pathname}`;
+
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      url.searchParams.set(key, value);
+    }
+  }
+
+  return url;
+}
+
+function isAllowedExternalUrl(url: URL, source: keyof typeof EXTERNAL_FETCH_SOURCES): boolean {
+  return url.protocol === 'https:' && url.origin === EXTERNAL_FETCH_SOURCES[source];
+}
+
+function logExternalFetchWarning(payload: Record<string, unknown>): void {
+  console.warn(JSON.stringify({ event: 'external_fetch_warning', ...payload }));
+}
+
 export async function fetchExternalWithTimeoutBudget(
-  url: string,
+  url: URL,
   init: RequestInit = {},
   options: ExternalFetchBudgetOptions
 ): Promise<Response | null> {
+  if (!isAllowedExternalUrl(url, options.source)) {
+    logExternalFetchWarning({
+      source: options.source,
+      reason: 'blocked_disallowed_url',
+    });
+    return null;
+  }
+
   const timeoutMs = options.timeoutMs ?? EXTERNAL_VERSE_FETCH_TIMEOUT_MS;
   const totalBudgetMs = options.totalBudgetMs ?? EXTERNAL_VERSE_FETCH_TOTAL_BUDGET_MS;
   const maxRetries = options.maxRetries ?? EXTERNAL_VERSE_FETCH_MAX_RETRIES;
@@ -85,14 +123,22 @@ export async function fetchExternalWithTimeoutBudget(
 
   const elapsedMs = Date.now() - startedAt;
   if (lastError) {
-    console.warn(`[external-fetch] ${options.label} failed after ${elapsedMs}ms; continuing without external result.`, lastError);
+    logExternalFetchWarning({
+      source: options.source,
+      reason: 'request_failed',
+      elapsed_ms: elapsedMs,
+      error_name: lastError instanceof Error ? lastError.name : 'unknown',
+    });
     return null;
   }
 
   if (lastResponse && !lastResponse.ok && isRetryableStatus(lastResponse.status)) {
-    console.warn(
-      `[external-fetch] ${options.label} exhausted retry budget with status ${lastResponse.status} after ${elapsedMs}ms; continuing without external result.`
-    );
+    logExternalFetchWarning({
+      source: options.source,
+      reason: 'retry_budget_exhausted',
+      elapsed_ms: elapsedMs,
+      status: lastResponse.status,
+    });
   }
 
   return lastResponse;
@@ -118,10 +164,13 @@ export async function fetchVerseHelloAO(
 ): Promise<string | null> {
   try {
     const res = await fetchExternalWithTimeoutBudget(
-      `https://bible.helloao.org/api/${translation}/${book}/${chapter}.json`,
+      buildExternalUrl(
+        'helloao',
+        `/api/${encodeURIComponent(translation)}/${encodeURIComponent(book)}/${encodeURIComponent(`${chapter}.json`)}`
+      ),
       {},
       {
-        label: `helloao:${translation}:${book}:${chapter}`
+        source: 'helloao'
       }
     );
     if (!res?.ok) return null;
@@ -151,10 +200,12 @@ export async function fetchVerseFallback(reference: string, translation: string 
   try {
     // bible-api.com expects 'john 3:16'
     const res = await fetchExternalWithTimeoutBudget(
-      `https://bible-api.com/${encodeURIComponent(reference)}?translation=${translation.toLowerCase()}`,
+      buildExternalUrl('bibleApi', `/${encodeURIComponent(reference)}`, {
+        translation: translation.toLowerCase(),
+      }),
       {},
       {
-        label: `bible-api:${translation}:${reference}`
+        source: 'bibleApi'
       }
     );
     if (!res?.ok) return null;

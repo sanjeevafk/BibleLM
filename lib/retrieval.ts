@@ -2491,11 +2491,13 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
         const [chapter, vNumStr] = cv.split(':');
         
         const bollsRef = bkbToBollsPath(book, parseInt(chapter, 10));
+        const bollsUrl = new URL('https://bolls.life');
+        bollsUrl.pathname = `/get-chapter/${encodeURIComponent(trans)}/${bollsRef}/`;
         const res = await fetchExternalWithTimeoutBudget(
-          `https://bolls.life/get-chapter/${trans}/${bollsRef}/`,
+          bollsUrl,
           {},
           {
-            label: `bolls-tagged-chapter:${trans}:${bollsRef}`
+            source: 'bolls'
           }
         );
 
