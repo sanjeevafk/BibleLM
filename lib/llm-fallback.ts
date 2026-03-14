@@ -2,6 +2,7 @@ import { createGroq } from '@ai-sdk/groq';
 import { generateText } from 'ai';
 import { GoogleGenAI } from '@google/genai';
 import { InferenceClient } from '@huggingface/inference';
+import { redis } from './redis';
 
 type FallbackOptions = {
   maxTokens?: number;
@@ -27,30 +28,83 @@ const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
 const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.1;
-const PROVIDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_PROVIDER_COOLDOWN_MS = 10 * 60 * 1000;
+// Keep the default cooldown short for transient 429s. Multi-hour or multi-day cooldowns
+// only make sense when a persistent backend such as Redis/KV is configured.
+const PROVIDER_COOLDOWN_MS = parseProviderCooldownMs(
+  process.env.PROVIDER_COOLDOWN_MS,
+  DEFAULT_PROVIDER_COOLDOWN_MS
+);
+const PROVIDER_COOLDOWN_KEY_PREFIX = 'llm-fallback:provider-disabled-until';
 let geminiDisabledUntil = 0;
 let openRouterDisabledUntil = 0;
 let groqDisabledUntil = 0;
 let hfDisabledUntil = 0;
 
+type ProviderName = 'gemini' | 'openrouter' | 'groq' | 'hf';
+
+function parseProviderCooldownMs(envValue: string | undefined, fallbackMs: number): number {
+  const parsed = Number.parseInt(envValue || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
+}
+
 function roundDurationMs(durationMs: number): number {
   return Number(durationMs.toFixed(2));
 }
 
-function isGeminiAvailable(): boolean {
-  return Date.now() > geminiDisabledUntil;
+function getInMemoryDisabledUntil(provider: ProviderName): number {
+  if (provider === 'gemini') return geminiDisabledUntil;
+  if (provider === 'openrouter') return openRouterDisabledUntil;
+  if (provider === 'groq') return groqDisabledUntil;
+  return hfDisabledUntil;
 }
 
-function isOpenRouterAvailable(): boolean {
-  return Date.now() > openRouterDisabledUntil;
+function setInMemoryDisabledUntil(provider: ProviderName, disabledUntil: number): void {
+  if (provider === 'gemini') {
+    geminiDisabledUntil = disabledUntil;
+  } else if (provider === 'openrouter') {
+    openRouterDisabledUntil = disabledUntil;
+  } else if (provider === 'groq') {
+    groqDisabledUntil = disabledUntil;
+  } else {
+    hfDisabledUntil = disabledUntil;
+  }
 }
 
-function isGroqAvailable(): boolean {
-  return Date.now() > groqDisabledUntil;
+function buildProviderCooldownKey(provider: ProviderName): string {
+  return `${PROVIDER_COOLDOWN_KEY_PREFIX}:${provider}`;
 }
 
-function isHfAvailable(): boolean {
-  return Date.now() > hfDisabledUntil;
+async function getProviderDisabledUntil(provider: ProviderName): Promise<number> {
+  const inMemoryValue = getInMemoryDisabledUntil(provider);
+  if (!redis) {
+    // Serverless cold starts reset module state, so this fallback only protects a warm instance.
+    return inMemoryValue;
+  }
+
+  try {
+    const stored = await redis.get<number | string>(buildProviderCooldownKey(provider));
+    if (typeof stored === 'number') {
+      setInMemoryDisabledUntil(provider, stored);
+      return stored;
+    }
+    if (typeof stored === 'string') {
+      const parsed = Number.parseInt(stored, 10);
+      if (Number.isFinite(parsed)) {
+        setInMemoryDisabledUntil(provider, parsed);
+        return parsed;
+      }
+    }
+    return inMemoryValue;
+  } catch (error) {
+    console.warn('[llm-fallback] Cooldown store read failed; using in-memory fallback only.', error);
+    // Serverless cold starts reset module state, so this fallback only protects a warm instance.
+    return inMemoryValue;
+  }
+}
+
+async function isProviderAvailable(provider: ProviderName): Promise<boolean> {
+  return Date.now() > (await getProviderDisabledUntil(provider));
 }
 
 function isQuotaError(error: unknown): boolean {
@@ -66,17 +120,18 @@ function isQuotaError(error: unknown): boolean {
   );
 }
 
-function disableProvider(provider: 'gemini' | 'openrouter' | 'groq' | 'hf'): void {
+async function disableProvider(provider: ProviderName): Promise<void> {
   const disabledUntil = Date.now() + PROVIDER_COOLDOWN_MS;
+  setInMemoryDisabledUntil(provider, disabledUntil);
 
-  if (provider === 'gemini') {
-    geminiDisabledUntil = disabledUntil;
-  } else if (provider === 'openrouter') {
-    openRouterDisabledUntil = disabledUntil;
-  } else if (provider === 'groq') {
-    groqDisabledUntil = disabledUntil;
-  } else {
-    hfDisabledUntil = disabledUntil;
+  if (redis) {
+    const ttlSeconds = Math.max(1, Math.ceil((disabledUntil - Date.now()) / 1000));
+    try {
+      await redis.set(buildProviderCooldownKey(provider), String(disabledUntil), { ex: ttlSeconds });
+    } catch (error) {
+      console.warn('[llm-fallback] Cooldown store write failed; using in-memory fallback only.', error);
+      // Serverless cold starts reset module state, so longer cooldowns require persistent storage.
+    }
   }
 
   console.warn(`[llm-fallback] ${provider} temporarily disabled due to quota limit`);
@@ -363,13 +418,13 @@ export async function generateWithFallback(
 
     const geminiKey = process.env.GEMINI_API_KEY;
     if (geminiKey) {
-      if (!isGeminiAvailable()) {
+      if (!(await isProviderAvailable('gemini'))) {
         console.warn('[llm-fallback] gemini disabled — using fallback');
       } else {
         const candidates = Array.from(new Set(GEMINI_MODEL_CANDIDATES.filter(Boolean)));
         for (const modelName of candidates) {
           try {
-            if (!isGeminiAvailable()) {
+            if (!(await isProviderAvailable('gemini'))) {
               throw new Error('GEMINI_TEMP_DISABLED');
             }
 
@@ -390,7 +445,7 @@ export async function generateWithFallback(
             throw new Error('Gemini returned empty output');
           } catch (error) {
             if (isQuotaError(error)) {
-              disableProvider('gemini');
+              await disableProvider('gemini');
               break;
             }
 
@@ -407,7 +462,7 @@ export async function generateWithFallback(
 
     const openRouterKey = process.env.OPENROUTER_API_KEY;
     if (openRouterKey) {
-      if (!isOpenRouterAvailable()) {
+      if (!(await isProviderAvailable('openrouter'))) {
         console.warn('[llm-fallback] openrouter disabled — using fallback');
       } else {
         try {
@@ -427,7 +482,7 @@ export async function generateWithFallback(
           throw new Error('OpenRouter returned empty output');
         } catch (error) {
           if (isQuotaError(error)) {
-            disableProvider('openrouter');
+            await disableProvider('openrouter');
           } else {
             logModelFailure(`openrouter:${OPENROUTER_MODEL}`, error);
           }
@@ -438,21 +493,22 @@ export async function generateWithFallback(
     }
 
     if (groqApiKey) {
-      if (!isGroqAvailable()) {
+      if (!(await isProviderAvailable('groq'))) {
         console.warn('[llm-fallback] groq disabled — using fallback');
       } else {
         const groq = createGroq({ apiKey: groqApiKey });
         const groqModels = [GROQ_PRIMARY_MODEL, GROQ_SECONDARY_MODEL];
-
         for (const modelName of groqModels) {
           try {
+            if (!(await isProviderAvailable('groq'))) {
+              throw new Error('GROQ_TEMP_DISABLED');
+            }
             const result = await generateText({
-              model: groq(modelName) as any,
+              model: groq(modelName),
               prompt,
               temperature,
-              maxOutputTokens: maxTokens,
             });
-            const text = result.text?.trim();
+            const text = result.text;
             if (text) {
               console.log(`[llm-fallback] Using fallback provider: groq:${modelName}`);
               return { type: 'content', content: text, modelUsed: `groq:${modelName}` };
@@ -460,7 +516,7 @@ export async function generateWithFallback(
             throw new Error('Groq returned empty output');
           } catch (error) {
             if (isQuotaError(error)) {
-              disableProvider('groq');
+              await disableProvider('groq');
               break;
             }
             logModelFailure(`groq:${modelName}`, error);
@@ -473,7 +529,7 @@ export async function generateWithFallback(
 
     const hfToken = process.env.HF_TOKEN;
     if (hfToken) {
-      if (!isHfAvailable()) {
+      if (!(await isProviderAvailable('hf'))) {
         console.warn('[llm-fallback] hf disabled — using fallback');
       } else {
         try {
@@ -504,7 +560,7 @@ export async function generateWithFallback(
           throw new Error('HF inference returned empty output');
         } catch (error) {
           if (isQuotaError(error)) {
-            disableProvider('hf');
+            await disableProvider('hf');
           } else {
             logModelFailure(`hf:${HF_MODEL}`, error);
           }
@@ -512,6 +568,17 @@ export async function generateWithFallback(
       }
     }
 
+    const fallbackContent =
+      options.fallbackContent ?? buildContextOnlyContent(prompt);
+
+    return {
+      type: 'content',
+      content: fallbackContent,
+      modelUsed: 'context-only',
+      finalFallback: true,
+    };
+  } catch (error) {
+    // In case of unexpected error, fallback to context-only content
     const fallbackContent =
       options.fallbackContent ?? buildContextOnlyContent(prompt);
 
