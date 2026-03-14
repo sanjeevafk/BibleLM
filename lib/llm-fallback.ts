@@ -27,7 +27,11 @@ const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
 const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.1;
+const PROVIDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 let geminiDisabledUntil = 0;
+let openRouterDisabledUntil = 0;
+let groqDisabledUntil = 0;
+let hfDisabledUntil = 0;
 
 function roundDurationMs(durationMs: number): number {
   return Number(durationMs.toFixed(2));
@@ -37,11 +41,45 @@ function isGeminiAvailable(): boolean {
   return Date.now() > geminiDisabledUntil;
 }
 
-function isGeminiQuotaError(error: unknown): boolean {
+function isOpenRouterAvailable(): boolean {
+  return Date.now() > openRouterDisabledUntil;
+}
+
+function isGroqAvailable(): boolean {
+  return Date.now() > groqDisabledUntil;
+}
+
+function isHfAvailable(): boolean {
+  return Date.now() > hfDisabledUntil;
+}
+
+function isQuotaError(error: unknown): boolean {
   const message = String((error as { message?: string })?.message || error || '').toUpperCase();
   const status = (error as { status?: number })?.status;
 
-  return status === 429 || message.includes('429') || message.includes('RESOURCE_EXHAUSTED');
+  return (
+    status === 429 ||
+    message.includes('429') ||
+    message.includes('RESOURCE_EXHAUSTED') ||
+    message.includes('RATE LIMIT') ||
+    message.includes('QUOTA')
+  );
+}
+
+function disableProvider(provider: 'gemini' | 'openrouter' | 'groq' | 'hf'): void {
+  const disabledUntil = Date.now() + PROVIDER_COOLDOWN_MS;
+
+  if (provider === 'gemini') {
+    geminiDisabledUntil = disabledUntil;
+  } else if (provider === 'openrouter') {
+    openRouterDisabledUntil = disabledUntil;
+  } else if (provider === 'groq') {
+    groqDisabledUntil = disabledUntil;
+  } else {
+    hfDisabledUntil = disabledUntil;
+  }
+
+  console.warn(`[llm-fallback] ${provider} temporarily disabled due to quota limit`);
 }
 
 function logModelFailure(model: string, error: unknown) {
@@ -351,9 +389,8 @@ export async function generateWithFallback(
             }
             throw new Error('Gemini returned empty output');
           } catch (error) {
-            if (isGeminiQuotaError(error)) {
-              geminiDisabledUntil = Date.now() + 60 * 60 * 1000;
-              console.warn('Gemini temporarily disabled due to quota limit');
+            if (isQuotaError(error)) {
+              disableProvider('gemini');
               break;
             }
 
@@ -370,48 +407,64 @@ export async function generateWithFallback(
 
     const openRouterKey = process.env.OPENROUTER_API_KEY;
     if (openRouterKey) {
-      try {
-        console.log('Fallback to OpenRouter');
-        const result = await streamOpenRouterContent(
-          prompt,
-          openRouterKey,
-          temperature,
-          maxTokens,
-          options.onChunk
-        );
-        const text = result.text;
-        if (text) {
-          console.log(`[llm-fallback] Using fallback provider: openrouter:${OPENROUTER_MODEL}`);
-          return { type: 'content', content: text, modelUsed: `openrouter:${OPENROUTER_MODEL}`, chunks: result.chunks };
+      if (!isOpenRouterAvailable()) {
+        console.warn('[llm-fallback] openrouter disabled — using fallback');
+      } else {
+        try {
+          console.log('Fallback to OpenRouter');
+          const result = await streamOpenRouterContent(
+            prompt,
+            openRouterKey,
+            temperature,
+            maxTokens,
+            options.onChunk
+          );
+          const text = result.text;
+          if (text) {
+            console.log(`[llm-fallback] Using fallback provider: openrouter:${OPENROUTER_MODEL}`);
+            return { type: 'content', content: text, modelUsed: `openrouter:${OPENROUTER_MODEL}`, chunks: result.chunks };
+          }
+          throw new Error('OpenRouter returned empty output');
+        } catch (error) {
+          if (isQuotaError(error)) {
+            disableProvider('openrouter');
+          } else {
+            logModelFailure(`openrouter:${OPENROUTER_MODEL}`, error);
+          }
         }
-        throw new Error('OpenRouter returned empty output');
-      } catch (error) {
-        logModelFailure(`openrouter:${OPENROUTER_MODEL}`, error);
       }
     } else {
       console.warn('[llm-fallback] OPENROUTER_API_KEY missing; skipping OpenRouter fallback.');
     }
 
     if (groqApiKey) {
-      const groq = createGroq({ apiKey: groqApiKey });
-      const groqModels = [GROQ_PRIMARY_MODEL, GROQ_SECONDARY_MODEL];
+      if (!isGroqAvailable()) {
+        console.warn('[llm-fallback] groq disabled — using fallback');
+      } else {
+        const groq = createGroq({ apiKey: groqApiKey });
+        const groqModels = [GROQ_PRIMARY_MODEL, GROQ_SECONDARY_MODEL];
 
-      for (const modelName of groqModels) {
-        try {
-          const result = await generateText({
-            model: groq(modelName) as any,
-            prompt,
-            temperature,
-            maxOutputTokens: maxTokens,
-          });
-          const text = result.text?.trim();
-          if (text) {
-            console.log(`[llm-fallback] Using fallback provider: groq:${modelName}`);
-            return { type: 'content', content: text, modelUsed: `groq:${modelName}` };
+        for (const modelName of groqModels) {
+          try {
+            const result = await generateText({
+              model: groq(modelName) as any,
+              prompt,
+              temperature,
+              maxOutputTokens: maxTokens,
+            });
+            const text = result.text?.trim();
+            if (text) {
+              console.log(`[llm-fallback] Using fallback provider: groq:${modelName}`);
+              return { type: 'content', content: text, modelUsed: `groq:${modelName}` };
+            }
+            throw new Error('Groq returned empty output');
+          } catch (error) {
+            if (isQuotaError(error)) {
+              disableProvider('groq');
+              break;
+            }
+            logModelFailure(`groq:${modelName}`, error);
           }
-          throw new Error('Groq returned empty output');
-        } catch (error) {
-          logModelFailure(`groq:${modelName}`, error);
         }
       }
     } else {
@@ -420,34 +473,42 @@ export async function generateWithFallback(
 
     const hfToken = process.env.HF_TOKEN;
     if (hfToken) {
-      try {
-        const hf = new InferenceClient(hfToken);
-        const hfResult = await hf.textGeneration({
-          model: HF_MODEL,
-          provider: 'hf-inference',
-          inputs: prompt,
-          parameters: {
-            max_new_tokens: maxTokens,
-            temperature,
-            return_full_text: false,
-          },
-          options: { wait_for_model: true },
-        });
+      if (!isHfAvailable()) {
+        console.warn('[llm-fallback] hf disabled — using fallback');
+      } else {
+        try {
+          const hf = new InferenceClient(hfToken);
+          const hfResult = await hf.textGeneration({
+            model: HF_MODEL,
+            provider: 'hf-inference',
+            inputs: prompt,
+            parameters: {
+              max_new_tokens: maxTokens,
+              temperature,
+              return_full_text: false,
+            },
+            options: { wait_for_model: true },
+          });
 
-        const hfText =
-          typeof hfResult === 'string'
-            ? hfResult
-            : Array.isArray(hfResult)
-              ? hfResult[0]?.generated_text
-              : hfResult.generated_text;
+          const hfText =
+            typeof hfResult === 'string'
+              ? hfResult
+              : Array.isArray(hfResult)
+                ? hfResult[0]?.generated_text
+                : hfResult.generated_text;
 
-        if (hfText && hfText.trim()) {
-          console.log(`[llm-fallback] Using fallback provider: hf:${HF_MODEL}`);
-          return { type: 'content', content: hfText.trim(), modelUsed: `hf:${HF_MODEL}` };
+          if (hfText && hfText.trim()) {
+            console.log(`[llm-fallback] Using fallback provider: hf:${HF_MODEL}`);
+            return { type: 'content', content: hfText.trim(), modelUsed: `hf:${HF_MODEL}` };
+          }
+          throw new Error('HF inference returned empty output');
+        } catch (error) {
+          if (isQuotaError(error)) {
+            disableProvider('hf');
+          } else {
+            logModelFailure(`hf:${HF_MODEL}`, error);
+          }
         }
-        throw new Error('HF inference returned empty output');
-      } catch (error) {
-        logModelFailure(`hf:${HF_MODEL}`, error);
       }
     }
 
