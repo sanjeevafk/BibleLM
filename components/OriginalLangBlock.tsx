@@ -11,19 +11,19 @@ export interface OriginalLangProps {
   strongs: string;
   gloss?: string;
   morph?: string;
-  ref?: string;
+  verseRef?: string;
 }
 
-export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss, morph, ref }: OriginalLangProps) {
+export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss, morph, verseRef }: OriginalLangProps) {
   const [resolvedMorph, setResolvedMorph] = React.useState<string | undefined>(morph);
   const [attemptedFetch, setAttemptedFetch] = React.useState(false);
   
   // Determine if hebrew based on strongs code starting with H
   const isHebrew = strongs.startsWith('H');
   const langClass = isHebrew ? 'hebrew-text' : 'greek-text';
-  const bollsLink = `https://bolls.life/dictionary/${isHebrew ? 'BDBT' : 'BDBT'}/${strongs}`;
+  const bollsLink = `https://bolls.life/dictionary/${isHebrew ? 'BDBT' : 'TGNT'}/${strongs}`;
   const morphValue = resolvedMorph ?? morph;
-  const canFetchMorph = Boolean(isHebrew && ref && !morphValue);
+  const canFetchMorph = Boolean(isHebrew && verseRef && !morphValue);
   const decodedMorph = morphValue ? decodeMorph(morphValue) : null;
 
   React.useEffect(() => {
@@ -37,7 +37,7 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
     const normalizeHebrew = (input: string) =>
       input.replace(/[\u0591-\u05C7]/g, '').replace(/[^\u0590-\u05FF]/g, '');
 
-    getMorphForVerse(ref as string)
+    getMorphForVerse(verseRef as string)
       .then((words) => {
         if (!words) return;
         const normWord = normalizeHebrew(word);
@@ -52,7 +52,7 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
       .catch(() => {
         // Silent: fallback to existing data
       });
-  }, [attemptedFetch, canFetchMorph, morphValue, ref, strongs, word]);
+  }, [attemptedFetch, canFetchMorph, morphValue, verseRef, strongs, word]);
   
   return (
     <Popover>
@@ -87,7 +87,7 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
           </div>
         )}
         <div className="rounded-md border bg-muted/40 p-2">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Strong's</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Strong&#39;s</div>
           <div className="font-mono text-[11px]">
             <a href={bollsLink} target="_blank" rel="noreferrer" className="underline underline-offset-2 text-primary/90">
               {strongs}

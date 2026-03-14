@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { NextRequest } from 'next/server';
 import path from 'path';
 import zlib from 'zlib';
 
@@ -92,10 +93,12 @@ function resolvePaths(file: string) {
   };
 }
 
-export async function GET(req: Request, context: { params: Promise<{ layer: string; book: string }> }) {
-  const params = await context.params;
-  const layer = params.layer;
-  const book = normalizeBook(params.book);
+export async function GET(req: NextRequest, { params }: { params: Promise<{ layer?: string; book?: string }> }) {
+  const { layer, book: rawBook } = await params;
+  if (!layer || !rawBook) {
+    return new Response('Not Found', { status: 404 });
+  }
+  const book = normalizeBook(rawBook);
   const entry = indexCache[book];
   if (!entry || !layer || !(layer in entry)) {
     return new Response('Not Found', { status: 404 });
@@ -136,7 +139,7 @@ export async function GET(req: Request, context: { params: Promise<{ layer: stri
     headers.set('Content-Encoding', encoding);
   }
 
-  return new Response(body, { status: 200, headers });
+  return new Response(new Uint8Array(body), { status: 200, headers });
 }
 
 export const runtime = 'nodejs';

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { NextRequest } from 'next/server';
 import path from 'path';
 import zlib from 'zlib';
 
@@ -68,9 +69,12 @@ function normalizeBook(input: string): string {
   return upper;
 }
 
-export async function GET(req: Request, context: { params: Promise<{ book: string }> }) {
-  const params = await context.params;
-  const book = normalizeBook(params.book);
+export async function GET(req: NextRequest, { params }: { params: Promise<{ book?: string }> }) {
+  const { book: rawBook } = await params;
+  if (!rawBook) {
+    return new Response('Not Found', { status: 404 });
+  }
+  const book = normalizeBook(rawBook);
   const file = indexCache[book];
   if (!file) {
     return new Response('Not Found', { status: 404 });
@@ -105,7 +109,7 @@ export async function GET(req: Request, context: { params: Promise<{ book: strin
     headers.set('Content-Encoding', encoding);
   }
 
-  return new Response(body, { status: 200, headers });
+  return new Response(new Uint8Array(body), { status: 200, headers });
 }
 
 export const runtime = 'nodejs';

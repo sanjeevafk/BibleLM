@@ -222,10 +222,11 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
   const metadata = (message as any).metadata as MessageMetadata | undefined;
   const modelUsed = metadata?.modelUsed;
   const finalFallback = !isUser && Boolean(metadata?.finalFallback);
+  const verses = metadata?.verses;
   const metadataVerses = React.useMemo(() => {
-    if (!Array.isArray(metadata?.verses)) return [];
-    return metadata.verses.filter((verse): verse is VerseContext => Boolean(verse?.reference && verse?.text));
-  }, [metadata?.verses]);
+    if (!Array.isArray(verses)) return [];
+    return verses.filter((verse): verse is VerseContext => Boolean(verse?.reference && verse?.text));
+  }, [verses]);
   const showFallbackBadge =
     !isUser &&
     Boolean(modelUsed && modelUsed !== PRIMARY_MODEL_USED);
@@ -401,7 +402,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
             strongs={parts[3]} 
             gloss={parts[4]} 
             morph={parts[5]} 
-            ref={parts[6]} 
+            verseRef={parts[6]} 
           />
         );
       }
@@ -460,7 +461,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
                         </Button>
                       </div>
                       <p className="text-sm text-muted-foreground leading-relaxed break-words [overflow-wrap:anywhere]">
-                        "{block.shortQuote}"
+                        &quot;{block.shortQuote}&quot;
                       </p>
                     </CardHeader>
                     <CardContent className="px-4 pb-4 pt-0 space-y-3">

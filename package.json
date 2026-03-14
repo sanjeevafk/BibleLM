@@ -9,8 +9,12 @@
     "build:openhebrewbible": "ts-node --project tsconfig.scripts.json scripts/parse-openhebrewbible.ts",
     "build:translations": "ts-node --project tsconfig.scripts.json scripts/build-translations.ts",
     "build:opengnt": "ts-node --project tsconfig.scripts.json scripts/build-opengnt.ts",
+    "benchmark:sample": "ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode sample",
+    "benchmark:live": "ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode live",
+    "benchmark:regression": "ts-node --project tsconfig.scripts.json tests/benchmark/check-regressions.ts project-docs/benchmark/latest-report.json",
+    "benchmark:flags": "ts-node --project tsconfig.scripts.json tests/benchmark/check-feature-flags.ts",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint --no-warn-ignored app components lib tests scripts *.ts *.mjs"
   },
   "dependencies": {
     "@ai-sdk/groq": "^3.0.29",
@@ -46,7 +50,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "dotenv": "^17.3.1",
-    "eslint": "^10.0.3",
+    "eslint": "^9.39.4",
     "eslint-config-next": "^16.1.6",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",

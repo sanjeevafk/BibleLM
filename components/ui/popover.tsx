@@ -2,26 +2,44 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+type PopoverTriggerChildProps = React.HTMLAttributes<HTMLElement> &
+  React.RefAttributes<HTMLElement> & {
+    role?: string;
+    tabIndex?: number;
+  };
+
 type PopoverContextValue = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  contentRef: React.RefObject<HTMLDivElement>;
-  triggerRef: React.RefObject<HTMLElement>;
+  setContentNode: (node: HTMLDivElement | null) => void;
 };
 
 const PopoverContext = React.createContext<PopoverContextValue | null>(null);
 
+function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
+  return (value: T | null) => {
+    for (const ref of refs) {
+      if (typeof ref === "function") {
+        ref(value);
+      } else if (ref) {
+        (ref as React.MutableRefObject<T | null>).current = value;
+      }
+    }
+  };
+}
+
 const Popover = ({ children }: { children: React.ReactNode }) => {
   const [open, setOpen] = React.useState(false);
   const contentRef = React.useRef<HTMLDivElement>(null);
-  const triggerRef = React.useRef<HTMLElement>(null);
+  const setContentNode = React.useCallback((node: HTMLDivElement | null) => {
+    contentRef.current = node;
+  }, []);
 
   React.useEffect(() => {
     if (!open) return;
     const handleClick = (event: MouseEvent) => {
       const target = event.target as Node;
       if (contentRef.current?.contains(target)) return;
-      if (triggerRef.current?.contains(target)) return;
       setOpen(false);
     };
     const handleKey = (event: KeyboardEvent) => {
@@ -37,8 +55,13 @@ const Popover = ({ children }: { children: React.ReactNode }) => {
     };
   }, [open]);
 
+  const value = React.useMemo(
+    () => ({ open, setOpen, setContentNode }),
+    [open, setContentNode]
+  );
+
   return (
-    <PopoverContext.Provider value={{ open, setOpen, contentRef, triggerRef }}>
+    <PopoverContext.Provider value={value}>
       <span className="relative inline-flex">{children}</span>
     </PopoverContext.Provider>
   );
@@ -49,31 +72,42 @@ type PopoverTriggerProps = React.HTMLAttributes<HTMLElement> & { asChild?: boole
 const PopoverTrigger = ({ asChild, children, ...props }: PopoverTriggerProps) => {
   const ctx = React.useContext(PopoverContext);
   if (!ctx) return <>{children}</>;
+  const { open, setOpen } = ctx;
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     props.onClick?.(event);
-    ctx.setOpen(!ctx.open);
+    setOpen(!open);
   };
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     props.onKeyDown?.(event);
     if (event.defaultPrevented) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      ctx.setOpen(!ctx.open);
+      setOpen(!open);
     }
     if (event.key === "Escape") {
-      ctx.setOpen(false);
+      setOpen(false);
     }
   };
 
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement, {
-      onClick: handleClick,
-      onKeyDown: handleKeyDown,
-      ref: ctx.triggerRef,
-      role: (children as React.ReactElement).props.role || "button",
-      tabIndex: (children as React.ReactElement).props.tabIndex ?? 0,
+    const child = children as React.ReactElement<PopoverTriggerChildProps>;
+    const childOnClick = child.props.onClick;
+    const childOnKeyDown = child.props.onKeyDown;
+    return React.cloneElement(child, {
+      onClick: (event) => {
+        childOnClick?.(event);
+        if (event.defaultPrevented) return;
+        handleClick(event);
+      },
+      onKeyDown: (event) => {
+        childOnKeyDown?.(event);
+        if (event.defaultPrevented) return;
+        handleKeyDown(event);
+      },
+      role: child.props.role || "button",
+      tabIndex: child.props.tabIndex ?? 0,
       "aria-haspopup": "dialog",
-      "aria-expanded": ctx.open,
+      "aria-expanded": open,
     });
   }
 
@@ -82,9 +116,8 @@ const PopoverTrigger = ({ asChild, children, ...props }: PopoverTriggerProps) =>
       type="button"
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      ref={ctx.triggerRef as React.RefObject<HTMLButtonElement>}
       aria-haspopup="dialog"
-      aria-expanded={ctx.open}
+      aria-expanded={open}
       {...props}
     >
       {children}
@@ -101,6 +134,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
   ({ className, align = "center", sideOffset = 6, style, ...props }, ref) => {
     const ctx = React.useContext(PopoverContext);
     if (!ctx || !ctx.open) return null;
+    const { setContentNode } = ctx;
     const alignment =
       align === "start" ? "left-0" : align === "end" ? "right-0" : "left-1/2 -translate-x-1/2";
 
@@ -108,11 +142,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
       <div
         role="dialog"
         aria-modal="false"
-        ref={(node) => {
-          ctx.contentRef.current = node;
-          if (typeof ref === "function") ref(node);
-          else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-        }}
+        ref={mergeRefs(ref, setContentNode)}
         className={cn(
           "absolute top-full z-50 w-64 rounded-xl border bg-popover p-3 text-popover-foreground shadow-md outline-none",
           "animate-in fade-in-0 zoom-in-95",

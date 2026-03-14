@@ -222,7 +222,7 @@ export async function getOpenGNTLayers(reference: string): Promise<OpenGntVerseL
   }
 
   const clauseVerse = clause?.verses?.[chapterKey]?.[verseKey];
-  if (clauseVerse?.ids?.length) {
+  if (clause && clauseVerse?.ids?.length) {
     result.clauses = {
       ids: clauseVerse.ids,
       meta: clause.clauses

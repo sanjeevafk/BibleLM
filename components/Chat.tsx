@@ -26,6 +26,8 @@ type ChatInnerProps = {
 };
 
 const TRANSLATION_STORAGE_KEY = 'biblelm-translation';
+const DEFAULT_TRANSLATION = 'BSB';
+const VALID_TRANSLATIONS = ['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'];
 
 export function Chat() {
   const mounted = useSyncExternalStore(
@@ -97,7 +99,13 @@ function ChatInner({
 }: ChatInnerProps) {
   const [input, setInput] = useState('');
   const [rateLimitWarning, setRateLimitWarning] = useState<string | null>(null);
-  const [selectedTranslation, setSelectedTranslation] = useState('BSB');
+  const [selectedTranslation, setSelectedTranslation] = useState(() => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_TRANSLATION;
+    }
+    const stored = localStorage.getItem(TRANSLATION_STORAGE_KEY);
+    return stored && VALID_TRANSLATIONS.includes(stored) ? stored : DEFAULT_TRANSLATION;
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentContainerClass = 'w-full max-w-[720px] mx-auto px-3 sm:px-4';
 
@@ -126,15 +134,8 @@ function ChatInner({
   const shouldAutoScroll = useRef(true);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const stored = localStorage.getItem(TRANSLATION_STORAGE_KEY);
-    if (stored && ['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'].includes(stored)) {
-      setSelectedTranslation(stored);
-    } else {
-      localStorage.setItem(TRANSLATION_STORAGE_KEY, 'BSB');
-      setSelectedTranslation('BSB');
-    }
-  }, []);
+    localStorage.setItem(TRANSLATION_STORAGE_KEY, selectedTranslation);
+  }, [selectedTranslation]);
 
   const scrollToBottom = useCallback((smooth = false) => {
     if (scrollRef.current) {
@@ -168,7 +169,6 @@ function ChatInner({
 
   const handleTranslationChange = useCallback((newTranslation: string) => {
     setSelectedTranslation(newTranslation);
-    localStorage.setItem(TRANSLATION_STORAGE_KEY, newTranslation);
   }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

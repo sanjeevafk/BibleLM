@@ -25,8 +25,8 @@ const AccordionItem = React.forwardRef<
 AccordionItem.displayName = "AccordionItem";
 
 const AccordionTrigger = React.forwardRef<
-  HTMLSummaryElement,
-  React.HTMLAttributes<HTMLSummaryElement>
+  HTMLElement,
+  React.ComponentPropsWithoutRef<'summary'>
 >(({ className, children, ...props }, ref) => (
   <summary
     ref={ref}
