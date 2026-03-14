@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { decodeMorph } from '@/lib/morph-utils';
-import { getMorphForVerse } from '@/lib/morphhb-client';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export interface OriginalLangProps {
@@ -14,48 +13,17 @@ export interface OriginalLangProps {
   verseRef?: string;
 }
 
-export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss, morph, verseRef }: OriginalLangProps) {
+export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss, morph }: OriginalLangProps) {
   const normalizedWord = word?.trim() || '';
   const normalizedStrongs = strongs?.trim() || '';
   const normalizedGloss = gloss?.trim() || '';
-  const [resolvedMorph, setResolvedMorph] = React.useState<string | undefined>(morph);
-  const [attemptedFetch, setAttemptedFetch] = React.useState(false);
   
   // Determine if hebrew based on strongs code starting with H
   const isHebrew = normalizedStrongs.startsWith('H');
   const langClass = isHebrew ? 'hebrew-text' : 'greek-text';
   const bollsLink = `https://bolls.life/dictionary/${isHebrew ? 'BDBT' : 'TGNT'}/${normalizedStrongs}`;
-  const morphValue = resolvedMorph ?? morph;
-  const canFetchMorph = Boolean(isHebrew && verseRef && !morphValue);
+  const morphValue = morph?.trim() || '';
   const decodedMorph = morphValue ? decodeMorph(morphValue) : null;
-
-  React.useEffect(() => {
-    setResolvedMorph(morph);
-  }, [morph]);
-
-  React.useEffect(() => {
-    if (!canFetchMorph || attemptedFetch || morphValue) return;
-    setAttemptedFetch(true);
-
-    const normalizeHebrew = (input: string) =>
-      input.replace(/[\u0591-\u05C7]/g, '').replace(/[^\u0590-\u05FF]/g, '');
-
-    getMorphForVerse(verseRef as string)
-      .then((words) => {
-        if (!words) return;
-        const normWord = normalizeHebrew(normalizedWord);
-        const exact = words.find((w) => w.s === normalizedStrongs && normalizeHebrew(w.t) === normWord);
-        const byStrongs = words.find((w) => w.s === normalizedStrongs);
-        const byWord = words.find((w) => normalizeHebrew(w.t) === normWord);
-        const match = exact || byStrongs || byWord;
-        if (match?.m) {
-          setResolvedMorph(match.m);
-        }
-      })
-      .catch(() => {
-        // Silent: fallback to existing data
-      });
-  }, [attemptedFetch, canFetchMorph, morphValue, normalizedStrongs, normalizedWord, verseRef]);
 
   if (!normalizedWord || !normalizedStrongs) {
     return null;

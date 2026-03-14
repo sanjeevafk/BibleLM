@@ -236,15 +236,3 @@ export async function fetchVerseTextWithFallback(
     await fetchVerseFallback(reference, translation)
   );
 }
-
-export async function fetchStrongsDefinition(strongs: string): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(`https://bolls.life/dictionary-definition/BDBT/${strongs}/`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data && data.length > 0 ? data[0] : null;
-  } catch (error) {
-    console.error('Bolls diff fetch error:', error);
-    return null;
-  }
-}

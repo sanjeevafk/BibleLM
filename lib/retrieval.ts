@@ -6,12 +6,10 @@ import { Pool } from 'pg';
 import {
   fetchExternalWithTimeoutBudget,
   fetchVerseTextWithFallback,
-  fetchStrongsDefinition,
   VerseContext
 } from './bible-fetch';
 import { ensureDbReady, getDbPool } from './db';
 import bibleIndexData from '../data/bible-index.json';
-import strongsDictData from '../data/strongs-dict.json';
 
 import {
   getCachedEmbedding,
@@ -21,6 +19,9 @@ import {
 } from './cache';
 import { redis } from './redis';
 import { getMorphhbWords } from './morphhb';
+import { getStrongsEntry } from './datasets/strongs';
+import { getCrossReferences } from './datasets/tsk';
+import { getVerseMetadataMap, type VerseMetadata } from './datasets/elianwong';
 import { getOpenHebrewBibleLayers, OpenHebrewVerseLayers } from './openhebrewbible';
 import { getOpenGNTLayers, OpenGntVerseLayers } from './opengnt';
 import { classifyAndExpand, type QueryDomain } from './query-utils';
@@ -32,7 +33,6 @@ import {
 } from './feature-flags';
 
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
-const STRONGS_DICT = strongsDictData as Record<string, Record<string, string>>;
 
 const HF_EMBEDDING_MODEL = process.env.HF_EMBEDDING_MODEL || 'intfloat/multilingual-e5-small';
 const HF_ENDPOINT = `https://router.huggingface.co/hf-inference/models/${HF_EMBEDDING_MODEL}/pipeline/feature-extraction`;
@@ -52,13 +52,6 @@ const NT_BOOKS = new Set([
 const LOCAL_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB']);
 
 type VerseResult = { verseId: string };
-type VerseGenre = 'law' | 'historical' | 'poetic' | 'prophetic' | 'gospel' | 'epistle' | 'apocalyptic';
-type VerseMetadata = {
-  verseId: string;
-  testament: 'OT' | 'NT';
-  genre: VerseGenre;
-  themeTags: string[];
-};
 
 type LexicalDoc = {
   verseId: string;
@@ -105,8 +98,6 @@ const RETRIEVAL_CONFIG = {
 } as const;
 
 let lexicalFuse: Fuse<LexicalDoc> | null = null;
-let verseMetadataCache: Map<string, VerseMetadata> | null = null;
-let verseMetadataPromise: Promise<Map<string, VerseMetadata>> | null = null;
 let semanticRerankerClient: InferenceClient | null = null;
 
 function tokenizeFallbackQuery(query: string): string[] {
@@ -184,31 +175,12 @@ function getLexicalFuse(): Fuse<LexicalDoc> {
 }
 
 async function getVerseMetadata(): Promise<Map<string, VerseMetadata>> {
-  if (verseMetadataCache) return verseMetadataCache;
-  if (verseMetadataPromise) return verseMetadataPromise;
-  verseMetadataPromise = (async () => {
-    try {
-      const metadataModule = await import('../data/verse-metadata.json');
-      const data = (metadataModule.default ?? metadataModule) as VerseMetadata[];
-      const map = new Map<string, VerseMetadata>();
-      if (Array.isArray(data)) {
-        for (const entry of data) {
-          if (entry?.verseId) {
-            map.set(entry.verseId, entry);
-          }
-        }
-      }
-      verseMetadataCache = map;
-      return map;
-    } catch (error) {
-      console.warn('Verse metadata unavailable; boosting skipped', error);
-      verseMetadataCache = new Map();
-      return verseMetadataCache;
-    } finally {
-      verseMetadataPromise = null;
-    }
-  })();
-  return verseMetadataPromise;
+  try {
+    return await getVerseMetadataMap();
+  } catch (error) {
+    console.warn('Verse metadata unavailable; boosting skipped', error);
+    return new Map();
+  }
 }
 
 /**
@@ -1369,51 +1341,28 @@ async function getCrossReferenceSignalMap(
   }
 
   const sourceRefs = directReferenceIds
-    .map((reference) => parseReferenceKey(reference))
-    .filter((ref): ref is { book: string; chapter: number; verse: number } => Boolean(ref));
-  const targetRefs = candidateIds
-    .map((reference) => parseReferenceKey(reference))
-    .filter((ref): ref is { book: string; chapter: number; verse: number } => Boolean(ref));
+    .map((reference) => reference.trim().toUpperCase())
+    .filter(Boolean);
+  const targetRefs = new Set(
+    candidateIds
+      .map((reference) => reference.trim().toUpperCase())
+      .filter(Boolean)
+  );
 
-  if (sourceRefs.length === 0 || targetRefs.length === 0) {
+  if (sourceRefs.length === 0 || targetRefs.size === 0) {
     return signals;
   }
 
   try {
-    await ensureDbReady();
-    const pool = getDbPool();
-
-    const values: Array<string | number> = [];
-    const sourceTuples: string[] = [];
-    sourceRefs.forEach((ref, index) => {
-      const base = index * 3;
-      sourceTuples.push(`($${base + 1}::text, $${base + 2}::int, $${base + 3}::int)`);
-      values.push(ref.book, ref.chapter, ref.verse);
-    });
-
-    const targetOffset = values.length;
-    const targetTuples: string[] = [];
-    targetRefs.forEach((ref, index) => {
-      const base = targetOffset + index * 3;
-      targetTuples.push(`($${base + 1}::text, $${base + 2}::int, $${base + 3}::int)`);
-      values.push(ref.book, ref.chapter, ref.verse);
-    });
-
-    const result = await pool.query<{
-      target_book: string;
-      target_chapter: number;
-      target_verse: number;
-    }>(
-      `SELECT DISTINCT target_book, target_chapter, target_verse
-       FROM cross_references
-       WHERE (source_book, source_chapter, source_verse) IN (VALUES ${sourceTuples.join(', ')})
-       AND (target_book, target_chapter, target_verse) IN (VALUES ${targetTuples.join(', ')})`,
-      values
-    );
-
-    result.rows.forEach((row) => {
-      signals.set(`${row.target_book} ${row.target_chapter}:${row.target_verse}`, 1);
-    });
+    const crossReferenceSets = await Promise.all(sourceRefs.map((reference) => getCrossReferences(reference)));
+    for (const refs of crossReferenceSets) {
+      for (const ref of refs) {
+        const normalizedTarget = ref.reference.trim().toUpperCase();
+        if (targetRefs.has(normalizedTarget)) {
+          signals.set(normalizedTarget, 1);
+        }
+      }
+    }
   } catch (error) {
     console.warn('Cross-reference signal lookup failed; continuing without reranker cross-reference signals', error);
   }
@@ -1720,73 +1669,46 @@ async function hybridSearch(
  * Limits to 3 total unique cross-references with more than 10 votes.
  */
 async function getTskCrossReferences(
-  pool: Pool,
   primaryVerses: VerseContext[],
   translation: string
 ): Promise<VerseContext[]> {
   if (primaryVerses.length === 0) return [];
 
-  // 1. Extract book, chapter, verse from primary verses
-  const refs = primaryVerses
-    .map((v) => parseReferenceKey(v.reference))
-    .filter((r): r is { book: string; chapter: number; verse: number } =>
-      Boolean(r && !isNaN(r.chapter) && !isNaN(r.verse))
-    );
+  const primaryRefs = new Set(
+    primaryVerses
+      .map((verse) => verse.reference.trim().toUpperCase())
+      .filter(Boolean)
+  );
+  const targetVotes = new Map<string, number>();
 
-  if (refs.length === 0) return [];
+  const crossReferenceSets = await Promise.all(
+    primaryVerses.map((verse) => getCrossReferences(verse.reference))
+  );
 
-  // 2. Query cross_references for matches where votes > 10
-  const values: Array<string | number> = [];
-  const tuples: string[] = [];
-  refs.forEach((ref, index) => {
-    const base = index * 3;
-    tuples.push(`($${base + 1}::text, $${base + 2}::int, $${base + 3}::int)`);
-    values.push(ref.book, ref.chapter, ref.verse);
-  });
-
-  const query = `
-    SELECT target_book, target_chapter, target_verse, votes
-    FROM cross_references
-    WHERE (source_book, source_chapter, source_verse) IN (VALUES ${tuples.join(', ')})
-    AND votes > 10
-    ORDER BY COALESCE(votes, 0) DESC
-    LIMIT 3;
-  `;
-
-  const result = await pool.query<{
-    target_book: string;
-    target_chapter: number;
-    target_verse: number;
-    votes: number;
-  }>(query, values);
-
-  if (result.rows.length === 0) return [];
-
-  // 3. Deduplication: Skip if already in primaryVerses
-  const primaryRefs = new Set(refs.map((ref) => `${ref.book} ${ref.chapter}:${ref.verse}`));
-  const seenTargets = new Set<string>();
-
-  const targetRefs = result.rows
-    .map((row) => ({
-      book: row.target_book,
-      chapter: row.target_chapter,
-      verse: row.target_verse
-    }))
-    .filter((ref) => {
-      const refStr = `${ref.book} ${ref.chapter}:${ref.verse}`;
-      if (primaryRefs.has(refStr) || seenTargets.has(refStr)) {
-        return false;
+  for (const refs of crossReferenceSets) {
+    for (const ref of refs) {
+      const votes = ref.votes ?? 0;
+      const normalizedReference = ref.reference.trim().toUpperCase();
+      if (votes <= 10 || primaryRefs.has(normalizedReference)) {
+        continue;
       }
-      seenTargets.add(refStr);
-      return true;
-    });
+
+      const currentVotes = targetVotes.get(normalizedReference) ?? Number.NEGATIVE_INFINITY;
+      if (votes > currentVotes) {
+        targetVotes.set(normalizedReference, votes);
+      }
+    }
+  }
+
+  const targetRefs = Array.from(targetVotes.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([reference]) => reference);
 
   if (targetRefs.length === 0) return [];
 
-  // 4. Fetch the actual text for these target verses
-  const crossRefVerses = await fetchVersesByRefs(pool, targetRefs, translation);
-  
-  // Mark as cross-references
+  const crossRefVerses = await fetchVersesByIds(targetRefs, translation);
+
   return crossRefVerses.map((v) => ({ ...v, isCrossReference: true }));
 }
 
@@ -1889,9 +1811,7 @@ export async function retrieveContextForQuery(
 
     if (intent === 'VERSE_EXPLANATION' && exactVerses.length > 0) {
       try {
-        await ensureDbReady();
-        const pool = getDbPool();
-        const tskVerses = await getTskCrossReferences(pool, exactVerses, translation);
+        const tskVerses = await getTskCrossReferences(exactVerses, translation);
         focusedVerses = [...exactVerses, ...tskVerses];
       } catch (error) {
         console.warn('Explanation cross-reference retrieval failed; continuing with target verses only', error);
@@ -2085,7 +2005,7 @@ async function retrieveContextFromDb(
   let finalVerses = coreVerses;
   if (tskDecision.shouldExpand) {
     try {
-      const tskVerses = await getTskCrossReferences(pool, coreVerses, translation);
+      const tskVerses = await getTskCrossReferences(coreVerses, translation);
       finalVerses = [...coreVerses, ...tskVerses];
     } catch (error) {
       console.warn('TSK retrieval failed', error);
@@ -2367,20 +2287,45 @@ async function retrieveContextViaApis(
   return enrichOriginalLanguages(finalVerses);
 }
 
-// Enrich verses with Strongs info from the bundled dict or API
+// Enrich verses with bundled Strong's data and static morphology datasets.
 async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseContext[]> {
-  const hydrateOriginals = async (originals: VerseContext['original']) => {
-    for (const orig of originals) {
-      const dictEntry = STRONGS_DICT[orig.strongs];
+  const fillMorphCodes = async (verse: VerseContext): Promise<void> => {
+    const parsed = parseReferenceKey(verse.reference);
+    if (!parsed || !OT_BOOKS.has(parsed.book) || !Array.isArray(verse.original) || verse.original.length === 0) {
+      return;
+    }
+
+    const morphWords = await getMorphhbWords(parsed.book, parsed.chapter, parsed.verse);
+    if (!morphWords || morphWords.length === 0) {
+      return;
+    }
+
+    const normalizeHebrew = (input: string) =>
+      input.replace(/[\u0591-\u05C7]/g, '').replace(/[^\u0590-\u05FF]/g, '');
+
+    for (const original of verse.original) {
+      if (original.morph) {
+        continue;
+      }
+
+      const normalizedWord = normalizeHebrew(original.word || '');
+      const exact = morphWords.find((word) => word.s === original.strongs && normalizeHebrew(word.t) === normalizedWord);
+      const byStrongs = morphWords.find((word) => word.s === original.strongs);
+      const byWord = morphWords.find((word) => normalizeHebrew(word.t) === normalizedWord);
+      const match = exact || byStrongs || byWord;
+      if (match?.m) {
+        original.morph = match.m;
+      }
+    }
+  };
+
+  const hydrateOriginals = async (verse: VerseContext) => {
+    await fillMorphCodes(verse);
+    for (const orig of verse.original) {
+      const dictEntry = await getStrongsEntry(orig.strongs);
       if (dictEntry) {
         orig.gloss = dictEntry.short_definition || dictEntry.definition;
         orig.transliteration = dictEntry.transliteration;
-      } else {
-        const fetched = await fetchStrongsDefinition(orig.strongs);
-        if (fetched) {
-          orig.gloss = String(fetched.short_definition || fetched.definition || '');
-          orig.transliteration = String(fetched.transliteration || '');
-        }
       }
     }
   };
@@ -2453,10 +2398,8 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
   for (const verse of verses) {
     let hasOriginals = verse.original && verse.original.length > 0;
     if (hasOriginals) {
-      // It came from the static index so it has { word, strongs }. Need to add gloss.
-      await hydrateOriginals(verse.original);
+      await hydrateOriginals(verse);
     } else {
-      // Try MorphHB local data first for OT verses
       const [bookRaw, cvRaw] = verse.reference.split(' ');
       if (bookRaw && cvRaw && OT_BOOKS.has(bookRaw)) {
         const [chapterRaw, verseRaw] = cvRaw.split(':');
@@ -2470,7 +2413,7 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
               strongs: w.s,
               morph: w.m
             }));
-            await hydrateOriginals(verse.original);
+            await hydrateOriginals(verse);
             hasOriginals = true;
           }
         }
@@ -2506,8 +2449,8 @@ async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseCon
            const matchV = chapterData.find((v: { verse: number, text: string }) => v.verse === parseInt(vNumStr, 10));
            if (matchV) {
              const tags = parseOriginalTags(matchV.text);
-             await hydrateOriginals(tags);
              verse.original = tags;
+             await hydrateOriginals(verse);
            }
         }
       } catch (err) {
