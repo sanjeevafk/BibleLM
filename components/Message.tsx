@@ -11,6 +11,13 @@ import type { UIMessage } from 'ai';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import type { VerseContext } from '@/lib/bible-fetch';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import {
+  hasStructuredOriginalLanguage,
+  normalizeOriginalLanguageEntries,
+  type StructuredChatResponse,
+  type StructuredOriginalLanguageEntry,
+  type StructuredVerseResponse,
+} from '@/lib/verse-response';
 
 const PRIMARY_MODEL_USED = 'gemini:gemini-2.5-flash';
 
@@ -39,6 +46,10 @@ type VerseBlock = {
   reference: string | null;
   shortQuote: string;
   markdown: string;
+  verseText?: string;
+  translation?: string;
+  analysisSummary?: string;
+  originalLanguage?: StructuredOriginalLanguageEntry[];
 };
 
 type MessageMetadata = {
@@ -49,6 +60,7 @@ type MessageMetadata = {
   metadata?: {
     translation?: string;
   };
+  response?: StructuredChatResponse;
 };
 
 function extractReference(lines: string[]): string | null {
@@ -87,7 +99,16 @@ function parseVerseBlocks(content: string): {
     const trimmed = value.trimStart();
     const lower = trimmed.toLowerCase();
     if (!trimmed.startsWith('- ')) return false;
-    if (lower.startsWith('- reference') || lower.startsWith('- **original key words') || lower.startsWith('- original key words')) {
+    if (
+      lower.startsWith('- reference') ||
+      lower.startsWith('- **original key words') ||
+      lower.startsWith('- **original language details') ||
+      lower.startsWith('- hebrew:') ||
+      lower.startsWith('- greek:') ||
+      lower.startsWith('- meaning:') ||
+      lower.startsWith('- original key words') ||
+      lower.startsWith('- original language details')
+    ) {
       return false;
     }
     return true;
@@ -163,19 +184,13 @@ function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
   return verses
     .filter((verse) => Boolean(verse?.text && verse?.reference))
     .map((verse, index) => {
-      const originalLines = (verse.original || []).slice(0, 8).map((entry) => {
-        const parts: string[] = [];
-        if (entry.transliteration) {
-          parts.push(entry.transliteration);
-        }
-        parts.push(`Strong's ${entry.strongs}`);
-        if (entry.gloss) {
-          parts.push(`- ${entry.gloss}`);
-        }
-        if (entry.morph) {
-          parts.push(`Morph: ${entry.morph}`);
-        }
-        return `- \`${entry.word}\` (${parts.join(', ')})`;
+      const originalLanguage = normalizeOriginalLanguageEntries(verse.original).slice(0, 8);
+      const originalLines = originalLanguage.map((entry) => {
+        const language = entry.strongs.toUpperCase().startsWith('H') ? 'Hebrew' : 'Greek';
+        const label = entry.transliteration
+          ? `${language}: ${entry.word} (${entry.strongs}; ${entry.transliteration})`
+          : `${language}: ${entry.word} (${entry.strongs})`;
+        return `- ${label}\n  Meaning: ${entry.meaning}`;
       });
 
       const markdownParts = [
@@ -184,7 +199,7 @@ function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
       ];
 
       if (originalLines.length > 0) {
-        markdownParts.push('**Original key words:**');
+        markdownParts.push('**Original language details:**');
         markdownParts.push(...originalLines);
       }
 
@@ -193,13 +208,31 @@ function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
         reference: verse.reference,
         shortQuote: shortenQuote(stripOuterQuotes(verse.text)),
         markdown: markdownParts.join('\n'),
+        verseText: verse.text,
+        translation: verse.translation,
+        originalLanguage,
       };
     });
 }
 
+function buildBlocksFromStructuredResponse(sections: StructuredVerseResponse[]): VerseBlock[] {
+  return sections
+    .filter((section) => Boolean(section?.verse?.reference && section?.verse?.text))
+    .map((section, index) => ({
+      id: `${section.verse.reference}-${index + 1}`,
+      reference: section.verse.reference,
+      shortQuote: shortenQuote(stripOuterQuotes(section.verse.text)),
+      markdown: `"${section.verse.text}"\n- **${section.verse.reference}${section.verse.translation ? ` (${section.verse.translation})` : ''}**`,
+      verseText: section.verse.text,
+      translation: section.verse.translation,
+      analysisSummary: section.analysis?.summary,
+      originalLanguage: section.original_language,
+    }));
+}
+
 function splitOriginalLanguageSection(markdown: string): { main: string; original: string } {
   const lines = markdown.split(/\r?\n/);
-  const startIndex = lines.findIndex((line) => /\*\*Original key words:\*\*/i.test(line.trim()));
+  const startIndex = lines.findIndex((line) => /\*\*Original (?:key words|language details):\*\*/i.test(line.trim()));
   if (startIndex === -1) {
     return { main: markdown.trim(), original: '' };
   }
@@ -214,6 +247,40 @@ function stripMarkdownForCopy(text: string): string {
     .replace(/\*\*|\*|__|_|`|~~|#|> /g, '');
 }
 
+function hasMeaningfulOriginalLanguageMarkdown(markdown: string): boolean {
+  const normalized = markdown
+    .replace(/\*\*Original (?:key words|language details):\*\*/gi, '')
+    .replace(/[-*]\s*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return Boolean(normalized);
+}
+
+function renderStructuredOriginalLanguage(entries: StructuredOriginalLanguageEntry[], verseRef?: string) {
+  return (
+    <div className="space-y-2">
+      {entries.map((entry, index) => (
+        <div key={`${entry.word}-${entry.strongs}-${index}`} className="rounded-md border bg-muted/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <OriginalLangBlock
+              word={entry.word}
+              translit={entry.transliteration}
+              strongs={entry.strongs}
+              gloss={entry.meaning}
+              verseRef={verseRef}
+            />
+            <span className="text-sm font-medium text-foreground/90">{entry.meaning}</span>
+          </div>
+          {entry.transliteration && (
+            <div className="mt-1 text-[11px] italic text-muted-foreground">{entry.transliteration}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const Message = React.memo(function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
@@ -223,6 +290,13 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
   const modelUsed = metadata?.modelUsed;
   const finalFallback = !isUser && Boolean(metadata?.finalFallback);
   const verses = metadata?.verses;
+  const structuredResponse = metadata?.response;
+  const structuredSections = React.useMemo(() => {
+    if (!Array.isArray(structuredResponse?.sections)) {
+      return [];
+    }
+    return structuredResponse.sections.filter((section) => Boolean(section?.verse?.reference && section?.verse?.text));
+  }, [structuredResponse]);
   const metadataVerses = React.useMemo(() => {
     if (!Array.isArray(verses)) return [];
     return verses.filter((verse): verse is VerseContext => Boolean(verse?.reference && verse?.text));
@@ -267,7 +341,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
           currentRef = `${refMatch[1].toUpperCase()} ${refMatch[2]}:${refMatch[3]}`;
         }
 
-        if (/\*\*Original key words:\*\*/i.test(trimmedLine)) {
+        if (/\*\*Original (?:key words|language details):\*\*/i.test(trimmedLine)) {
           inOriginalBlock = true;
           return line;
         }
@@ -326,7 +400,11 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
     () => parseVerseBlocks(processedContent),
     [processedContent]
   );
+  const fallbackSummary = structuredResponse?.analysis?.summary?.trim() || '';
   const verseBlocks = React.useMemo(() => {
+    if (structuredSections.length > 0) {
+      return buildBlocksFromStructuredResponse(structuredSections);
+    }
     if (blocks.length > 0) {
       return blocks;
     }
@@ -334,7 +412,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       return buildBlocksFromMetadata(metadataVerses);
     }
     return [];
-  }, [blocks, metadataVerses]);
+  }, [blocks, metadataVerses, structuredSections]);
 
   const markdownComponents: Components = {
     p({ children }) {
@@ -384,7 +462,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       const text = React.Children.toArray(children)
         .map(child => (typeof child === 'string' ? child : ''))
         .join('');
-      if (text.includes('Original key words:')) {
+      if (text.includes('Original key words:') || text.includes('Original language details:')) {
         return <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-6 pb-1 border-b border-muted-foreground/10">{children}</span>;
       }
       return <strong className="font-bold text-primary/90">{children}</strong>;
@@ -395,6 +473,9 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
       
       if (text.startsWith('orig|')) {
         const parts = text.split('|');
+        if (!parts[1]?.trim() || !parts[3]?.trim() || !parts[4]?.trim()) {
+          return null;
+        }
         return (
           <OriginalLangBlock 
             word={parts[1]} 
@@ -431,10 +512,10 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
           </div>
         )}
         <div className="text-sm leading-relaxed overflow-x-visible break-words [overflow-wrap:anywhere]">
-          {preamble && (
+          {(preamble || fallbackSummary) && (
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {preamble}
+                {preamble || fallbackSummary}
               </ReactMarkdown>
             </div>
           )}
@@ -444,6 +525,8 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
               {preamble && <hr className="my-4 border-muted/40" />}
               {verseBlocks.map((block) => {
                 const section = splitOriginalLanguageSection(block.markdown);
+                const hasStructuredOriginal = hasStructuredOriginalLanguage(block.originalLanguage);
+                const hasMarkdownOriginal = hasMeaningfulOriginalLanguageMarkdown(section.original);
                 const verseCopied = copiedVerseId === block.id;
                 return (
                   <Card key={block.id} className="border-muted/60 bg-card/90 shadow-sm">
@@ -473,22 +556,30 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
                         </div>
                       )}
 
-                      {section.original && (
+                      {block.analysisSummary && block.analysisSummary !== (preamble || fallbackSummary) && (
+                        <p className="text-sm leading-relaxed text-muted-foreground">{block.analysisSummary}</p>
+                      )}
+
+                      {hasStructuredOriginal || hasMarkdownOriginal ? (
                         <Accordion type="single" className="w-full">
                           <AccordionItem value={`${block.id}-orig`}>
                             <AccordionTrigger className="px-1 text-xs uppercase tracking-wider text-muted-foreground">
                               Original-language details
                             </AccordionTrigger>
                             <AccordionContent className="px-1 pt-2 border-t border-muted/30">
-                              <div className="prose prose-sm dark:prose-invert max-w-none break-words [overflow-wrap:anywhere]">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                  {section.original}
-                                </ReactMarkdown>
-                              </div>
+                              {hasStructuredOriginal ? (
+                                renderStructuredOriginalLanguage(block.originalLanguage || [], block.reference || undefined)
+                              ) : (
+                                <div className="prose prose-sm dark:prose-invert max-w-none break-words [overflow-wrap:anywhere]">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                    {section.original}
+                                  </ReactMarkdown>
+                                </div>
+                              )}
                             </AccordionContent>
                           </AccordionItem>
                         </Accordion>
-                      )}
+                      ) : null}
                     </CardContent>
                   </Card>
                 );

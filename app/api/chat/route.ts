@@ -8,6 +8,12 @@ import { validateDataIntegrity } from '@/lib/validate-data';
 import type { VerseContext } from '@/lib/bible-fetch';
 import { redis } from '@/lib/redis';
 import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
+import {
+  buildStructuredVerseResponse,
+  compactStructuredChatResponse,
+  normalizeOriginalLanguageEntries,
+  type StructuredChatResponse,
+} from '@/lib/verse-response';
 
 // export const runtime = 'edge';
 
@@ -33,6 +39,7 @@ type NormalizedChatResponse = {
   verses: VerseContext[];
   metadata: {
     translation: string;
+    response?: StructuredChatResponse;
   };
 };
 
@@ -606,6 +613,146 @@ function normalizeOriginalKeywordLine(line: string): string {
   return `${prefix}\`${word}\`${rest}`;
 }
 
+function formatMorphArtifactLine(line: string): string[] | null {
+  const trimmed = line.trim();
+  const payload = trimmed
+    .replace(/^[-*]\s*/, '')
+    .replace(/^`{1,3}/, '')
+    .replace(/`{1,3}$/, '')
+    .trim();
+
+  if (!/^orig\s*\|/i.test(payload)) {
+    return null;
+  }
+
+  const parts = payload.split('|').map((part) => part.trim());
+  if (parts.length < 4) {
+    return [];
+  }
+
+  const [, wordCandidate, third, fourth, fifth] = parts;
+  const hasTransliteration = /^[HG]\d+$/i.test(fourth || '');
+  const word = wordCandidate?.trim();
+  const transliteration = hasTransliteration ? third?.trim() : '';
+  const strongs = hasTransliteration ? fourth?.trim() : third?.trim();
+  const meaning = hasTransliteration ? fifth?.trim() : fourth?.trim();
+
+  if (!word || !strongs || !meaning || !/^[HG]\d+$/i.test(strongs)) {
+    return [];
+  }
+
+  const language = strongs.toUpperCase().startsWith('H') ? 'Hebrew' : 'Greek';
+  const label = transliteration ? `${language}: ${word} (${strongs}; ${transliteration})` : `${language}: ${word} (${strongs})`;
+
+  return [`- ${label}`, `  Meaning: ${meaning}`];
+}
+
+function extractResponseSections(content: string): {
+  preamble: string;
+  postamble: string;
+} {
+  const lines = content.split(/\r?\n/);
+  const preambleLines: string[] = [];
+  const postambleLines: string[] = [];
+  let i = 0;
+  let inVerseSection = false;
+
+  const isVerseStartLine = (value: string) => {
+    const trimmed = value.trimStart();
+    const lower = trimmed.toLowerCase();
+    if (!trimmed.startsWith('- ')) return false;
+    if (
+      lower.startsWith('- reference') ||
+      lower.startsWith('- **original key words') ||
+      lower.startsWith('- **original language details') ||
+      lower.startsWith('- hebrew:') ||
+      lower.startsWith('- greek:') ||
+      lower.startsWith('- meaning:') ||
+      lower.startsWith('- original key words') ||
+      lower.startsWith('- original language details')
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const isVerseStart = isVerseStartLine(line);
+    if (!isVerseStart) {
+      if (!inVerseSection) {
+        preambleLines.push(line);
+      } else {
+        postambleLines.push(line);
+      }
+      i += 1;
+      continue;
+    }
+
+    inVerseSection = true;
+    i += 1;
+
+    while (i < lines.length) {
+      const next = lines[i];
+      if (isVerseStartLine(next)) {
+        break;
+      }
+      if (!next.trim()) {
+        i += 1;
+        continue;
+      }
+      if (/^\S/.test(next) && !next.startsWith('- ') && !next.startsWith('* ')) {
+        postambleLines.push(...lines.slice(i));
+        i = lines.length;
+        break;
+      }
+      i += 1;
+    }
+  }
+
+  return {
+    preamble: preambleLines.join('\n').trim(),
+    postamble: postambleLines.join('\n').trim(),
+  };
+}
+
+function extractAnalysisSummary(content: string): string | undefined {
+  const { preamble, postamble } = extractResponseSections(content);
+  const summary = [preamble, postamble]
+    .flatMap((section) => section.split(/\r?\n/))
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false;
+      if (/^Using fallback model:/i.test(line)) return false;
+      if (/^All quotes from /i.test(line)) return false;
+      if (/^\*\*Original (?:key words|language details):\*\*/i.test(line)) return false;
+      if (/^[-*]\s*(Hebrew|Greek):/i.test(line)) return false;
+      if (/^\s*Meaning:/i.test(line)) return false;
+      return true;
+    })
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return summary || undefined;
+}
+
+function buildStructuredResponsePayload(
+  content: string,
+  verses: VerseContext[],
+  translation: string
+): StructuredChatResponse | undefined {
+  const analysisSummary = extractAnalysisSummary(content);
+  const sections = verses
+    .map((verse) => buildStructuredVerseResponse(verse, translation))
+    .filter((section): section is NonNullable<ReturnType<typeof buildStructuredVerseResponse>> => Boolean(section));
+
+  return compactStructuredChatResponse({
+    ...(analysisSummary ? { analysis: { summary: analysisSummary } } : {}),
+    sections,
+  });
+}
+
 function normalizeResponseContent(content: string, verses: VerseContext[]): string {
   if (!content || !content.trim()) {
     return content;
@@ -616,7 +763,7 @@ function normalizeResponseContent(content: string, verses: VerseContext[]): stri
   normalized = normalized
     .replace(/^\s*[-*]?\s*Reference\s*:\s*(.+)$/gim, (_match, ref) => `- **${String(ref).trim()}**`)
     .replace(/^\s*[-*]?\s*Ref(?:erence)?\s*-\s*(.+)$/gim, (_match, ref) => `- **${String(ref).trim()}**`)
-    .replace(/^\s*([-*]\s*)?\*\*Original key words:?\*\*\s*$/gim, '**Original key words:**');
+    .replace(/^\s*([-*]\s*)?\*\*Original (?:key words|language details):?\*\*\s*$/gim, '**Original language details:**');
 
   const lines = normalized.split('\n');
   const output: string[] = [];
@@ -624,9 +771,17 @@ function normalizeResponseContent(content: string, verses: VerseContext[]): stri
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (/^\*\*Original key words:\*\*$/i.test(trimmed)) {
+    const formattedArtifact = formatMorphArtifactLine(line);
+    if (formattedArtifact) {
+      if (formattedArtifact.length > 0) {
+        output.push(...formattedArtifact);
+      }
+      continue;
+    }
+
+    if (/^\*\*Original (?:key words|language details):\*\*$/i.test(trimmed)) {
       inOriginalBlock = true;
-      output.push('**Original key words:**');
+      output.push('**Original language details:**');
       continue;
     }
 
@@ -655,24 +810,27 @@ function normalizeResponseContent(content: string, verses: VerseContext[]): stri
     normalized = `${normalized}\n\n${refs}`.trim();
   }
 
-  if (!/\*\*Original key words:\*\*/i.test(normalized)) {
+  if (!/\*\*Original (?:key words|language details):\*\*/i.test(normalized)) {
     const originalSections = verses
-      .filter((verse) => Array.isArray(verse.original) && verse.original.length > 0)
+      .map((verse) => ({
+        verse,
+        entries: normalizeOriginalLanguageEntries(verse.original),
+      }))
+      .filter(({ entries }) => entries.length > 0)
       .slice(0, 4)
-      .map((verse) => {
-        const words = verse.original
+      .map(({ verse, entries }) => {
+        const words = entries
           .slice(0, 6)
           .map((entry) => {
-            const parts: string[] = [];
-            if (entry.transliteration) parts.push(entry.transliteration);
-            parts.push(`Strong's ${entry.strongs}`);
-            if (entry.gloss) parts.push(`- ${entry.gloss}`);
-            if (entry.morph) parts.push(`Morph: ${entry.morph}`);
-            return `- ${entry.word} (${parts.join(', ')})`;
+            const language = entry.strongs.toUpperCase().startsWith('H') ? 'Hebrew' : 'Greek';
+            const label = entry.transliteration
+              ? `${language}: ${entry.word} (${entry.strongs}; ${entry.transliteration})`
+              : `${language}: ${entry.word} (${entry.strongs})`;
+            return `- ${label}\n  Meaning: ${entry.meaning}`;
           })
           .join('\n');
 
-        return `- **${verse.reference}**\n**Original key words:**\n${words}`;
+        return `- **${verse.reference}**\n**Original language details:**\n${words}`;
       })
       .join('\n\n');
 
@@ -792,6 +950,7 @@ async function executeUncachedPipeline(options: {
     verses,
     metadata: {
       translation: options.requestedTranslation,
+      response: buildStructuredResponsePayload(streamedContent, verses, options.requestedTranslation),
     },
   };
   logContextUtilizationDiagnostics(normalizedResponse.content, normalizedResponse.verses, {
@@ -998,6 +1157,11 @@ export async function POST(req: Request) {
         verses: cached.verses || [],
         metadata: {
           translation: requestedTranslation,
+          response: buildStructuredResponsePayload(
+            cachedStreamedContent,
+            cached.verses || [],
+            requestedTranslation
+          ),
         },
       };
       logContextUtilizationDiagnostics(cachedResponse.content, cachedResponse.verses, {

@@ -15,13 +15,16 @@ export interface OriginalLangProps {
 }
 
 export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, translit, strongs, gloss, morph, verseRef }: OriginalLangProps) {
+  const normalizedWord = word?.trim() || '';
+  const normalizedStrongs = strongs?.trim() || '';
+  const normalizedGloss = gloss?.trim() || '';
   const [resolvedMorph, setResolvedMorph] = React.useState<string | undefined>(morph);
   const [attemptedFetch, setAttemptedFetch] = React.useState(false);
   
   // Determine if hebrew based on strongs code starting with H
-  const isHebrew = strongs.startsWith('H');
+  const isHebrew = normalizedStrongs.startsWith('H');
   const langClass = isHebrew ? 'hebrew-text' : 'greek-text';
-  const bollsLink = `https://bolls.life/dictionary/${isHebrew ? 'BDBT' : 'TGNT'}/${strongs}`;
+  const bollsLink = `https://bolls.life/dictionary/${isHebrew ? 'BDBT' : 'TGNT'}/${normalizedStrongs}`;
   const morphValue = resolvedMorph ?? morph;
   const canFetchMorph = Boolean(isHebrew && verseRef && !morphValue);
   const decodedMorph = morphValue ? decodeMorph(morphValue) : null;
@@ -40,9 +43,9 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
     getMorphForVerse(verseRef as string)
       .then((words) => {
         if (!words) return;
-        const normWord = normalizeHebrew(word);
-        const exact = words.find((w) => w.s === strongs && normalizeHebrew(w.t) === normWord);
-        const byStrongs = words.find((w) => w.s === strongs);
+        const normWord = normalizeHebrew(normalizedWord);
+        const exact = words.find((w) => w.s === normalizedStrongs && normalizeHebrew(w.t) === normWord);
+        const byStrongs = words.find((w) => w.s === normalizedStrongs);
         const byWord = words.find((w) => normalizeHebrew(w.t) === normWord);
         const match = exact || byStrongs || byWord;
         if (match?.m) {
@@ -52,7 +55,11 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
       .catch(() => {
         // Silent: fallback to existing data
       });
-  }, [attemptedFetch, canFetchMorph, morphValue, verseRef, strongs, word]);
+  }, [attemptedFetch, canFetchMorph, morphValue, normalizedStrongs, normalizedWord, verseRef]);
+
+  if (!normalizedWord || !normalizedStrongs || !normalizedGloss) {
+    return null;
+  }
   
   return (
     <Popover>
@@ -62,35 +69,35 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
           dir={isHebrew ? 'rtl' : 'ltr'}
           className={`${langClass} cursor-pointer underline underline-offset-4 decoration-dotted font-semibold text-primary/90 bg-transparent border-0 p-0 appearance-none`}
         >
-          {word}
+          {normalizedWord}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[min(92vw,22rem)] max-h-[72vh] overflow-y-auto space-y-2 text-xs">
         <div className="flex items-center justify-between gap-2">
-          <span dir={isHebrew ? 'rtl' : 'ltr'} className={`${langClass} text-base font-bold bg-primary/5 px-2 py-1 rounded-md border border-primary/10`}>{word}</span>
+          <span dir={isHebrew ? 'rtl' : 'ltr'} className={`${langClass} text-base font-bold bg-primary/5 px-2 py-1 rounded-md border border-primary/10`}>{normalizedWord}</span>
           <a
             href={bollsLink}
             target="_blank"
             rel="noreferrer"
             className="text-[10px] font-mono text-muted-foreground underline underline-offset-2 shrink-0"
           >
-            {strongs}
+            {normalizedStrongs}
           </a>
         </div>
         {translit && (
           <div className="text-[11px] text-muted-foreground italic break-words">{translit}</div>
         )}
-        {gloss && (
+        {normalizedGloss && (
           <div className="rounded-md border bg-muted/40 p-2">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Gloss</div>
-            <div className="leading-relaxed break-words [overflow-wrap:anywhere]">{gloss}</div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Meaning</div>
+            <div className="leading-relaxed break-words [overflow-wrap:anywhere]">{normalizedGloss}</div>
           </div>
         )}
         <div className="rounded-md border bg-muted/40 p-2">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Strong&#39;s</div>
           <div className="font-mono text-[11px]">
             <a href={bollsLink} target="_blank" rel="noreferrer" className="underline underline-offset-2 text-primary/90">
-              {strongs}
+              {normalizedStrongs}
             </a>
           </div>
         </div>
