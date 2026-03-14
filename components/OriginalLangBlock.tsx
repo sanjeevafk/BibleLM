@@ -57,7 +57,7 @@ export const OriginalLangBlock = React.memo(function OriginalLangBlock({ word, t
       });
   }, [attemptedFetch, canFetchMorph, morphValue, normalizedStrongs, normalizedWord, verseRef]);
 
-  if (!normalizedWord || !normalizedStrongs || !normalizedGloss) {
+  if (!normalizedWord || !normalizedStrongs) {
     return null;
   }
   
