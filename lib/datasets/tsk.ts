@@ -1,5 +1,3 @@
-'use server';
-
 import { loadDataset, resolveDatasetPath } from './base';
 
 export type TskCrossReference = {

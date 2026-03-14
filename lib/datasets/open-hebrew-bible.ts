@@ -1,5 +1,3 @@
-'use server';
-
 import path from 'path';
 
 import { loadJsonDataset, markDatasetMissing, resolveDatasetPath } from './base';

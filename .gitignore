@@ -41,8 +41,6 @@ next-env.d.ts
 
 #local-files
 datasets/
-!lib/datasets/
-!lib/datasets/**
 bibleLM-analysis.md
 Dataset&RetrievalEnrichment.md
 

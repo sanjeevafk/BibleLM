@@ -1,5 +1,3 @@
-'use server';
-
 import { loadJsonDataset, resolveDatasetPath } from './base';
 
 export type StrongsEntry = {

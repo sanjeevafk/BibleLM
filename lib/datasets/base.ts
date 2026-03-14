@@ -1,5 +1,3 @@
-'use server';
-
 import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
@@ -80,8 +78,13 @@ async function loadDatasetInternal<T>(
       datasetCache.set(datasetKey, parsed as unknown);
       return parsed;
     } catch (error) {
-      console.warn(`Dataset load failed for ${datasetKey}`, error);
-      missingDatasets.add(datasetKey);
+      if (isFileNotFoundError(error)) {
+        console.warn(`Dataset file not found for ${datasetKey}`, error);
+        missingDatasets.add(datasetKey);
+        return null;
+      }
+
+      console.error(`Dataset parse/load failed for ${datasetKey}`, error);
       return null;
     } finally {
       datasetInflight.delete(datasetKey);
@@ -116,4 +119,13 @@ export async function loadTextDataset(
 
 export function markDatasetMissing(datasetKey: string): void {
   missingDatasets.add(datasetKey);
+}
+
+function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
 }

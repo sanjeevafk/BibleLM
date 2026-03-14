@@ -1,5 +1,3 @@
-'use server';
-
 import { loadJsonDataset, resolveDatasetPath } from './base';
 
 export type VerseGenre =
@@ -32,8 +30,13 @@ export async function getVerseMetadataMap(): Promise<Map<string, VerseMetadata>>
   }
 
   verseMetadataMapPromise = (async () => {
-    const data = await loadElianwongVerseMetadata();
-    return new Map(data.filter((entry) => entry?.verseId).map((entry) => [entry.verseId, entry]));
+    try {
+      const data = await loadElianwongVerseMetadata();
+      return new Map(data.filter((entry) => entry?.verseId).map((entry) => [entry.verseId, entry]));
+    } catch (error) {
+      verseMetadataMapPromise = null;
+      throw error;
+    }
   })();
 
   return verseMetadataMapPromise;
