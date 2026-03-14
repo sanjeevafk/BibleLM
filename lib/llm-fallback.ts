@@ -27,9 +27,21 @@ const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
 const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.1;
+let geminiDisabledUntil = 0;
 
 function roundDurationMs(durationMs: number): number {
   return Number(durationMs.toFixed(2));
+}
+
+function isGeminiAvailable(): boolean {
+  return Date.now() > geminiDisabledUntil;
+}
+
+function isGeminiQuotaError(error: unknown): boolean {
+  const message = String((error as { message?: string })?.message || error || '').toUpperCase();
+  const status = (error as { status?: number })?.status;
+
+  return status === 429 || message.includes('429') || message.includes('RESOURCE_EXHAUSTED');
 }
 
 function logModelFailure(model: string, error: unknown) {
@@ -313,28 +325,42 @@ export async function generateWithFallback(
 
     const geminiKey = process.env.GEMINI_API_KEY;
     if (geminiKey) {
-      const candidates = Array.from(new Set(GEMINI_MODEL_CANDIDATES.filter(Boolean)));
-      for (const modelName of candidates) {
-        try {
-          const result = await streamGeminiContent(
-            modelName,
-            prompt,
-            geminiKey,
-            temperature,
-            maxTokens,
-            options.onChunk
-          );
-          const text = result.text;
-          if (text) {
-            console.log('Primary LLM: Gemini');
-            console.log(`[llm-fallback] Using primary provider: gemini:${modelName}`);
-            return { type: 'content', content: text, modelUsed: `gemini:${modelName}`, chunks: result.chunks };
-          }
-          throw new Error('Gemini returned empty output');
-        } catch (error) {
-          logModelFailure(`gemini:${modelName}`, error);
-          if (isModelNotFoundError(error)) {
-            console.warn(`[llm-fallback] Gemini model alias unavailable, trying next candidate: ${modelName}`);
+      if (!isGeminiAvailable()) {
+        console.warn('[llm-fallback] gemini disabled — using fallback');
+      } else {
+        const candidates = Array.from(new Set(GEMINI_MODEL_CANDIDATES.filter(Boolean)));
+        for (const modelName of candidates) {
+          try {
+            if (!isGeminiAvailable()) {
+              throw new Error('GEMINI_TEMP_DISABLED');
+            }
+
+            const result = await streamGeminiContent(
+              modelName,
+              prompt,
+              geminiKey,
+              temperature,
+              maxTokens,
+              options.onChunk
+            );
+            const text = result.text;
+            if (text) {
+              console.log('Primary LLM: Gemini');
+              console.log(`[llm-fallback] Using primary provider: gemini:${modelName}`);
+              return { type: 'content', content: text, modelUsed: `gemini:${modelName}`, chunks: result.chunks };
+            }
+            throw new Error('Gemini returned empty output');
+          } catch (error) {
+            if (isGeminiQuotaError(error)) {
+              geminiDisabledUntil = Date.now() + 60 * 60 * 1000;
+              console.warn('Gemini temporarily disabled due to quota limit');
+              break;
+            }
+
+            logModelFailure(`gemini:${modelName}`, error);
+            if (isModelNotFoundError(error)) {
+              console.warn(`[llm-fallback] Gemini model alias unavailable, trying next candidate: ${modelName}`);
+            }
           }
         }
       }
