@@ -43,6 +43,7 @@ next-env.d.ts
 datasets/
 bibleLM-analysis.md
 Dataset&RetrievalEnrichment.md
+local-docs/
 
 # generated benchmark outputs
 project-docs/benchmark/latest-report.json
