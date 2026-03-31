@@ -554,7 +554,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
                       )}
 
                       {hasStructuredOriginal || hasMarkdownOriginal ? (
-                        <Accordion type="single" collapsible className="w-full border-t border-border/40 mt-4">
+                        <Accordion type="single" className="w-full border-t border-border/40 mt-4">
                           <AccordionItem value={`${block.id}-orig`} className="border-b-0">
                             <AccordionTrigger className="py-3 px-1 text-[10px] sm:text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground/60 hover:text-primary transition-colors hover:no-underline">
                               Original Words & Meanings
