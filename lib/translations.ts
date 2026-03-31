@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import zlib from 'zlib';
-import bibleIndexData from '../data/bible-index.json';
+import bibleIndexData from '../data/bible-full-index.json';
 
 type TranslationBook = Record<string, Record<string, string>>;
 type IndexedVerse = { text?: string };

@@ -11,12 +11,12 @@ import {
   type VerseContext,
 } from '../bible-fetch';
 import { getTranslationVerse } from '../translations';
-import bibleIndexData from '../../data/bible-index.json';
+import bibleIndexData from '../../data/bible-full-index.json';
 import { LOCAL_TRANSLATIONS } from './types';
 import { parseReferenceKey, cloneVerses } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
 import { enrichOriginalLanguages } from './enrichment';
-import { getLexicalFuse } from './search';
+import { getBM25Engine } from './search';
 import type { RetrievalDebugState } from './types';
 
 const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
@@ -253,14 +253,14 @@ export function attachIndexedOriginals(verses: VerseContext[]): void {
 export async function fallbackBundledLexicalSearch(
   query: string,
   translation: string,
-  limit = 6
+  limit = 25
 ): Promise<VerseContext[]> {
-  const topK = Math.max(1, Math.floor(limit));
-  const fuse = await getLexicalFuse();
-  const hits = fuse.search(query, { limit: topK * 3 });
-  const verseIds = hits.map((hit) => hit.item.verseId).slice(0, topK);
+  const engine = await getBM25Engine();
+  const hits = engine.search(query, limit);
+  const verseIds = hits.map((hit) => hit.doc.id);
   return fetchVersesByIds(verseIds, translation);
 }
+
 
 // ---------------------------------------------------------------------------
 // retrieveContextViaApis — fallback when DB has nothing useful

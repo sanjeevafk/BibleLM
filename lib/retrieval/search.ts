@@ -3,7 +3,7 @@
  * all retrieval debug/diagnostics infrastructure.
  */
 
-import Fuse from 'fuse.js';
+import { BM25Engine } from './bm25';
 import { getCrossReferences } from '../datasets/tsk';
 import { ENABLE_RETRIEVAL_DEBUG, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
@@ -21,27 +21,21 @@ import {
 } from './types';
 import { tokenizeFallbackQuery } from './verse-utils';
 
-let lexicalFuse: Fuse<LexicalDoc> | null = null;
+let bm25Engine: BM25Engine | null = null;
 
-export async function getLexicalFuse(): Promise<Fuse<LexicalDoc>> {
-  if (!lexicalFuse) {
-    const bibleIndexData = (await import('../../data/bible-index.json')).default;
+export async function getBM25Engine(): Promise<BM25Engine> {
+  if (!bm25Engine) {
+    const bibleIndexData = (await import('../../data/bible-full-index.json')).default;
     const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
-    const LEXICAL_DOCS: LexicalDoc[] = Object.values(BIBLE_INDEX).map((verse) => ({
-      verseId: verse.reference,
-      text: verse.text,
-    }));
-
-    lexicalFuse = new Fuse(LEXICAL_DOCS, {
-      keys: ['text'],
-      includeScore: true,
-      threshold: RETRIEVAL_CONFIG.fuse.lexicalThreshold,
-      minMatchCharLength: RETRIEVAL_CONFIG.fuse.minMatchCharLength,
-      ignoreLocation: true,
+    bm25Engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
+      k1: RETRIEVAL_CONFIG.bm25.k1,
+      b: RETRIEVAL_CONFIG.bm25.b,
+      phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
     });
   }
-  return lexicalFuse;
+  return bm25Engine;
 }
+
 
 
 // ---------------------------------------------------------------------------
@@ -207,14 +201,29 @@ export async function hybridSearch(
 ): Promise<VerseResult[]> {
   const topK = clampTopK(options?.topK);
   const translation = options?.translation || 'BSB';
-  const fuse = await getLexicalFuse();
-  const lexicalHits = fuse.search(query, { limit: topK * 3 });
+  const engine = await getBM25Engine();
+  const bm25Hits = engine.search(query, RETRIEVAL_CONFIG.bm25.candidateLimit);
 
-  const scored: RankedVerse[] = lexicalHits.map((hit, index) => ({
-    verseId: hit.item.verseId,
-    score: 1 / (index + 1),
+
+  if (bm25Hits.length === 0) {
+    if (debugState) {
+      addRetrievalStageTrace(debugState, { stage: 'bm25_search', action: 'no_match', query });
+      debugState.hybridTopKRefs = [];
+    }
+    return [];
+  }
+
+  // Min-Max Normalization for BM25 scores
+  const maxScore = bm25Hits[0].score;
+  const minScore = bm25Hits[bm25Hits.length - 1].score;
+  const scoreDiff = maxScore - minScore || 1;
+
+  const scored: RankedVerse[] = bm25Hits.map((hit, index) => ({
+    verseId: hit.doc.id,
+    score: (hit.score - minScore) / scoreDiff,
     rankLexical: index + 1,
   }));
+
 
   if (scored.length === 0) {
     if (debugState) {
@@ -226,9 +235,10 @@ export async function hybridSearch(
 
   if (debugState) {
     addRetrievalStageTrace(debugState, {
-      stage: 'lexical_search', action: 'applied', query,
-      candidate_count: scored.length, limit: topK * 3,
+      stage: 'bm25_search', action: 'applied', query,
+      candidate_count: scored.length, limit: RETRIEVAL_CONFIG.bm25.candidateLimit,
     });
+
     scored.forEach((hit, index) => {
       debugState.candidateTraces.set(hit.verseId, {
         reference: hit.verseId,

@@ -21,10 +21,11 @@ export const LOCAL_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB']);
 export const CONTEXT_CACHE_VERSION = 'v3';
 
 export const RETRIEVAL_CONFIG = {
-  fuse: {
-    lexicalThreshold: 0.32,
-    candidateLimit: 18,
-    minMatchCharLength: 3,
+  bm25: {
+    k1: 1.2,
+    b: 0.65,
+    phraseBoost: 1.5,
+    candidateLimit: 25,
   },
   finalCandidateWindow: {
     default: 5,
@@ -32,6 +33,7 @@ export const RETRIEVAL_CONFIG = {
     max: 8,
   },
 } as const;
+
 
 export const TSK_CONFIG = {
   MIN_CORE_VERSE_COUNT: 4,
