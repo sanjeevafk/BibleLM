@@ -50,3 +50,4 @@ project-docs/benchmark/latest-report.md
 .vscode/settings.json
 verify_regex.js
 .vscode/settings.json
+/PROJECT_OWNER.md
