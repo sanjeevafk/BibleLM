@@ -30,7 +30,7 @@ export class BM25Engine {
   private docLengths: Map<string, number> = new Map();
   private termFreqs: Map<string, Map<string, number>> = new Map(); // term -> docId -> count
   private docFreqs: Map<string, number> = new Map(); // term -> docCount
-  
+
   private docs: Map<string, BM25Doc> = new Map();
 
   constructor(config: BM25Config = {}) {
@@ -110,11 +110,11 @@ export class BM25Engine {
       const docFreqMap = this.termFreqs.get(term)!;
       for (const [docId, tf] of docFreqMap.entries()) {
         const dl = this.docLengths.get(docId)!;
-        
+
         // BM25 Score formula
         const numerator = tf * (this.k1 + 1);
         const denominator = tf + this.k1 * (1 - this.b + this.b * (dl / this.avgDocLength));
-        
+
         const termScore = idf * (numerator / denominator);
         scores.set(docId, (scores.get(docId) || 0) + termScore);
       }
@@ -171,8 +171,12 @@ export class BM25Engine {
   public importState(state: any, indexData: Record<string, { text: string }>) {
     this.totalDocs = state.totalDocs;
     this.avgDocLength = state.avgDocLength;
-    this.docFreqs = new Map(Object.entries(state.docFreqs));
-    this.docLengths = new Map(Object.entries(state.docLengths));
+    this.docFreqs = new Map(
+      Object.entries(state.docFreqs).map(([k, v]) => [k, Number(v)])
+    );
+    this.docLengths = new Map(
+      Object.entries(state.docLengths).map(([k, v]) => [k, Number(v)])
+    );
     this.termFreqs = new Map(
       Object.entries(state.termFreqs).map(([term, docMap]) => [
         term,

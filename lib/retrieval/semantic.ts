@@ -24,7 +24,10 @@ export async function reRankSemantic(
     const model = (genAI as any).getGenerativeModel({ model: 'text-embedding-004' });
 
     // 1. Generate query embedding
-    const queryResult = await model.embedContent(query);
+    const queryResult = await model.embedContent({
+      content: { role: 'user', parts: [{ text: query }] },
+      taskType: 'RETRIEVAL_QUERY'
+    });
     const queryEmbedding = queryResult.embedding.values;
 
     // 2. Generate embeddings for candidates
@@ -50,17 +53,22 @@ export async function reRankSemantic(
 
     const scored = candidates.map((candidate, i) => {
       const docEmbedding = docEmbeddings[i];
-      if (!docEmbedding) return candidate;
+      
+      // Calculate normalized BM25 score regardless (shared scale window [0,1])
+      const normalizedBM25 = Math.max(0, Math.min(1, (candidate.score - bm25Min) / bm25Range));
+
+      if (!docEmbedding) {
+        return {
+          ...candidate,
+          score: normalizedBM25, // Fallback to normalized BM25 only
+        };
+      }
 
       const similarity = dotProduct(queryEmbedding, docEmbedding);
 
       // Normalize Similarity to [0, 1]
       // dotProduct on normalized embeddings yields cosine similarity in [-1, 1]
       const normalizedSimilarity = (similarity + 1) / 2;
-
-      // Normalize BM25 score to [0, 1]
-      // min-max normalization against the current batch window
-      const normalizedBM25 = Math.max(0, Math.min(1, (candidate.score - bm25Min) / bm25Range));
 
       // Blend Lexical and Semantic scores
       // higher alpha weights semantic similarity more heavily

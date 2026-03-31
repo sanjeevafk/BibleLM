@@ -153,9 +153,10 @@ export async function retrieveContextForQuery(
   const expansionLimit = 3;
   
   const expansionTasks = limitedIds.slice(0, expansionLimit).map(id => fetchContextWindow(id, translation, 1));
-  const remainingTasks = limitedIds.slice(expansionLimit).map(id => fetchVersesByIds([id], translation));
+  const remainingIds = limitedIds.slice(expansionLimit);
+  const remainingTask = remainingIds.length > 0 ? fetchVersesByIds(remainingIds, translation) : Promise.resolve([]);
   
-  const allResults = await Promise.all([...expansionTasks, ...remainingTasks]);
+  const allResults = await Promise.all([...expansionTasks, remainingTask]);
   for (const res of allResults) {
     expandedVerses.push(...res);
   }

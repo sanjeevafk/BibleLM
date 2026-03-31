@@ -8,6 +8,12 @@ async function buildIndex() {
   const indexPath = path.join(process.cwd(), 'data', 'bible-full-index.json');
   const outputPath = path.join(process.cwd(), 'data', 'bm25-state.json');
 
+  // Ensure output directory exists
+  const outputDir = path.dirname(outputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
   if (!fs.existsSync(indexPath)) {
     console.error('Error: bible-full-index.json not found. Run scripts/prepare-index.ts first.');
     process.exit(1);
