@@ -1,7 +1,13 @@
-import { simulateReadableStream, streamText } from 'ai';
+/**
+ * POST /api/chat — HTTP handler.
+ *
+ * This file is intentionally thin: request parsing, rate limiting, cache
+ * lookup, pipeline delegation, and streaming. All business logic lives in
+ * the sibling lib/ modules.
+ */
+
+import { streamText } from 'ai';
 import { createHash, randomUUID } from 'crypto';
-import { retrieveContextForQuery } from '@/lib/retrieval';
-import { buildCitationWhitelist, buildContextPrompt, expandCitationReference, SYSTEM_PROMPT } from '@/lib/prompts';
 import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache';
 import { generateWithFallback } from '@/lib/llm-fallback';
 import { validateDataIntegrity } from '@/lib/validate-data';
@@ -9,6 +15,8 @@ import type { VerseContext } from '@/lib/bible-fetch';
 import { redis } from '@/lib/redis';
 import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
 import { inMemoryRateLimit } from '@/lib/rate-limit-memory';
+import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
+import { retrieveContextForQuery } from '@/lib/retrieval';
 import {
   buildStructuredVerseResponse,
   compactStructuredChatResponse,
@@ -16,7 +24,21 @@ import {
   type StructuredChatResponse,
 } from '@/lib/verse-response';
 
+import { getClientIp } from './lib/ip-utils';
+import { scrubInvalidCitations } from './lib/citation-scrubber';
+import {
+  normalizeResponseContent,
+  buildStructuredResponsePayload,
+  ensureFallbackBanner,
+  logContextUtilizationDiagnostics,
+  streamTextFromContent,
+} from './lib/response-normalizer';
+
 // export const runtime = 'edge';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 const PRIMARY_MODEL = 'gemini-2.5-flash';
 const PRIMARY_MODEL_USED = `gemini:${PRIMARY_MODEL}`;
@@ -32,7 +54,25 @@ const CACHE_MODEL_CANDIDATES = [
   `hf:${HF_FALLBACK_MODEL}`,
   'context-only',
 ];
+
+const DEBUG_LLM = ENABLE_RETRIEVAL_DEBUG;
+const RATE_LIMIT_WINDOW_SECONDS = 60;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+const RATE_LIMIT_WARN_THRESHOLD = 50;
+
+const RATE_LIMIT_SCRIPT = `
+local current = redis.call("INCR", KEYS[1])
+if current == 1 then
+  redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return current
+`;
+
 const dataValidationPromise = validateDataIntegrity();
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type NormalizedChatResponse = {
   content: string;
@@ -79,36 +119,18 @@ type ModelHistoryMessage = {
   content: string;
 };
 
-const DEBUG_LLM = ENABLE_RETRIEVAL_DEBUG;
-const RATE_LIMIT_WINDOW_SECONDS = 60;
-const RATE_LIMIT_MAX_REQUESTS = 60;
-const RATE_LIMIT_WARN_THRESHOLD = 50;
+// ---------------------------------------------------------------------------
+// Latency utilities
+// ---------------------------------------------------------------------------
+
 const EMPTY_LATENCY_METRICS: LatencyMetrics = {
-  cache_lookup_ms: 0,
-  retrieve_total_ms: 0,
-  embed_ms: 0,
-  vector_ms: 0,
-  fetch_verses_db_ms: 0,
-  fetch_verses_api_ms: 0,
-  enrich_ms: 0,
-  prompt_build_ms: 0,
-  llm_ms: 0,
-  post_normalize_ms: 0,
-  total_ms: 0,
+  cache_lookup_ms: 0, retrieve_total_ms: 0, embed_ms: 0, vector_ms: 0,
+  fetch_verses_db_ms: 0, fetch_verses_api_ms: 0, enrich_ms: 0,
+  prompt_build_ms: 0, llm_ms: 0, post_normalize_ms: 0, total_ms: 0,
 };
-const RATE_LIMIT_SCRIPT = `
-local current = redis.call("INCR", KEYS[1])
-if current == 1 then
-  redis.call("EXPIRE", KEYS[1], ARGV[1])
-end
-return current
-`;
-const inflightRequests = new Map<string, Promise<PipelineExecutionResult>>();
 
 function debugLog(...args: unknown[]) {
-  if (DEBUG_LLM) {
-    console.log(...args);
-  }
+  if (DEBUG_LLM) console.log(...args);
 }
 
 function roundLatencyMs(durationMs: number): number {
@@ -122,6 +144,12 @@ function createLatencyMetrics(): LatencyMetrics {
 function setLatencyMetric(metrics: LatencyMetrics, metric: LatencyMetricName, durationMs: number): void {
   metrics[metric] = roundLatencyMs(durationMs);
 }
+
+// ---------------------------------------------------------------------------
+// In-flight request deduplication
+// ---------------------------------------------------------------------------
+
+const inflightRequests = new Map<string, Promise<PipelineExecutionResult>>();
 
 function normalizeInflightQuery(query: string): string {
   return query.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -144,148 +172,17 @@ function buildInflightRequestKeyWithHistory(
   return `${buildInflightRequestKey(query, translation, model)}\u0000${hashModelHistory(modelHistory)}`;
 }
 
-async function findPreferredCachedResponse(
-  query: string,
-  translation: string
-): Promise<CacheLookupResult | null> {
-  const cacheCandidates = CACHE_MODEL_CANDIDATES.map((modelKey) => ({
-    modelKey,
-    cacheKey: buildCacheKey({
-      query,
-      translation,
-      model: modelKey,
-    }),
-  }));
-
-  const results = await Promise.all(
-    cacheCandidates.map(async ({ modelKey, cacheKey }) => ({
-      modelKey,
-      cacheKey,
-      response: await getCachedResponse({
-        query,
-        translation,
-        model: modelKey,
-      }),
-    }))
-  );
-
-  return results.find((result) => result.response?.response) ?? null;
-}
-
-function isValidIPv4(value: string): boolean {
-  const parts = value.split('.');
-  if (parts.length !== 4) return false;
-  return parts.every((part) => {
-    if (!/^\d{1,3}$/.test(part)) return false;
-    const num = Number(part);
-    return num >= 0 && num <= 255;
-  });
-}
-
-function isLikelyIPv6(value: string): boolean {
-  if (!value.includes(':')) return false;
-  return /^[0-9a-f:]+$/i.test(value);
-}
-
-function normalizeIpCandidate(candidate: string | null | undefined): string | null {
-  if (!candidate) return null;
-  let value = candidate.trim();
-  if (!value) return null;
-
-  // x-forwarded-for may contain a comma-separated chain.
-  if (value.includes(',')) {
-    value = value.split(',')[0]?.trim() || '';
-  }
-
-  if (!value) return null;
-
-  // Strip brackets from IPv6 format "[::1]:443".
-  if (value.startsWith('[') && value.includes(']')) {
-    value = value.slice(1, value.indexOf(']'));
-  }
-
-  // Strip port from IPv4 format "1.2.3.4:1234".
-  const ipv4WithPortMatch = value.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/);
-  if (ipv4WithPortMatch) {
-    value = ipv4WithPortMatch[1];
-  }
-
-  // Normalize IPv4-mapped IPv6 "::ffff:1.2.3.4".
-  if (value.startsWith('::ffff:')) {
-    value = value.slice('::ffff:'.length);
-  }
-
-  // Remove IPv6 scope zone, e.g. "fe80::1%eth0".
-  value = value.split('%')[0];
-
-  if (isValidIPv4(value) || isLikelyIPv6(value)) {
-    return value.toLowerCase();
-  }
-  return null;
-}
-
-function getClientIp(req: Request): string | null {
-  const candidates = [
-    req.headers.get('x-vercel-forwarded-for'),
-    req.headers.get('cf-connecting-ip'),
-    req.headers.get('x-real-ip'),
-    req.headers.get('x-forwarded-for'),
-  ];
-
-  for (const candidate of candidates) {
-    const parsed = normalizeIpCandidate(candidate);
-    if (parsed) {
-      return parsed;
-    }
-  }
-
-  return null;
-}
-
-async function incrementRateLimitCounter(rateLimitKey: string): Promise<number | null> {
-  if (!redis) {
-    return null;
-  }
-
-  try {
-    const rawCount = await redis.eval<[string], number>(RATE_LIMIT_SCRIPT, [rateLimitKey], [
-      String(RATE_LIMIT_WINDOW_SECONDS),
-    ]);
-    const count = Number(rawCount);
-    return Number.isFinite(count) ? count : null;
-  } catch (error) {
-    console.warn('[rate-limit] Atomic counter failed; falling back to non-atomic INCR/EXPIRE.', error);
-    if (!redis) {
-      return null;
-    }
-    try {
-      const fallbackCount = await redis.incr(rateLimitKey);
-      if (fallbackCount === 1) {
-        await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
-      }
-      return fallbackCount;
-    } catch (fallbackError) {
-      console.warn('[rate-limit] Fallback counter failed; disabling rate limit for this request.', fallbackError);
-      return null;
-    }
-  }
-}
+// ---------------------------------------------------------------------------
+// Model ID normalization
+// ---------------------------------------------------------------------------
 
 function normalizeModelId(modelUsed: string | undefined): string {
   if (!modelUsed) return PRIMARY_MODEL_USED;
   if (modelUsed.includes(':') || modelUsed === 'context-only') return modelUsed;
-  if (modelUsed === PRIMARY_MODEL) {
-    return `gemini:${modelUsed}`;
-  }
-  if (modelUsed === GROQ_FALLBACK_MODEL || modelUsed === GROQ_SECONDARY_MODEL) {
-    return `groq:${modelUsed}`;
-  }
-  if (modelUsed === OPENROUTER_MODEL) {
-    return `openrouter:${modelUsed}`;
-  }
-  if (modelUsed === HF_FALLBACK_MODEL) {
-    return `hf:${modelUsed}`;
-  }
+  if (modelUsed === PRIMARY_MODEL) return `gemini:${modelUsed}`;
+  if (modelUsed === GROQ_FALLBACK_MODEL || modelUsed === GROQ_SECONDARY_MODEL) return `groq:${modelUsed}`;
+  if (modelUsed === OPENROUTER_MODEL) return `openrouter:${modelUsed}`;
+  if (modelUsed === HF_FALLBACK_MODEL) return `hf:${modelUsed}`;
   return modelUsed;
 }
 
@@ -301,600 +198,65 @@ function buildPrompt(
   history: Array<{ role: 'system' | 'assistant' | 'user'; content: string }>
 ): string {
   const historyLines = history
-    .filter((message) => message.role !== 'system')
-    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
+    .filter((m) => m.role !== 'system')
+    .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`)
     .join('\n');
-
-  if (historyLines.trim()) {
-    return `${finalPrompt}\n\nCONVERSATION HISTORY\n${historyLines}`;
-  }
-
-  return finalPrompt;
+  return historyLines.trim() ? `${finalPrompt}\n\nCONVERSATION HISTORY\n${historyLines}` : finalPrompt;
 }
 
-function normalizeCitationToken(citation: string): string {
-  const trimmed = citation.trim();
-  let end = trimmed.length;
-
-  while (end > 0) {
-    const char = trimmed[end - 1];
-    if (!'()[],.;:!?'.includes(char)) {
-      break;
-    }
-    end -= 1;
-  }
-
-  return collapseCitationWhitespace(trimmed.slice(0, end));
-}
-
-function collapseCitationWhitespace(value: string): string {
-  let result = '';
-  let previousWasWhitespace = false;
-
-  for (const char of value) {
-    const isWhitespace =
-      char === ' ' ||
-      char === '\n' ||
-      char === '\r' ||
-      char === '\t' ||
-      char === '\f' ||
-      char === '\v';
-
-    if (isWhitespace) {
-      if (!previousWasWhitespace && result.length > 0) {
-        result += ' ';
-      }
-      previousWasWhitespace = true;
-      continue;
-    }
-
-    result += char;
-    previousWasWhitespace = false;
-  }
-
-  return result.trim();
-}
-
-function removeAllOccurrences(value: string, target: string): string {
-  if (!target) return value;
-
-  let result = value;
-  let index = result.indexOf(target);
-  while (index !== -1) {
-    result = `${result.slice(0, index)}${result.slice(index + target.length)}`;
-    index = result.indexOf(target);
-  }
-  return result;
-}
-
-function stripBracketedCitationSegments(content: string, citation: string, opening: string, closing: string): string {
-  if (!citation) return content;
-
-  let result = content;
-  let searchStart = 0;
-
-  while (searchStart < result.length) {
-    const citationIndex = result.indexOf(citation, searchStart);
-    if (citationIndex === -1) {
-      break;
-    }
-
-    const openingIndex = result.lastIndexOf(opening, citationIndex);
-    const closingIndex = result.indexOf(closing, citationIndex + citation.length);
-    if (openingIndex !== -1 && closingIndex !== -1) {
-      const segment = result.slice(openingIndex + 1, closingIndex);
-      if (segment.includes(citation)) {
-        result = `${result.slice(0, openingIndex)}${result.slice(closingIndex + 1)}`;
-        searchStart = openingIndex;
-        continue;
-      }
-    }
-
-    searchStart = citationIndex + citation.length;
-  }
-
-  return result;
-}
-
-function stripEmptyCitationDelimiters(content: string): string {
-  let result = content;
-  let changed = true;
-
-  while (changed) {
-    changed = false;
-
-    for (const pair of ['()', '[]']) {
-      const next = removeAllOccurrences(result, pair);
-      if (next !== result) {
-        result = next;
-        changed = true;
-      }
-    }
-  }
-
-  return result;
-}
-
-function collapseRepeatedSpacesPerLine(value: string): string {
-  let result = '';
-  let previousWasSpace = false;
-
-  for (const char of value) {
-    if (char === ' ' || char === '\t') {
-      if (!previousWasSpace) {
-        result += ' ';
-      }
-      previousWasSpace = true;
-      continue;
-    }
-
-    result += char;
-    previousWasSpace = false;
-  }
-
-  return result;
-}
-
-function collapseBlankLines(value: string): string {
-  let result = '';
-  let consecutiveNewlines = 0;
-
-  for (const char of value) {
-    if (char === '\n') {
-      consecutiveNewlines += 1;
-      if (consecutiveNewlines <= 2) {
-        result += char;
-      }
-      continue;
-    }
-
-    consecutiveNewlines = 0;
-    result += char;
-  }
-
-  return result;
-}
-
-function removeSpaceBeforeCitationPunctuation(value: string): string {
-  let result = '';
-
-  for (const char of value) {
-    if (',.;:!?'.includes(char) && result.endsWith(' ')) {
-      result = result.slice(0, -1);
-    }
-    result += char;
-  }
-
-  return result;
-}
-
-function buildCitationWhitelistSet(verses: VerseContext[]): Set<string> {
-  const whitelist = new Set<string>();
-  for (const citation of buildCitationWhitelist(verses)) {
-    const normalized = normalizeCitationToken(citation);
-    if (normalized) {
-      whitelist.add(normalized.toLowerCase());
-    }
-  }
-  return whitelist;
-}
-
-function extractCitations(content: string): string[] {
-  const matches = content.match(
-    /(?<![1-3]\s)\b(?:[1-3][A-Z]{2}|[A-Z]{2,3}|[1-3]\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+\d+:\d+(?:[-–]\d+)?\b/g
-  );
-  return matches ? matches.map((match) => normalizeCitationToken(match)) : [];
-}
-
-function isAllowedCitation(citation: string, whitelist: Set<string>): boolean {
-  const normalized = normalizeCitationToken(citation);
-  if (!normalized) {
-    return true;
-  }
-
-  const expanded = expandCitationReference(normalized);
-  return whitelist.has(normalized.toLowerCase()) || whitelist.has(expanded.toLowerCase());
-}
-
-function scrubInvalidCitations(content: string, verses: VerseContext[]): string {
-  const whitelist = buildCitationWhitelistSet(verses);
-  if (whitelist.size === 0) {
-    return content;
-  }
-
-  const citations = extractCitations(content);
-  const invalidCitations = Array.from(
-    new Set(citations.filter((citation) => !isAllowedCitation(citation, whitelist)))
-  );
-
-  if (invalidCitations.length === 0) {
-    return content;
-  }
-
-  let sanitized = content;
-  for (const citation of invalidCitations) {
-    sanitized = stripBracketedCitationSegments(sanitized, citation, '(', ')');
-    sanitized = stripBracketedCitationSegments(sanitized, citation, '[', ']');
-    sanitized = removeAllOccurrences(sanitized, citation);
-  }
-
-  sanitized = stripEmptyCitationDelimiters(sanitized);
-  sanitized = collapseRepeatedSpacesPerLine(sanitized);
-  sanitized = collapseBlankLines(sanitized);
-  sanitized = removeSpaceBeforeCitationPunctuation(sanitized).trim();
-
-  console.info(JSON.stringify({
-    event: 'citation_whitelist_enforced',
-    removedCitations: invalidCitations,
-    allowedCitations: Array.from(whitelist),
-  }));
-
-  return sanitized;
-}
-
-function logContextUtilizationDiagnostics(
-  content: string,
-  verses: VerseContext[],
-  options?: {
-    requestId?: string;
-    modelUsed?: string | null;
-    cacheHit?: boolean;
-  }
-): void {
-  if (!DEBUG_LLM) {
-    return;
-  }
-
-  const retrievedWhitelist = buildCitationWhitelistSet(verses);
-  const citedWhitelist = new Set(
-    extractCitations(content)
-      .map((citation) => expandCitationReference(normalizeCitationToken(citation)).toLowerCase())
-      .filter((citation) => retrievedWhitelist.has(citation))
-  );
-
-  const retrievedCount = retrievedWhitelist.size;
-  const citedCount = citedWhitelist.size;
-  const citationUtilization = retrievedCount > 0
-    ? Number((citedCount / retrievedCount).toFixed(2))
-    : 0;
-
-  console.info(JSON.stringify({
-    event: 'context_utilization',
-    requestId: options?.requestId,
-    modelUsed: options?.modelUsed,
-    cacheHit: options?.cacheHit ?? false,
-    retrieved_count: retrievedCount,
-    cited_count: citedCount,
-    citation_utilization: citationUtilization,
-  }));
-}
-
-function ensureFallbackBanner(
-  content: string,
-  modelUsed: string,
-  fallbackUsed: boolean,
-  finalFallback: boolean
-): string {
-  if (!fallbackUsed || finalFallback) {
-    return content;
-  }
-  const banner = `Using fallback model: ${modelUsed} due to rate limits / availability`;
-  if (content.startsWith(banner)) {
-    return content;
-  }
-  return `${banner}\n\n${content}`;
-}
-
-function normalizeOriginalKeywordLine(line: string): string {
-  const match = line.match(/^(\s*[-*]\s+)(.+)$/);
-  if (!match) {
-    return line;
-  }
-
-  const prefix = match[1];
-  const body = match[2].trim();
-  if (!body || body.startsWith('`') || body.startsWith('```')) {
-    return line;
-  }
-
-  const wordWithMetaMatch = body.match(/^(\[?[^\(\]]+\]?)(\s*\(.*\))$/);
-  if (wordWithMetaMatch) {
-    const word = wordWithMetaMatch[1].replace(/^\[|\]$/g, '').trim();
-    const rest = wordWithMetaMatch[2].trim();
-    return `${prefix}\`${word}\` ${rest}`;
-  }
-
-  const compactMatch = body.match(/^([^\s,;:]+)(.*)$/);
-  if (!compactMatch) {
-    return line;
-  }
-
-  const word = compactMatch[1].replace(/^\[|\]$/g, '').trim();
-  const rest = compactMatch[2] || '';
-  return `${prefix}\`${word}\`${rest}`;
-}
-
-function formatMorphArtifactLine(line: string): string[] | null {
-  const trimmed = line.trim();
-  const payload = trimmed
-    .replace(/^[-*]\s*/, '')
-    .replace(/^`{1,3}/, '')
-    .replace(/`{1,3}$/, '')
-    .trim();
-
-  if (!/^orig\s*\|/i.test(payload)) {
-    return null;
-  }
-
-  const parts = payload.split('|').map((part) => part.trim());
-  if (parts.length < 4) {
-    return [];
-  }
-
-  const [, wordCandidate, third, fourth, fifth] = parts;
-  const hasTransliteration = /^[HG]\d+$/i.test(fourth || '');
-  const word = wordCandidate?.trim();
-  const transliteration = hasTransliteration ? third?.trim() : '';
-  const strongs = hasTransliteration ? fourth?.trim() : third?.trim();
-  const meaning = hasTransliteration ? fifth?.trim() : fourth?.trim();
-
-  if (!word || !strongs || !meaning || !/^[HG]\d+$/i.test(strongs)) {
-    return [];
-  }
-
-  const language = strongs.toUpperCase().startsWith('H') ? 'Hebrew' : 'Greek';
-  const label = transliteration ? `${language}: ${word} (${strongs}; ${transliteration})` : `${language}: ${word} (${strongs})`;
-
-  return [`- ${label}`, `  Meaning: ${meaning}`];
-}
-
-function extractResponseSections(content: string): {
-  preamble: string;
-  postamble: string;
-} {
-  const lines = content.split(/\r?\n/);
-  const preambleLines: string[] = [];
-  const postambleLines: string[] = [];
-  let i = 0;
-  let inVerseSection = false;
-
-  const isVerseStartLine = (value: string) => {
-    const trimmed = value.trimStart();
-    const lower = trimmed.toLowerCase();
-    if (!trimmed.startsWith('- ')) return false;
-    if (
-      lower.startsWith('- reference') ||
-      lower.startsWith('- **original key words') ||
-      lower.startsWith('- **original language details') ||
-      lower.startsWith('- hebrew:') ||
-      lower.startsWith('- greek:') ||
-      lower.startsWith('- meaning:') ||
-      lower.startsWith('- original key words') ||
-      lower.startsWith('- original language details')
-    ) {
-      return false;
-    }
-    return true;
-  };
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const isVerseStart = isVerseStartLine(line);
-    if (!isVerseStart) {
-      if (!inVerseSection) {
-        preambleLines.push(line);
-      } else {
-        postambleLines.push(line);
-      }
-      i += 1;
-      continue;
-    }
-
-    inVerseSection = true;
-    i += 1;
-
-    while (i < lines.length) {
-      const next = lines[i];
-      if (isVerseStartLine(next)) {
-        break;
-      }
-      if (!next.trim()) {
-        i += 1;
-        continue;
-      }
-      if (/^\S/.test(next) && !next.startsWith('- ') && !next.startsWith('* ')) {
-        postambleLines.push(...lines.slice(i));
-        i = lines.length;
-        break;
-      }
-      i += 1;
-    }
-  }
-
-  return {
-    preamble: preambleLines.join('\n').trim(),
-    postamble: postambleLines.join('\n').trim(),
-  };
-}
-
-function extractAnalysisSummary(content: string): string | undefined {
-  const { preamble, postamble } = extractResponseSections(content);
-  const summary = [preamble, postamble]
-    .flatMap((section) => section.split(/\r?\n/))
-    .map((line) => line.trim())
-    .filter((line) => {
-      if (!line) return false;
-      if (/^Using fallback model:/i.test(line)) return false;
-      if (/^All quotes from /i.test(line)) return false;
-      if (/^\*\*Original (?:key words|language details):\*\*/i.test(line)) return false;
-      if (/^[-*]\s*(Hebrew|Greek):/i.test(line)) return false;
-      if (/^\s*Meaning:/i.test(line)) return false;
-      return true;
-    })
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return summary || undefined;
-}
-
-function buildStructuredResponsePayload(
-  content: string,
-  verses: VerseContext[],
+// ---------------------------------------------------------------------------
+// Cache lookup
+// ---------------------------------------------------------------------------
+
+async function findPreferredCachedResponse(
+  query: string,
   translation: string
-): StructuredChatResponse | undefined {
-  const analysisSummary = extractAnalysisSummary(content);
-  const sections = verses
-    .map((verse) => buildStructuredVerseResponse(verse, translation))
-    .filter((section): section is NonNullable<ReturnType<typeof buildStructuredVerseResponse>> => Boolean(section));
+): Promise<CacheLookupResult | null> {
+  const cacheCandidates = CACHE_MODEL_CANDIDATES.map((modelKey) => ({
+    modelKey,
+    cacheKey: buildCacheKey({ query, translation, model: modelKey }),
+  }));
 
-  return compactStructuredChatResponse({
-    ...(analysisSummary ? { analysis: { summary: analysisSummary } } : {}),
-    sections,
-  });
+  const results = await Promise.all(
+    cacheCandidates.map(async ({ modelKey, cacheKey }) => ({
+      modelKey,
+      cacheKey,
+      response: await getCachedResponse({ query, translation, model: modelKey }),
+    }))
+  );
+
+  return results.find((result) => result.response?.response) ?? null;
 }
 
-function normalizeResponseContent(content: string, verses: VerseContext[]): string {
-  if (!content || !content.trim()) {
-    return content;
-  }
+// ---------------------------------------------------------------------------
+// Redis rate limiting (atomic Lua script)
+// ---------------------------------------------------------------------------
 
-  let normalized = content.replace(/\r\n/g, '\n').trim();
-
-  normalized = normalized
-    .replace(/^\s*[-*]?\s*Reference\s*:\s*(.+)$/gim, (_match, ref) => `- **${String(ref).trim()}**`)
-    .replace(/^\s*[-*]?\s*Ref(?:erence)?\s*-\s*(.+)$/gim, (_match, ref) => `- **${String(ref).trim()}**`)
-    .replace(/^\s*([-*]\s*)?\*\*Original (?:key words|language details):?\*\*\s*$/gim, '**Original language details:**');
-
-  const lines = normalized.split('\n');
-  const output: string[] = [];
-  let inOriginalBlock = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const formattedArtifact = formatMorphArtifactLine(line);
-    if (formattedArtifact) {
-      if (formattedArtifact.length > 0) {
-        output.push(...formattedArtifact);
-      }
-      continue;
-    }
-
-    if (/^\*\*Original (?:key words|language details):\*\*$/i.test(trimmed)) {
-      inOriginalBlock = true;
-      output.push('**Original language details:**');
-      continue;
-    }
-
-    const startsNewVerse =
-      /^[-*]\s*["“]/.test(trimmed) ||
-      /^[-*]\s*\*\*[A-Z0-9]{2,}\s+\d+:\d+/.test(trimmed) ||
-      /^Textual conclusion/i.test(trimmed) ||
-      /^All quotes from/i.test(trimmed);
-
-    if (inOriginalBlock && startsNewVerse) {
-      inOriginalBlock = false;
-    }
-
-    if (inOriginalBlock && /^[-*]\s+/.test(trimmed)) {
-      output.push(normalizeOriginalKeywordLine(line));
-      continue;
-    }
-
-    output.push(line);
-  }
-
-  normalized = output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-
-  if (!/\*\*[A-Z0-9]{2,}\s+\d+:\d+(?:[-–]\d+)?/.test(normalized) && verses.length > 0) {
-    const refs = verses.map((verse) => `- **${verse.reference} (${verse.translation})**`).join('\n');
-    normalized = `${normalized}\n\n${refs}`.trim();
-  }
-
-  if (!/\*\*Original (?:key words|language details):\*\*/i.test(normalized)) {
-    const originalSections = verses
-      .map((verse) => ({
-        verse,
-        entries: normalizeOriginalLanguageEntries(verse.original),
-      }))
-      .filter(({ entries }) => entries.length > 0)
-      .slice(0, 4)
-      .map(({ verse, entries }) => {
-        const words = entries
-          .slice(0, 6)
-          .map((entry) => {
-            const language = entry.strongs.toUpperCase().startsWith('H') ? 'Hebrew' : 'Greek';
-            const label = entry.transliteration
-              ? `${language}: ${entry.word} (${entry.strongs}; ${entry.transliteration})`
-              : `${language}: ${entry.word} (${entry.strongs})`;
-            return `- ${label}\n  Meaning: ${entry.meaning}`;
-          })
-          .join('\n');
-
-        return `- **${verse.reference}**\n**Original language details:**\n${words}`;
-      })
-      .join('\n\n');
-
-    if (originalSections) {
-      normalized = `${normalized}\n\n${originalSections}`.trim();
+async function incrementRateLimitCounter(rateLimitKey: string): Promise<number | null> {
+  if (!redis) return null;
+  try {
+    const rawCount = await redis.eval<[string], number>(RATE_LIMIT_SCRIPT, [rateLimitKey], [
+      String(RATE_LIMIT_WINDOW_SECONDS),
+    ]);
+    const count = Number(rawCount);
+    return Number.isFinite(count) ? count : null;
+  } catch (error) {
+    console.warn('[rate-limit] Atomic counter failed; falling back to non-atomic INCR/EXPIRE.', error);
+    if (!redis) return null;
+    try {
+      const fallbackCount = await redis.incr(rateLimitKey);
+      if (fallbackCount === 1) await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
+      return fallbackCount;
+    } catch (fallbackError) {
+      console.warn('[rate-limit] Fallback counter failed; disabling rate limit for this request.', fallbackError);
+      return null;
     }
   }
-
-  return normalized;
 }
 
-async function streamTextFromContent(
-  text: string,
-  messages: Array<{ role: string; content: string }>,
-  preferredChunks?: string[]
-) {
-  const chunkText = (input: string): string[] => {
-    const chunks: string[] = [];
-    const maxChunkLength = 220;
-    let cursor = 0;
-    while (cursor < input.length) {
-      const next = input.slice(cursor, cursor + maxChunkLength);
-      chunks.push(next);
-      cursor += maxChunkLength;
-    }
-    return chunks.length > 0 ? chunks : [input];
-  };
-
-  const chunks =
-    Array.isArray(preferredChunks) && preferredChunks.length > 0
-      ? preferredChunks
-      : chunkText(text);
-  const textDeltas = chunks.map((delta) => ({ type: 'text-delta', id: 'text-1', delta }));
-
-  const cachedStreamModel = {
-    specificationVersion: 'v3',
-    provider: 'cache',
-    modelId: 'cache',
-    doStream: async () => ({
-      stream: simulateReadableStream({
-        chunks: [
-          { type: 'stream-start', warnings: [] },
-          { type: 'text-start', id: 'text-1' },
-          ...textDeltas,
-          { type: 'text-end', id: 'text-1' },
-          {
-            type: 'finish',
-            finishReason: { unified: 'stop', raw: undefined },
-            usage: {
-              inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-              outputTokens: { total: text.length, text: text.length, reasoning: 0 },
-            },
-          },
-        ],
-      }),
-    }),
-  };
-
-  return streamText({
-    model: cachedStreamModel as any,
-    messages: messages as any,
-  });
-}
+// ---------------------------------------------------------------------------
+// Uncached pipeline execution
+// ---------------------------------------------------------------------------
 
 async function executeUncachedPipeline(options: {
   query: string;
@@ -926,9 +288,7 @@ async function executeUncachedPipeline(options: {
     maxTokens: 2048,
     temperature: 0.1,
     apiKey: options.groqApiKey,
-    onTiming: (durationMs) => {
-      pipelineMetrics.llm_ms = roundLatencyMs(durationMs);
-    },
+    onTiming: (durationMs) => { pipelineMetrics.llm_ms = roundLatencyMs(durationMs); },
   });
 
   const postNormalizeStartedAt = performance.now();
@@ -939,12 +299,7 @@ async function executeUncachedPipeline(options: {
     normalizeResponseContent(generation.content, verses),
     verses
   );
-  const streamedContent = ensureFallbackBanner(
-    normalizedContent,
-    normalizedModelUsed,
-    fallbackUsed,
-    finalFallback
-  );
+  const streamedContent = ensureFallbackBanner(normalizedContent, normalizedModelUsed, fallbackUsed, finalFallback);
   const normalizedResponse: NormalizedChatResponse = {
     content: streamedContent,
     modelUsed: normalizedModelUsed,
@@ -963,18 +318,8 @@ async function executeUncachedPipeline(options: {
 
   if (verses.length > 0 && !/No supporting passages found/i.test(normalizedResponse.content)) {
     await setCachedResponse(
-      {
-        query: options.query,
-        translation: options.requestedTranslation,
-        model: normalizedModelUsed,
-      },
-      {
-        verses,
-        context,
-        prompt: finalPrompt,
-        response: normalizedResponse.content,
-        modelUsed: normalizedResponse.modelUsed,
-      }
+      { query: options.query, translation: options.requestedTranslation, model: normalizedModelUsed },
+      { verses, context, prompt: finalPrompt, response: normalizedResponse.content, modelUsed: normalizedResponse.modelUsed }
     );
   }
 
@@ -987,6 +332,10 @@ async function executeUncachedPipeline(options: {
     pipelineMetrics,
   };
 }
+
+// ---------------------------------------------------------------------------
+// POST handler
+// ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
   const requestId = randomUUID();
@@ -1011,23 +360,15 @@ export async function POST(req: Request) {
         return 'http://localhost';
       })();
     const url = new URL(req.url, baseUrl);
-    const queryTranslation =
-      url.searchParams.get('translation') ||
-      url.searchParams.get('trans');
-    const headerTranslation =
-      req.headers.get('x-translation') ||
-      req.headers.get('x-bible-translation');
+    const queryTranslation = url.searchParams.get('translation') || url.searchParams.get('trans');
+    const headerTranslation = req.headers.get('x-translation') || req.headers.get('x-bible-translation');
 
     const rawMessages = Array.isArray(messages) ? messages : [];
     const normalizedMessages = rawMessages
       .map((message: { role?: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }) => {
         const role = message?.role;
-        if (role !== 'system' && role !== 'assistant' && role !== 'user') {
-          return null;
-        }
-        if (typeof message.content === 'string') {
-          return { role, content: message.content };
-        }
+        if (role !== 'system' && role !== 'assistant' && role !== 'user') return null;
+        if (typeof message.content === 'string') return { role, content: message.content };
         if (Array.isArray(message.content)) {
           const text = message.content
             .map((part: { type?: string; text?: string }) => (part?.type === 'text' ? part.text || '' : ''))
@@ -1035,9 +376,7 @@ export async function POST(req: Request) {
           return text ? { role, content: text } : null;
         }
         if (Array.isArray(message.parts)) {
-          const text = message.parts
-            .map((part) => (part?.type === 'text' ? part.text || '' : ''))
-            .join('');
+          const text = message.parts.map((part) => (part?.type === 'text' ? part.text || '' : '')).join('');
           return text ? { role, content: text } : null;
         }
         return null;
@@ -1046,8 +385,6 @@ export async function POST(req: Request) {
         Boolean(message && message.content && message.content.trim())
       );
 
-    // Groq API key is used for query classification and as a fallback LLM provider
-    // Primary LLM provider is Gemini (uses GEMINI_API_KEY from environment)
     const groqApiKey = customApiKey || process.env.GROQ_API_KEY;
     debugLog('Provider keys:', {
       hasGemini: Boolean(process.env.GEMINI_API_KEY),
@@ -1056,7 +393,6 @@ export async function POST(req: Request) {
       hasHf: Boolean(process.env.HF_TOKEN),
     });
 
-    // Get the latest user message
     let lastUserIndex = -1;
     let lastUserMessage: { role?: string; content?: unknown } | undefined;
     for (let i = normalizedMessages.length - 1; i >= 0; i -= 1) {
@@ -1101,8 +437,8 @@ export async function POST(req: Request) {
           }
           if (count > RATE_LIMIT_MAX_REQUESTS) {
             statusCode = 429;
-            return new Response(JSON.stringify({ 
-              error: 'Rate limit exceeded (60 req/min). Try again in 60s.' 
+            return new Response(JSON.stringify({
+              error: 'Rate limit exceeded (60 req/min). Try again in 60s.',
             }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
           }
         }
@@ -1110,15 +446,11 @@ export async function POST(req: Request) {
         debugLog('Rate limiting skipped: unable to determine valid client IP.');
       }
     } else {
-      // Redis unavailable: use in-memory sliding-window limiter as fallback.
-      // Not cluster-safe — configure Upstash Redis for production multi-instance deployments.
+      // Redis unavailable — use in-memory sliding-window fallback.
+      // Not cluster-safe: configure Upstash Redis for multi-instance deployments.
       const ip = getClientIp(req);
       if (ip) {
-        const result = inMemoryRateLimit(
-          `ratelimit:${ip}`,
-          RATE_LIMIT_MAX_REQUESTS,
-          RATE_LIMIT_WINDOW_SECONDS * 1000
-        );
+        const result = inMemoryRateLimit(`ratelimit:${ip}`, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_SECONDS * 1000);
         debugLog(`[in-memory rate limit] count=${result.count} for IP ${ip}`);
         if (!result.allowed) {
           statusCode = 429;
@@ -1135,10 +467,7 @@ export async function POST(req: Request) {
     }
 
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
-    const modelHistory = history.map((message) => ({
-      role: message.role,
-      content: message.content
-    }));
+    const modelHistory = history.map((m) => ({ role: m.role, content: m.content }));
 
     let cached = null as Awaited<ReturnType<typeof getCachedResponse>>;
     let cachedKey: string | null = null;
@@ -1166,12 +495,7 @@ export async function POST(req: Request) {
         normalizeResponseContent(cached.response, cached.verses || []),
         cached.verses || []
       );
-      const cachedStreamedContent = ensureFallbackBanner(
-        normalizedCachedContent,
-        cachedModelUsed,
-        fallbackUsed,
-        finalFallback
-      );
+      const cachedStreamedContent = ensureFallbackBanner(normalizedCachedContent, cachedModelUsed, fallbackUsed, finalFallback);
       setLatencyMetric(latencyMetrics, 'post_normalize_ms', performance.now() - postNormalizeStartedAt);
       const cachedResponse: NormalizedChatResponse = {
         content: cachedStreamedContent,
@@ -1179,33 +503,23 @@ export async function POST(req: Request) {
         verses: cached.verses || [],
         metadata: {
           translation: requestedTranslation,
-          response: buildStructuredResponsePayload(
-            cachedStreamedContent,
-            cached.verses || [],
-            requestedTranslation
-          ),
+          response: buildStructuredResponsePayload(cachedStreamedContent, cached.verses || [], requestedTranslation),
         },
       };
       logContextUtilizationDiagnostics(cachedResponse.content, cachedResponse.verses, {
-        requestId,
-        modelUsed: cachedResponse.modelUsed,
-        cacheHit: true,
+        requestId, modelUsed: cachedResponse.modelUsed, cacheHit: true,
       });
       modelUsedForLog = cachedResponse.modelUsed;
 
       const cachedResult = await streamTextFromContent(cachedResponse.content, [
         { role: 'system', content: cached.prompt },
         ...modelHistory,
-        { role: 'user', content: query }
+        { role: 'user', content: query },
       ] as Array<{ role: string; content: string }>);
 
       const cachedHeaders: Record<string, string> = {};
-      if (fallbackUsed) {
-        cachedHeaders['x-model-used'] = cachedModelUsed;
-      }
-      if (rateLimitWarning) {
-        cachedHeaders['x-rate-limit-warning'] = rateLimitWarning;
-      }
+      if (fallbackUsed) cachedHeaders['x-model-used'] = cachedModelUsed;
+      if (rateLimitWarning) cachedHeaders['x-rate-limit-warning'] = rateLimitWarning;
 
       const response = cachedResult.toUIMessageStreamResponse({
         headers: Object.keys(cachedHeaders).length > 0 ? cachedHeaders : undefined,
@@ -1226,30 +540,17 @@ export async function POST(req: Request) {
       return response;
     }
 
-    const missKey = buildCacheKey({
-      query,
-      translation: requestedTranslation,
-      model: PRIMARY_MODEL_USED,
-    });
+    const missKey = buildCacheKey({ query, translation: requestedTranslation, model: PRIMARY_MODEL_USED });
     debugLog('Cache MISS – proceeding to LLM', missKey);
 
-    const inflightKey = buildInflightRequestKeyWithHistory(
-      query,
-      requestedTranslation,
-      PRIMARY_MODEL_USED,
-      modelHistory
-    );
+    const inflightKey = buildInflightRequestKeyWithHistory(query, requestedTranslation, PRIMARY_MODEL_USED, modelHistory);
     let pipelinePromise = inflightRequests.get(inflightKey);
     if (pipelinePromise) {
       debugLog('In-flight dedup HIT – awaiting active pipeline', inflightKey);
     } else {
       debugLog('In-flight dedup MISS – starting pipeline', inflightKey);
       pipelinePromise = executeUncachedPipeline({
-        query,
-        requestedTranslation,
-        groqApiKey,
-        modelHistory,
-        requestId,
+        query, requestedTranslation, groqApiKey, modelHistory, requestId,
       }).finally(() => {
         if (inflightRequests.get(inflightKey) === pipelinePromise) {
           inflightRequests.delete(inflightKey);
@@ -1292,7 +593,7 @@ export async function POST(req: Request) {
       [
         { role: 'system', content: pipelineResult.finalPrompt },
         ...modelHistory,
-        { role: 'user', content: query }
+        { role: 'user', content: query },
       ] as Array<{ role: string; content: string }>,
       pipelineResult.preferredChunks
     );
@@ -1306,14 +607,13 @@ export async function POST(req: Request) {
     const errorMsg = error?.message?.toLowerCase() || '';
     if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
       statusCode = 429;
-      return new Response(JSON.stringify({ 
-        error: 'Rate limit exceeded. The shared resource is currently overloaded. Please wait a moment or provide your own API key in the settings.' 
+      return new Response(JSON.stringify({
+        error: 'Rate limit exceeded. The shared resource is currently overloaded. Please wait a moment or provide your own API key in the settings.',
       }), { status: statusCode, headers: { 'Content-Type': 'application/json' } });
     }
-
     statusCode = 500;
-    return new Response(JSON.stringify({ 
-      error: 'An unexpected error occurred while processing your request.' 
+    return new Response(JSON.stringify({
+      error: 'An unexpected error occurred while processing your request.',
     }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
   } finally {
     setLatencyMetric(latencyMetrics, 'total_ms', performance.now() - requestStartedAt);

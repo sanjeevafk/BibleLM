@@ -14,7 +14,8 @@
     "benchmark:regression": "ts-node --project tsconfig.scripts.json tests/benchmark/check-regressions.ts project-docs/benchmark/latest-report.json",
     "benchmark:flags": "ts-node --project tsconfig.scripts.json tests/benchmark/check-feature-flags.ts",
     "start": "next start",
-    "lint": "eslint --no-warn-ignored app components lib tests scripts *.ts *.mjs"
+    "lint": "eslint --no-warn-ignored app components lib tests scripts *.ts *.mjs",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/groq": "^3.0.29",
