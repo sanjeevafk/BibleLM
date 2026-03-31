@@ -10,6 +10,7 @@
 
 type WindowEntry = {
   timestamps: number[];
+  windowMs: number;
 };
 
 const store = new Map<string, WindowEntry>();
@@ -18,13 +19,13 @@ const store = new Map<string, WindowEntry>();
 let lastCleanup = 0;
 const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-function performCleanup(windowMs: number): void {
+function performCleanup(): void {
   const now = Date.now();
   if (now - lastCleanup < CLEANUP_INTERVAL) return;
   lastCleanup = now;
 
   for (const [key, entry] of store.entries()) {
-    entry.timestamps = entry.timestamps.filter((ts) => now - ts < windowMs);
+    entry.timestamps = entry.timestamps.filter((ts) => now - ts < entry.windowMs);
     if (entry.timestamps.length === 0) {
       store.delete(key);
     }
@@ -46,13 +47,16 @@ export function inMemoryRateLimit(
   windowMs: number
 ): InMemoryRateLimitResult {
   const now = Date.now();
-  performCleanup(windowMs);
+  performCleanup();
 
   let entry = store.get(key);
   if (!entry) {
-    entry = { timestamps: [] };
+    entry = { timestamps: [], windowMs };
     store.set(key, entry);
   }
+
+  // Update window if it changed
+  entry.windowMs = windowMs;
 
   // Prune timestamps outside the sliding window
   entry.timestamps = entry.timestamps.filter((ts) => now - ts < windowMs);
