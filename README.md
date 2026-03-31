@@ -13,6 +13,32 @@
 
 ## System Architecture
 
+```text
++-----------------------+      +-----------------------+      +-----------------------+
+|                       |      |                       |      |                       |
+|   Client App (UI)     +----->|  Vercel Edge API      +----->|  Primary LLM          |
+|   Next.js React       |      |  (/api/chat)          |      |  (Gemini 2.5 Flash)   |
+|                       |      |                       |      |                       |
++-----------------------+      +-----------+-----------+      +-----------+-----------+
+                                           |                              |
+                                           v                              v (Fallback)
++-----------------------+      +-----------+-----------+      +-----------+-----------+
+|                       |      |                       |      |                       |
+|   Upstash Redis       |<-----+  Hybrid Retrieval V3  |      |  Secondary LLMs       |
+|   (Rate Limit/Cache)  |      |  (BM25 + Semantic)    |      |  (OpenRouter, Groq,   |
+|                       |      |                       |      |   HuggingFace)        |
++-----------------------+      +-----------+-----------+      +-----------------------+
+                                           |
+                                           v
+                               +-----------+-----------+
+                               |                       |
+                               |  Static Data Bundles  |
+                               |  (JSON, BSB, TSK,     |
+                               |   Morphology)         |
+                               |                       |
+                               +-----------------------+
+```
+
 Next.js 16 (App Router) and Vercel Edge runtime. Fully stateless where possible; lightweight Upstash Redis used for rate-limiting and response caching.
 
 ### Tech Stack
@@ -40,6 +66,32 @@ Next.js 16 (App Router) and Vercel Edge runtime. Fully stateless where possible;
   - **Treasury of Scripture Knowledge (TSK)** — Ranked thematic cross-references.
 
 ### Request Lifecycle (Detailed RAG Flow)
+
+```text
+User Query
+    |
+    v
+[ Theological Synonym Expansion ] ---> (e.g., "Messiah" -> "Christ", "Anointed")
+    |
+    v
+[ Lexical Search (BM25) ] ---> Uses pre-computed index state (<10ms)
+    |
+    +---> Top Result Confidence High?
+                 |
+                YES ───────────────────────────┐
+                 |                             |
+                 NO                            |
+                 |                             v
+                 v             [ Context Window Expansion (±1 Verse) ]
+[ Semantic Re-ranking ]                        |
+  (Top 50 candidates sent to                   |
+   Gemini Embedding API)                       v
+                 |               [ Build Strict Citation Prompt ]
+                 |                             |
+                 └─────────────────────────────┤
+                                               v
+                             [ Inference & Streaming (LLM) ]
+```
 
 1. **Client to /api/chat (POST, Edge)**  
    Sends message history array in Vercel AI SDK format.
