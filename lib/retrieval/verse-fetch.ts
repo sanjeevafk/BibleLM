@@ -30,28 +30,56 @@ export function extractDirectReferences(
 ): Array<{ book: string; chapter: number; verse: number; endVerse?: number }> {
   const results: Array<{ book: string; chapter: number; verse: number; endVerse?: number }> = [];
 
-  const regex = /\b(?:([1-3])\s*)?(Gen|Exo|Lev|Num|Deu|Jos|Jdg|Rut|Sa|Ki|Ch|Ezr|Neh|Est|Job|Ps|Pro|Ecc|Song|Isa|Jer|Lam|Ezk|Dan|Hos|Joel|Amos|Obad|Jonah|Mic|Nahum|Hab|Zeph|Hag|Zech|Mal|Matt|Mark|Luke|John|Rom|Cor|Gal|Eph|Phil|Col|Thess|Tim|Titus|Philemon|Heb|James|Pet|John|Jude|Rev)[a-z]*\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?\b/gi;
+  const regex = /\b(?:([1-3])\s*)?(Gen|Exo|Lev|Num|Deu|Jos|Jdg|Rut|Sa|Ki|Ch|Ezr|Neh|Est|Job|Ps|Pro|Ecc|Song|Isa|Jer|Lam|Eze|Ezk|Dan|Hos|Joe|Amo|Oba|Jon|Mic|Nah|Hab|Zep|Hag|Zec|Mal|Mat|Mrk|Luk|Jhn|Act|Rom|Cor|Gal|Eph|Phil|Phm|Col|The|Tim|Tit|Heb|Jas|Pet|Jude|Rev)[a-z]*\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?\b/gi;
 
   const bookMap: Record<string, string> = {
+    // Law
     'GEN': 'GEN', 'EXO': 'EXO', 'LEV': 'LEV', 'NUM': 'NUM', 'DEU': 'DEU',
+    // History
     'JOS': 'JOS', 'JDG': 'JDG', 'RUT': 'RUT', '1SA': '1SA', '2SA': '2SA', '1KI': '1KI', '2KI': '2KI',
-    '1CH': '1CH', '2CH': '2CH', 'PSA': 'PSA', 'PRO': 'PRO', 'ISA': 'ISA', 'MAT': 'MAT', 'MAR': 'MRK',
-    'LUK': 'LUK', 'JOH': 'JHN', 'ROM': 'ROM', '1CO': '1CO', '2CO': '2CO', 'GAL': 'GAL', 'EPH': 'EPH',
-    'PHI': 'PHP', 'COL': 'COL', '1TH': '1TH', '2TH': '2TH', '1TI': '1TI', '2TI': '2TI', '1PE': '1PE',
-    '2PE': '2PE', '1JO': '1JN', '2JO': '2JN', '3JO': '3JN', 'HEB': 'HEB', 'JAM': 'JAS', 'REV': 'REV',
-    // Fallbacks and extra shorthands
-    'SAM': '1SA', '1SAM': '1SA', '2SAM': '2SA', 'KIN': '1KI', '1KIN': '1KI', '2KIN': '2KI',
-    'CHR': '1CH', '1CHR': '1CH', '2CHR': '2CH', 'COR': '1CO', 'THE': '1TH', 'TIM': '1TI', 'PET': '1PE',
-    '1JOH': '1JN', '2JOH': '2JN', '3JOH': '3JN', 'JAS': 'JAS', 'MRK': 'MRK', 'JHN': 'JHN', 'PHP': 'PHP',
+    '1CH': '1CH', '2CH': '2CH', 'EZR': 'EZR', 'NEH': 'NEH', 'EST': 'EST',
+    // Wisdom
+    'JOB': 'JOB', 'PSA': 'PSA', 'PRO': 'PRO', 'ECC': 'ECC', 'SNG': 'SNG',
+    // Prophets
+    'ISA': 'ISA', 'JER': 'JER', 'LAM': 'LAM', 'EZK': 'EZK', 'EZE': 'EZK', 'DAN': 'DAN',
+    'HOS': 'HOS', 'JOL': 'JOL', 'JOE': 'JOL', 'AMO': 'AMO', 'OBA': 'OBA', 'JON': 'JON',
+    'MIC': 'MIC', 'NAM': 'NAM', 'NAH': 'NAM', 'HAB': 'HAB', 'ZEP': 'ZEP', 'HAG': 'HAG',
+    'ZEC': 'ZEC', 'MAL': 'MAL',
+    // Gospels & Acts
+    'MAT': 'MAT', 'MRK': 'MRK', 'MAR': 'MRK', 'LUK': 'LUK', 'JHN': 'JHN', 'JOH': 'JHN', 'ACT': 'ACT',
+    // Epistles
+    'ROM': 'ROM', '1CO': '1CO', '2CO': '2CO', 'GAL': 'GAL', 'EPH': 'EPH', 'PHP': 'PHP', 'PHI': 'PHP',
+    'COL': 'COL', '1TH': '1TH', '2TH': '2TH', '1TI': '1TI', '2TI': '2TI', 'TIT': 'TIT', 'PHM': 'PHM',
+    'HEB': 'HEB', 'JAS': 'JAS', 'JAM': 'JAS', '1PE': '1PE', '2PE': '2PE', '1JN': '1JN', '2JN': '2JN',
+    '3JN': '3JN', 'JUD': 'JUD', 'REV': 'REV',
+    // Shorthand Fallbacks
+    'PS': 'PSA', 'SAM': '1SA', 'KIN': '1KI', 'CHR': '1CH', 'COR': '1CO', 'THE': '1TH',
+    'TIM': '1TI', 'PET': '1PE', '1JO': '1JN', '2JO': '2JN', '3JO': '3JN',
+    '1JOH': '1JN', '2JOH': '2JN', '3JOH': '3JN',
   };
 
   let match;
-  regex.lastIndex = 0; // Reset just in case
+  regex.lastIndex = 0;
   while ((match = regex.exec(query)) !== null) {
     const num = match[1] || '';
-    const name = match[2].substring(0, 3).toUpperCase();
-    const bookRaw = (num + name).trim();
-    const bookCode = bookMap[bookRaw] || bookRaw;
+    const namePart = match[2].toUpperCase().substring(0, 3);
+    
+    // Attempt lookup with prefix + 3-char name (e.g. '1CO')
+    // Fallback to name alone if no numeric prefix found (e.g. 'GEN')
+    const key = (num + namePart).trim();
+    let bookCode = bookMap[key] || bookMap[namePart] || key;
+
+    // Handle the case where prefix was provided but not in key (e.g. "2 Samuel" -> num=2, namePart=SAM -> key=2SAM)
+    // bookMap['2SAM'] is not there, so it falls back to bookMap['SAM'] ('1SA') then we override '1' with '2'.
+    if (num && bookCode && bookCode.length === 3 && /^[123]/.test(bookCode)) {
+      bookCode = num + bookCode.substring(1);
+    } else if (num && bookCode && !/^[123]/.test(bookCode)) {
+      // e.g. "1 John" -> num=1, namePart=JOH -> bookMap['JOH']='JHN' -> result '1JHN'
+      // We check if a numbered variant exists in our map (like 1JOH -> 1JN)
+      const numberedKey = num + bookCode;
+      bookCode = bookMap[numberedKey] || (num + bookCode);
+    }
+
     results.push({
       book: bookCode,
       chapter: parseInt(match[3], 10),
@@ -236,25 +264,12 @@ export async function fallbackBundledLexicalSearch(
 // retrieveContextViaApis — fallback when DB has nothing useful
 // ---------------------------------------------------------------------------
 
-const tenCommandments: VerseContext[] = [
-  { reference: 'EXO 20:3', text: 'Thou shalt have no other gods before me.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:4', text: 'Thou shalt not make unto thee a graven image, nor any likeness of anything that is in heaven above, or that is in the earth beneath, or that is in the water under the earth.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:7', text: 'Thou shalt not take the name of Jehovah thy God in vain; for Jehovah will not hold him guiltless that taketh his name in vain.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:8', text: 'Remember the sabbath day, to keep it holy.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:12', text: 'Honor thy father and thy mother, that thy days may be long in the land which Jehovah thy God giveth thee.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:13', text: 'Thou shalt not kill.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:14', text: 'Thou shalt not commit adultery.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:15', text: 'Thou shalt not steal.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:16', text: 'Thou shalt not bear false witness against thy neighbor.', translation: 'ASV', original: [] },
-  { reference: 'EXO 20:17', text: "Thou shalt not covet thy neighbor's house, thou shalt not covet thy neighbor's wife, nor his man-servant, nor his maid-servant, nor his ox, nor his ass, nor anything that is thy neighbor's.", translation: 'ASV', original: [] },
+const tenCommandments: string[] = [
+  'EXO 20:3', 'EXO 20:4', 'EXO 20:7', 'EXO 20:8', 'EXO 20:12', 'EXO 20:13', 'EXO 20:14', 'EXO 20:15', 'EXO 20:16', 'EXO 20:17',
 ];
 
-const freedomFromSlaveryVerses: VerseContext[] = [
-  { reference: 'GAL 3:28', text: 'There can be neither Jew nor Greek, there can be neither bond nor free, there can be no male and female; for ye all are one in Christ Jesus.', translation: 'WEB', original: [] },
-  { reference: 'GAL 4:7', text: 'So that thou art no longer a bondservant, but a son; and if a son, then an heir through God.', translation: 'WEB', original: [] },
-  { reference: 'ROM 6:6', text: 'knowing this, that our old man was crucified with him, that the body of sin might be done away, that so we should no longer be in bondage to sin;', translation: 'WEB', original: [] },
-  { reference: '1CO 7:22', text: "For he that was called in the Lord being a bondservant, is the Lord's freedman: likewise he that was called being free, is Christ's bondservant.", translation: 'WEB', original: [] },
-  { reference: 'PHM 1:16', text: 'no longer as a bondservant, but more than a bondservant, a beloved brother, especially to me, but how much rather to thee, both in the flesh and in the Lord.', translation: 'WEB', original: [] },
+const freedomFromSlaveryVerses: string[] = [
+  'GAL 3:28', 'GAL 4:7', 'ROM 6:6', '1CO 7:22', 'PHM 1:16',
 ];
 
 export async function retrieveContextViaApis(
@@ -267,12 +282,12 @@ export async function retrieveContextViaApis(
   const canUseIndex = translation === 'BSB';
 
   // Priority commandment injection
-  const prioritized: VerseContext[] = [];
+  const prioritizedRefs: string[] = [];
   const addPriority = (index: number, keywords: string[]) => {
     if (keywords.some((k) => normalizedQuery.includes(k))) {
-      const verse = tenCommandments[index];
-      if (!verses.some((v) => v.reference === verse.reference) && !prioritized.some((v) => v.reference === verse.reference)) {
-        prioritized.push(verse);
+      const ref = tenCommandments[index];
+      if (!prioritizedRefs.includes(ref)) {
+        prioritizedRefs.push(ref);
       }
     }
   };
@@ -288,12 +303,23 @@ export async function retrieveContextViaApis(
   addPriority(8, ['false witness', 'perjury', 'lie in court', 'slander']);
   addPriority(9, ['covet', 'coveting', 'envy your neighbor', 'envy thy neighbor']);
 
-  for (const verse of prioritized.reverse()) verses.unshift(verse);
+  if (prioritizedRefs.length > 0) {
+    const hydrated = await fetchVersesByIds(prioritizedRefs, translation);
+    // Unshift in reverse order so the ones matched first appear first in the final array
+    for (const v of hydrated.slice().reverse()) {
+      if (!verses.some(existing => existing.reference === v.reference)) {
+        verses.unshift(v);
+      }
+    }
+  }
 
   const freedomKeywords = ['slavery', 'slave', 'enslaved', 'servant', 'bondservant', 'bond servant', 'bondage', 'doulos', 'freedom from'];
   if (freedomKeywords.some((k) => normalizedQuery.includes(k))) {
-    for (const verse of freedomFromSlaveryVerses.slice().reverse()) {
-      if (!verses.some((v) => v.reference === verse.reference)) verses.unshift(verse);
+    const hydratedFreedom = await fetchVersesByIds(freedomFromSlaveryVerses, translation);
+    for (const v of hydratedFreedom.slice().reverse()) {
+      if (!verses.some(existing => existing.reference === v.reference)) {
+        verses.unshift(v);
+      }
     }
   }
 
