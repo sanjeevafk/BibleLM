@@ -63,6 +63,16 @@ function stripBracketedCitationSegments(content: string, citation: string, openi
     if (citationIndex === -1) break;
 
     const openingIndex = result.lastIndexOf(opening, citationIndex);
+    if (openingIndex !== -1) {
+      const firstClosingAfterOpening = result.indexOf(closing, openingIndex);
+      if (firstClosingAfterOpening !== -1 && firstClosingAfterOpening < citationIndex) {
+        // The nearest opening bracket was closed before the citation starts.
+        // This avoids pairing a far-away opening with a later closing.
+        searchStart = citationIndex + citation.length;
+        continue;
+      }
+    }
+
     const closingIndex = result.indexOf(closing, citationIndex + citation.length);
     if (openingIndex !== -1 && closingIndex !== -1) {
       const segment = result.slice(openingIndex + 1, closingIndex);

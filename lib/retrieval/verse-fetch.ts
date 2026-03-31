@@ -56,6 +56,7 @@ export function extractDirectReferences(
     'PS': 'PSA', 'SAM': '1SA', 'KIN': '1KI', 'CHR': '1CH', 'COR': '1CO', 'THE': '1TH',
     'TIM': '1TI', 'PET': '1PE', '1JO': '1JN', '2JO': '2JN', '3JO': '3JN',
     '1JOH': '1JN', '2JOH': '2JN', '3JOH': '3JN',
+    '1JHN': '1JN', '2JHN': '2JN', '3JHN': '3JN',
   };
 
   let match;
