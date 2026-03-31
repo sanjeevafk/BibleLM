@@ -19,6 +19,8 @@ import {
   type TskExpansionDecision,
   TSK_CONFIG,
 } from './types';
+import { expandTheologicalQuery } from './synonyms';
+import { reRankSemantic } from './semantic';
 import { tokenizeFallbackQuery } from './verse-utils';
 
 let bm25Engine: BM25Engine | null = null;
@@ -30,17 +32,33 @@ export async function getBM25Engine(): Promise<BM25Engine> {
     bm25EnginePromise = (async () => {
       const bibleIndexData = (await import('../../data/bible-full-index.json')).default;
       const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
-      const engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
-        k1: RETRIEVAL_CONFIG.bm25.k1,
-        b: RETRIEVAL_CONFIG.bm25.b,
-        phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
-      });
+      
+      let engine: BM25Engine;
+      try {
+        // Try to load pre-computed state to avoid full indexing on cold start
+        const state = (await import('../../data/bm25-state.json')).default;
+        engine = BM25Engine.createFromState(state, BIBLE_INDEX, {
+          k1: RETRIEVAL_CONFIG.bm25.k1,
+          b: RETRIEVAL_CONFIG.bm25.b,
+          phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
+        });
+        console.log('[retrieval] BM25 engine hydrated from pre-computed state.');
+      } catch (e) {
+        console.warn('[retrieval] No BM25 state found, indexing in-memory...');
+        engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
+          k1: RETRIEVAL_CONFIG.bm25.k1,
+          b: RETRIEVAL_CONFIG.bm25.b,
+          phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
+        });
+      }
+      
       bm25Engine = engine;
       return engine;
     })();
   }
   return bm25EnginePromise;
 }
+
 
 
 
@@ -208,7 +226,11 @@ export async function hybridSearch(
   const topK = clampTopK(options?.topK);
   const translation = options?.translation || 'BSB';
   const engine = await getBM25Engine();
-  const bm25Hits = engine.search(query, RETRIEVAL_CONFIG.bm25.candidateLimit);
+
+  // Phase 2: Theological Query Expansion
+  const expandedQuery = expandTheologicalQuery(query);
+  const bm25Hits = engine.search(expandedQuery, RETRIEVAL_CONFIG.bm25.candidateLimit);
+
 
 
   if (bm25Hits.length === 0) {
@@ -230,6 +252,24 @@ export async function hybridSearch(
     rankLexical: index + 1,
   }));
 
+  // Phase 3: Conditional Semantic Re-ranking
+  // Gating: Only trigger if BM25 top match is low confidence OR gap is small
+  const top1Score = scored[0]?.score || 0;
+  const scoreGap = top1Score - (scored[1]?.score || 0);
+  const semanticGatingThreshold = 0.85; // BM25 max normalized score
+  const gapThreshold = 0.15; // Confidence gap
+  
+  let finalRanked = scored;
+  let semanticTriggered = false;
+
+  if (top1Score < semanticGatingThreshold || scoreGap < gapThreshold) {
+    semanticTriggered = true;
+    const verseTexts = new Map(bm25Hits.map(h => [h.doc.id, h.doc.text]));
+    const reRanked = await reRankSemantic(query, scored, verseTexts);
+    finalRanked = reRanked;
+  }
+
+
 
   if (scored.length === 0) {
     if (debugState) {
@@ -243,9 +283,11 @@ export async function hybridSearch(
     addRetrievalStageTrace(debugState, {
       stage: 'bm25_search', action: 'applied', query,
       candidate_count: scored.length, limit: RETRIEVAL_CONFIG.bm25.candidateLimit,
+      semantic_triggered: semanticTriggered,
     });
 
-    scored.forEach((hit, index) => {
+    finalRanked.forEach((hit, index) => {
+
       debugState.candidateTraces.set(hit.verseId, {
         reference: hit.verseId,
         lexical_rank: hit.rankLexical,
@@ -259,7 +301,8 @@ export async function hybridSearch(
     logRetrievalConfidenceDiagnostics(scored, { translation });
   }
 
-  const finalHits = scored.slice(0, topK);
+  const finalHits = finalRanked.slice(0, topK);
+
   if (debugState) {
     debugState.hybridTopKRefs = finalHits.map((hit) => hit.verseId);
   }

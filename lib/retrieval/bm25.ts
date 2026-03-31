@@ -147,6 +147,47 @@ export class BM25Engine {
   }
 
   /**
+   * Serializes the engine's internal maps for persistence.
+   */
+  public exportState(): object {
+    return {
+      totalDocs: this.totalDocs,
+      avgDocLength: this.avgDocLength,
+      docFreqs: Object.fromEntries(this.docFreqs),
+      termFreqs: Object.fromEntries(
+        Array.from(this.termFreqs.entries()).map(([term, docMap]) => [
+          term,
+          Object.fromEntries(docMap)
+        ])
+      ),
+      docLengths: Object.fromEntries(this.docLengths),
+      // We don't serialize 'docs' since it's large and reconstructed from the index file.
+    };
+  }
+
+  /**
+   * Hydrates the engine from a serialized state object.
+   */
+  public importState(state: any, indexData: Record<string, { text: string }>) {
+    this.totalDocs = state.totalDocs;
+    this.avgDocLength = state.avgDocLength;
+    this.docFreqs = new Map(Object.entries(state.docFreqs));
+    this.docLengths = new Map(Object.entries(state.docLengths));
+    this.termFreqs = new Map(
+      Object.entries(state.termFreqs).map(([term, docMap]) => [
+        term,
+        new Map(Object.entries(docMap as Record<string, number>))
+      ])
+    );
+
+    // Reconstruct 'docs' from indexData
+    this.docs.clear();
+    for (const [id, val] of Object.entries(indexData)) {
+      this.docs.set(id, { id, text: val.text });
+    }
+  }
+
+  /**
    * Static factory for quick initialization
    */
   public static async createFromIndex(indexData: Record<string, { text: string }>, config?: BM25Config): Promise<BM25Engine> {
@@ -158,4 +199,14 @@ export class BM25Engine {
     await engine.index(docs);
     return engine;
   }
+
+  /**
+   * Static factory for hydration from state
+   */
+  public static createFromState(state: any, indexData: Record<string, { text: string }>, config?: BM25Config): BM25Engine {
+    const engine = new BM25Engine(config);
+    engine.importState(state, indexData);
+    return engine;
+  }
 }
+

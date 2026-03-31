@@ -22,6 +22,7 @@ import {
 } from './search';
 import {
   fetchVersesByIds,
+  fetchContextWindow,
   attachIndexedOriginals,
   applyTranslationOverride,
   retrieveContextViaApis,
@@ -145,8 +146,23 @@ export async function retrieveContextForQuery(
   const limitedIds = orderedIds.slice(0, topK);
 
   const fetchVersesStartedAt = performance.now();
-  let verses = await fetchVersesByIds(limitedIds, translation);
+  
+  // Phase 4: Context Window Expansion
+  // We expand the top 3 hits if they are not already part of a range
+  const expandedVerses: VerseContext[] = [];
+  const expansionLimit = 3;
+  
+  const expansionTasks = limitedIds.slice(0, expansionLimit).map(id => fetchContextWindow(id, translation, 1));
+  const remainingTasks = limitedIds.slice(expansionLimit).map(id => fetchVersesByIds([id], translation));
+  
+  const allResults = await Promise.all([...expansionTasks, ...remainingTasks]);
+  for (const res of allResults) {
+    expandedVerses.push(...res);
+  }
+  
+  let verses = expandedVerses;
   recordRetrievalMetric(instrumentation, 'fetch_verses_db_ms', fetchVersesStartedAt);
+
 
   const shouldUseApiFallback =
     verses.length === 0 ||

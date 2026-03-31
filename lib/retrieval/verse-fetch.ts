@@ -247,6 +247,34 @@ export function attachIndexedOriginals(verses: VerseContext[]): void {
 }
 
 // ---------------------------------------------------------------------------
+// fetchContextWindow — retrieve preceding and following verses for a hit
+// ---------------------------------------------------------------------------
+
+export async function fetchContextWindow(
+  verseId: string,
+  translation: string,
+  windowSize: number = 1
+): Promise<VerseContext[]> {
+  const parsed = parseReferenceKey(verseId);
+  if (!parsed) return [];
+
+  const refs: string[] = [];
+  
+  // Calculate window (e.g. -1, 0, +1)
+  for (let i = -windowSize; i <= windowSize; i++) {
+    const v = parsed.verse + i;
+    if (v > 0) {
+      refs.push(`${parsed.book} ${parsed.chapter}:${v}`);
+    }
+  }
+
+  // Bulk fetch these IDs
+  // Note: This might span chapters/books in a future upgrade, 
+  // but for now we stick to the same chapter.
+  return fetchVersesByIds(refs, translation);
+}
+
+// ---------------------------------------------------------------------------
 // fallBackBundledLexicalSearch — search using local bible-index.json
 // ---------------------------------------------------------------------------
 
