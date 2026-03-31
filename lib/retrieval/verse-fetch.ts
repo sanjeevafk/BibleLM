@@ -360,7 +360,7 @@ export async function retrieveContextViaApis(
 
   // Lexical fallback
   if (verses.length < 2) {
-    const lexicalFallback = await fallbackBundledLexicalSearch(query, translation, 6);
+    const lexicalFallback = await fallbackBundledLexicalSearch(query, translation);
     const existingRefs = new Set(verses.map(v => v.reference));
     const newVerses = lexicalFallback.filter(v => !existingRefs.has(v.reference));
     if (newVerses.length > 0) verses.push(...newVerses);

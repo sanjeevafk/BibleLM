@@ -22,18 +22,24 @@ import {
 import { tokenizeFallbackQuery } from './verse-utils';
 
 let bm25Engine: BM25Engine | null = null;
+let bm25EnginePromise: Promise<BM25Engine> | null = null;
 
 export async function getBM25Engine(): Promise<BM25Engine> {
-  if (!bm25Engine) {
-    const bibleIndexData = (await import('../../data/bible-full-index.json')).default;
-    const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
-    bm25Engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
-      k1: RETRIEVAL_CONFIG.bm25.k1,
-      b: RETRIEVAL_CONFIG.bm25.b,
-      phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
-    });
+  if (bm25Engine) return bm25Engine;
+  if (!bm25EnginePromise) {
+    bm25EnginePromise = (async () => {
+      const bibleIndexData = (await import('../../data/bible-full-index.json')).default;
+      const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
+      const engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
+        k1: RETRIEVAL_CONFIG.bm25.k1,
+        b: RETRIEVAL_CONFIG.bm25.b,
+        phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
+      });
+      bm25Engine = engine;
+      return engine;
+    })();
   }
-  return bm25Engine;
+  return bm25EnginePromise;
 }
 
 
@@ -216,11 +222,11 @@ export async function hybridSearch(
   // Min-Max Normalization for BM25 scores
   const maxScore = bm25Hits[0].score;
   const minScore = bm25Hits[bm25Hits.length - 1].score;
-  const scoreDiff = maxScore - minScore || 1;
+  const scoreDiff = maxScore - minScore;
 
   const scored: RankedVerse[] = bm25Hits.map((hit, index) => ({
     verseId: hit.doc.id,
-    score: (hit.score - minScore) / scoreDiff,
+    score: scoreDiff > 0 ? (hit.score - minScore) / scoreDiff : 1,
     rankLexical: index + 1,
   }));
 

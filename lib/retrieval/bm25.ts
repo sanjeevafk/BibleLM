@@ -54,6 +54,16 @@ export class BM25Engine {
    * Indexes a collection of documents.
    */
   public async index(docs: BM25Doc[]) {
+    // Clear existing state
+    this.totalDocs = 0;
+    this.avgDocLength = 0;
+    this.docs.clear();
+    this.docLengths.clear();
+    this.termFreqs.clear();
+    this.docFreqs.clear();
+
+    if (docs.length === 0) return;
+
     this.totalDocs = docs.length;
     let totalLength = 0;
 
@@ -111,11 +121,16 @@ export class BM25Engine {
     }
 
     // Apply Phrase Boost
-    const normalizedQuery = query.toLowerCase().trim();
+    const normalizeForPhrase = (text: string) =>
+      text.toLowerCase().replace(/[^\w\s']/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const normalizedQuery = normalizeForPhrase(query);
     if (normalizedQuery.length > 5) { // Only boost longer queries
       for (const [docId, score] of scores.entries()) {
         const doc = this.docs.get(docId)!;
-        if (doc.text.toLowerCase().includes(normalizedQuery)) {
+        const normalizedDoc = normalizeForPhrase(doc.text);
+
+        if (normalizedDoc.includes(normalizedQuery)) {
           scores.set(docId, score * this.phraseBoost);
         }
       }
