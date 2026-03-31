@@ -41,7 +41,7 @@ function bkbToBollsPath(bookCode: string, chapter: number): string {
 
 function parseOriginalTags(text: string): Array<{ word: string; strongs: string; gloss?: string }> {
   const words: Array<{ word: string; strongs: string; gloss?: string }> = [];
-  const cleanLine = text.replace(/<span.*?>/g, '').replace(/<\/\span>/g, '');
+  const cleanLine = text.replace(/<span.*?>/g, '').replace(/<\/span>/g, '');
   const parts = cleanLine.split('<S>');
 
   for (let i = 0; i < parts.length; i++) {
@@ -51,7 +51,7 @@ function parseOriginalTags(text: string): Array<{ word: string; strongs: string;
     const endStrongsIdx = part.indexOf('</S>');
     if (endStrongsIdx !== -1) {
       const strongs = part.substring(0, endStrongsIdx);
-      const wordPart = parts[i - 1].replace(/<\/\S>/g, '').trim();
+      const wordPart = parts[i - 1].replace(/<\/S>/g, '').trim();
       const lastSpace = wordPart.lastIndexOf(' ');
       const word = lastSpace === -1 ? wordPart : wordPart.substring(lastSpace + 1);
       const cleanWord = word.replace(/[,.;:!?]/g, '');
