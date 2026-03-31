@@ -14,6 +14,15 @@ import {
   Layers,
 } from "lucide-react";
 
+const DARK_MODE_KEY = 'biblelm-dark-mode';
+
+function getInitialDarkMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  const stored = localStorage.getItem(DARK_MODE_KEY);
+  if (stored !== null) return stored === 'true';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 export default function Home() {
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -22,23 +31,25 @@ export default function Home() {
   );
 
   const isDarkMode = useSyncExternalStore(
-    (onStoreChange) => {
-      const mql = window.matchMedia("(prefers-color-scheme: dark)");
-      mql.addEventListener("change", onStoreChange);
-      return () => mql.removeEventListener("change", onStoreChange);
+    (onStoreChange: () => void) => {
+      window.addEventListener('storage', onStoreChange);
+      return () => window.removeEventListener('storage', onStoreChange);
     },
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+    () => getInitialDarkMode(),
     () => false,
   );
 
   useEffect(() => {
     if (mounted) {
-      document.documentElement.classList.toggle("dark", isDarkMode);
+      document.documentElement.classList.toggle('dark', isDarkMode);
     }
   }, [isDarkMode, mounted]);
 
   const toggleDarkMode = () => {
-    document.documentElement.classList.toggle("dark");
+    const next = !document.documentElement.classList.contains('dark');
+    document.documentElement.classList.toggle('dark', next);
+    localStorage.setItem(DARK_MODE_KEY, String(next));
+    window.dispatchEvent(new Event('storage'));
   };
 
   return (

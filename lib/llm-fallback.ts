@@ -1,5 +1,5 @@
 import { createGroq } from '@ai-sdk/groq';
-import { generateText } from 'ai';
+import { generateText, streamText } from 'ai';
 import { GoogleGenAI } from '@google/genai';
 import { InferenceClient } from '@huggingface/inference';
 import { redis } from './redis';
@@ -503,15 +503,21 @@ export async function generateWithFallback(
             if (!(await isProviderAvailable('groq'))) {
               throw new Error('GROQ_TEMP_DISABLED');
             }
-            const result = await generateText({
+            const groqStream = streamText({
               model: groq(modelName),
               prompt,
               temperature,
-            });
-            const text = result.text;
+              maxTokens: maxTokens as any,
+            } as any);
+            const chunks: string[] = [];
+            for await (const chunk of (await groqStream).textStream) {
+              chunks.push(chunk);
+              options.onChunk?.(chunk);
+            }
+            const text = chunks.join('');
             if (text) {
               console.log(`[llm-fallback] Using fallback provider: groq:${modelName}`);
-              return { type: 'content', content: text, modelUsed: `groq:${modelName}` };
+              return { type: 'content', content: text, modelUsed: `groq:${modelName}`, chunks };
             }
             throw new Error('Groq returned empty output');
           } catch (error) {

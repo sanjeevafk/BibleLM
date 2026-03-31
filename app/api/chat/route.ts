@@ -8,6 +8,7 @@ import { validateDataIntegrity } from '@/lib/validate-data';
 import type { VerseContext } from '@/lib/bible-fetch';
 import { redis } from '@/lib/redis';
 import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
+import { inMemoryRateLimit } from '@/lib/rate-limit-memory';
 import {
   buildStructuredVerseResponse,
   compactStructuredChatResponse,
@@ -1102,14 +1103,35 @@ export async function POST(req: Request) {
             statusCode = 429;
             return new Response(JSON.stringify({ 
               error: 'Rate limit exceeded (60 req/min). Try again in 60s.' 
-            }), { status: statusCode, headers: { 'Content-Type': 'application/json' } });
+            }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
           }
         }
       } else {
         debugLog('Rate limiting skipped: unable to determine valid client IP.');
       }
     } else {
-      debugLog('Rate limiting disabled: Upstash Redis not configured.');
+      // Redis unavailable: use in-memory sliding-window limiter as fallback.
+      // Not cluster-safe — configure Upstash Redis for production multi-instance deployments.
+      const ip = getClientIp(req);
+      if (ip) {
+        const result = inMemoryRateLimit(
+          `ratelimit:${ip}`,
+          RATE_LIMIT_MAX_REQUESTS,
+          RATE_LIMIT_WINDOW_SECONDS * 1000
+        );
+        debugLog(`[in-memory rate limit] count=${result.count} for IP ${ip}`);
+        if (!result.allowed) {
+          statusCode = 429;
+          return new Response(JSON.stringify({
+            error: 'Rate limit exceeded (60 req/min). Try again in 60s.',
+          }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+        }
+        if (result.count > RATE_LIMIT_WARN_THRESHOLD) {
+          rateLimitWarning = `Approaching rate limit (${result.count}/${RATE_LIMIT_MAX_REQUESTS} req/min)`;
+        }
+      } else {
+        debugLog('Rate limiting skipped: unable to determine valid client IP.');
+      }
     }
 
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
@@ -1187,7 +1209,7 @@ export async function POST(req: Request) {
 
       const response = cachedResult.toUIMessageStreamResponse({
         headers: Object.keys(cachedHeaders).length > 0 ? cachedHeaders : undefined,
-        messageMetadata: ({ part }) => {
+        messageMetadata: ({ part }: { part: any }) => {
           if (part.type === 'start' || part.type === 'finish') {
             return {
               modelUsed: cachedResponse.modelUsed,
@@ -1292,7 +1314,7 @@ export async function POST(req: Request) {
     statusCode = 500;
     return new Response(JSON.stringify({ 
       error: 'An unexpected error occurred while processing your request.' 
-    }), { status: statusCode, headers: { 'Content-Type': 'application/json' } });
+    }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
   } finally {
     setLatencyMetric(latencyMetrics, 'total_ms', performance.now() - requestStartedAt);
     console.info(JSON.stringify({

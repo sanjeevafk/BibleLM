@@ -90,7 +90,7 @@ async function fallbackBundledLexicalSearch(query: string, translation: string, 
   const topK = Math.max(1, Math.floor(limit));
   const hits = getLexicalFuse().search(query, { limit: topK * 3 });
   const verseIds = hits
-    .map((hit) => hit.item.verseId)
+    .map((hit: any) => hit.item.verseId)
     .slice(0, topK);
 
   return fetchVersesByIds(verseIds, translation);
@@ -569,7 +569,7 @@ async function resolveVerseText(
   verseId: string,
   translation: string
 ): Promise<VerseContext | null> {
-  const canUseIndex = translation === 'WEB';
+  const canUseIndex = translation === 'BSB';
   if (LOCAL_TRANSLATIONS.has(translation)) {
     const localText = await getTranslationVerse(verseId, translation);
     if (localText) {

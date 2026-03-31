@@ -23,6 +23,7 @@ type ChatInnerProps = {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   onNewChat: () => void;
+  key?: React.Key;
 };
 
 const TRANSLATION_STORAGE_KEY = 'biblelm-translation';
@@ -45,13 +46,18 @@ export function Chat() {
     () => ''
   );
 
+  const DARK_MODE_KEY = 'biblelm-dark-mode';
+
   const isDarkMode = useSyncExternalStore(
     (onStoreChange: () => void) => {
-      const mql = window.matchMedia('(prefers-color-scheme: dark)');
-      mql.addEventListener('change', onStoreChange);
-      return () => mql.removeEventListener('change', onStoreChange);
+      window.addEventListener('storage', onStoreChange);
+      return () => window.removeEventListener('storage', onStoreChange);
     },
-    () => (typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false),
+    () => {
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(DARK_MODE_KEY) : null;
+      if (stored !== null) return stored === 'true';
+      return typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+    },
     () => false
   );
 
@@ -69,7 +75,10 @@ export function Chat() {
   };
 
   const toggleDarkMode = () => {
-    document.documentElement.classList.toggle('dark');
+    const next = !document.documentElement.classList.contains('dark');
+    document.documentElement.classList.toggle('dark', next);
+    localStorage.setItem('biblelm-dark-mode', String(next));
+    window.dispatchEvent(new Event('storage'));
   };
 
   const handleNewChat = () => {
