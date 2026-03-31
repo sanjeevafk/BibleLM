@@ -32,7 +32,11 @@ function bkbToBollsPath(bookCode: string, chapter: number): string {
     '1PE': 60, '2PE': 61, '1JN': 62, '2JN': 63, '3JN': 64,
     'JUD': 65, 'REV': 66,
   };
-  return `${map[bookCode]}/${chapter}`;
+  const bookNum = map[bookCode];
+  if (bookNum === undefined) {
+    throw new Error(`Unknown book code: ${bookCode}`);
+  }
+  return `${bookNum}/${chapter}`;
 }
 
 function parseOriginalTags(text: string): Array<{ word: string; strongs: string; gloss?: string }> {

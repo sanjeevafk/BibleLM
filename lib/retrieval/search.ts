@@ -269,7 +269,9 @@ function computeTskTopicalCoverage(query: string, verses: VerseContext[]): numbe
 export function buildTskExpansionDecision(query: string, coreVerses: VerseContext[]): TskExpansionDecision {
   const coreVerseCount = coreVerses.length;
   const topicalCoverage = Number(computeTskTopicalCoverage(query, coreVerses).toFixed(6));
-  const countConfidence = Math.min(coreVerseCount / TSK_CONFIG.MIN_CORE_VERSE_COUNT, 1);
+  const countConfidence = TSK_CONFIG.MIN_CORE_VERSE_COUNT > 0
+    ? Math.min(coreVerseCount / TSK_CONFIG.MIN_CORE_VERSE_COUNT, 1)
+    : 1;
   const retrievalConfidence = Number(((countConfidence + topicalCoverage) / 2).toFixed(6));
   const metrics = { core_verse_count: coreVerseCount, topical_coverage: topicalCoverage, retrieval_confidence: retrievalConfidence };
 

@@ -30,26 +30,33 @@ export function extractDirectReferences(
 ): Array<{ book: string; chapter: number; verse: number; endVerse?: number }> {
   const results: Array<{ book: string; chapter: number; verse: number; endVerse?: number }> = [];
 
-  const regex = /\b(Gen|Exo|Lev|Num|Deu|Jos|Jdg|Rut|Sa|Ki|Ch|Ezr|Neh|Est|Job|Ps|Pro|Ecc|Song|Isa|Jer|Lam|Ezk|Dan|Hos|Joel|Amos|Obad|Jonah|Mic|Nahum|Hab|Zeph|Hag|Zech|Mal|Matt|Mark|Luke|John|Rom|Cor|Gal|Eph|Phil|Col|Thess|Tim|Titus|Philemon|Heb|James|Pet|John|Jude|Rev)[a-z]*\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?\b/gi;
+  const regex = /\b(?:([1-3])\s*)?(Gen|Exo|Lev|Num|Deu|Jos|Jdg|Rut|Sa|Ki|Ch|Ezr|Neh|Est|Job|Ps|Pro|Ecc|Song|Isa|Jer|Lam|Ezk|Dan|Hos|Joel|Amos|Obad|Jonah|Mic|Nahum|Hab|Zeph|Hag|Zech|Mal|Matt|Mark|Luke|John|Rom|Cor|Gal|Eph|Phil|Col|Thess|Tim|Titus|Philemon|Heb|James|Pet|John|Jude|Rev)[a-z]*\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?\b/gi;
 
   const bookMap: Record<string, string> = {
     'GEN': 'GEN', 'EXO': 'EXO', 'LEV': 'LEV', 'NUM': 'NUM', 'DEU': 'DEU',
-    'JOS': 'JOS', 'JDG': 'JDG', 'RUT': 'RUT', 'SA': '1SA', 'KI': '1KI', 'CH': '1CH',
-    'PSA': 'PSA', 'PRO': 'PRO', 'ISA': 'ISA', 'MAT': 'MAT', 'MAR': 'MRK',
-    'LUK': 'LUK', 'JOH': 'JHN', 'ROM': 'ROM', 'COR': '1CO', 'GAL': 'GAL', 'EPH': 'EPH',
-    'PHI': 'PHP', 'COL': 'COL', 'THE': '1TH', 'TIM': '1TI', 'HEB': 'HEB', 'JAM': 'JAS',
-    'PET': '1PE', 'REV': 'REV',
+    'JOS': 'JOS', 'JDG': 'JDG', 'RUT': 'RUT', '1SA': '1SA', '2SA': '2SA', '1KI': '1KI', '2KI': '2KI',
+    '1CH': '1CH', '2CH': '2CH', 'PSA': 'PSA', 'PRO': 'PRO', 'ISA': 'ISA', 'MAT': 'MAT', 'MAR': 'MRK',
+    'LUK': 'LUK', 'JOH': 'JHN', 'ROM': 'ROM', '1CO': '1CO', '2CO': '2CO', 'GAL': 'GAL', 'EPH': 'EPH',
+    'PHI': 'PHP', 'COL': 'COL', '1TH': '1TH', '2TH': '2TH', '1TI': '1TI', '2TI': '2TI', '1PE': '1PE',
+    '2PE': '2PE', '1JO': '1JN', '2JO': '2JN', '3JO': '3JN', 'HEB': 'HEB', 'JAM': 'JAS', 'REV': 'REV',
+    // Fallbacks and extra shorthands
+    'SAM': '1SA', '1SAM': '1SA', '2SAM': '2SA', 'KIN': '1KI', '1KIN': '1KI', '2KIN': '2KI',
+    'CHR': '1CH', '1CHR': '1CH', '2CHR': '2CH', 'COR': '1CO', 'THE': '1TH', 'TIM': '1TI', 'PET': '1PE',
+    '1JOH': '1JN', '2JOH': '2JN', '3JOH': '3JN', 'JAS': 'JAS', 'MRK': 'MRK', 'JHN': 'JHN', 'PHP': 'PHP',
   };
 
   let match;
+  regex.lastIndex = 0; // Reset just in case
   while ((match = regex.exec(query)) !== null) {
-    const bookRaw = match[1].substring(0, 3).toUpperCase();
+    const num = match[1] || '';
+    const name = match[2].substring(0, 3).toUpperCase();
+    const bookRaw = (num + name).trim();
     const bookCode = bookMap[bookRaw] || bookRaw;
     results.push({
       book: bookCode,
-      chapter: parseInt(match[2], 10),
-      verse: parseInt(match[3], 10),
-      endVerse: match[4] ? parseInt(match[4], 10) : undefined,
+      chapter: parseInt(match[3], 10),
+      verse: parseInt(match[4], 10),
+      endVerse: match[5] ? parseInt(match[5], 10) : undefined,
     });
   }
 
@@ -283,7 +290,7 @@ export async function retrieveContextViaApis(
 
   for (const verse of prioritized.reverse()) verses.unshift(verse);
 
-  const freedomKeywords = ['slav', 'slave', 'servant', 'bondservant', 'bond servant', 'bond', 'doulos', 'freedom', 'free'];
+  const freedomKeywords = ['slavery', 'slave', 'enslaved', 'servant', 'bondservant', 'bond servant', 'bondage', 'doulos', 'freedom from'];
   if (freedomKeywords.some((k) => normalizedQuery.includes(k))) {
     for (const verse of freedomFromSlaveryVerses.slice().reverse()) {
       if (!verses.some((v) => v.reference === verse.reference)) verses.unshift(verse);
@@ -300,7 +307,7 @@ export async function retrieveContextViaApis(
         if (verses.some((v) => v.reference === refKey || v.reference.startsWith(refKey + '-'))) return null;
 
         const dbMatch = BIBLE_INDEX[`${ref.book} ${ref.chapter}:${ref.verse}`];
-        if (dbMatch && canUseIndex) return cloneVerses([dbMatch])[0];
+        if (dbMatch && canUseIndex) return cloneVerses([{ ...dbMatch, translation: 'BSB' }])[0];
 
         if (LOCAL_TRANSLATIONS.has(translation)) {
           const localText = await getTranslationVerse(refStr, translation);
@@ -326,7 +333,9 @@ export async function retrieveContextViaApis(
   // Lexical fallback
   if (verses.length < 2) {
     const lexicalFallback = await fallbackBundledLexicalSearch(query, translation, 6);
-    if (lexicalFallback.length > 0) verses.push(...lexicalFallback);
+    const existingRefs = new Set(verses.map(v => v.reference));
+    const newVerses = lexicalFallback.filter(v => !existingRefs.has(v.reference));
+    if (newVerses.length > 0) verses.push(...newVerses);
   }
 
   // Post-process

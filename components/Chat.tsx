@@ -194,8 +194,8 @@ function ChatInner({
         {
           body: {
             translation: selectedTranslation,
-            customApiKey: customKey || undefined,
           },
+          headers: customKey ? { Authorization: `Bearer ${customKey}` } : undefined,
         }
       );
       setInput('');

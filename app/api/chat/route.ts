@@ -244,9 +244,11 @@ async function incrementRateLimitCounter(rateLimitKey: string): Promise<number |
     console.warn('[rate-limit] Atomic counter failed; falling back to non-atomic INCR/EXPIRE.', error);
     if (!redis) return null;
     try {
-      const fallbackCount = await redis.incr(rateLimitKey);
-      if (fallbackCount === 1) await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
-      return fallbackCount;
+      const multi = redis.multi();
+      multi.incr(rateLimitKey);
+      multi.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
+      const results = await multi.exec();
+      return Number(results?.[0]) || null;
     } catch (fallbackError) {
       console.warn('[rate-limit] Fallback counter failed; disabling rate limit for this request.', fallbackError);
       return null;
@@ -348,7 +350,9 @@ export async function POST(req: Request) {
 
   try {
     await dataValidationPromise;
-    const { messages, translation, customApiKey } = await req.json();
+    const { messages, translation } = await req.json();
+    const authHeader = req.headers.get('Authorization');
+    const customApiKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
     const baseUrl =
       req.headers.get('origin') ||
       (() => {

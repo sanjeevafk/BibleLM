@@ -41,8 +41,9 @@ function normalizeIpCandidate(candidate: string | null | undefined): string | nu
   }
 
   // Normalize IPv4-mapped IPv6 "::ffff:1.2.3.4".
-  if (value.startsWith('::ffff:')) {
-    value = value.slice('::ffff:'.length);
+  const lowerValue = value.toLowerCase();
+  if (lowerValue.startsWith('::ffff:')) {
+    value = value.slice(7); // '::ffff:'.length === 7
   }
 
   // Remove IPv6 scope zone, e.g. "fe80::1%eth0".

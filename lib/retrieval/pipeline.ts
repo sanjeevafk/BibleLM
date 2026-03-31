@@ -7,7 +7,7 @@
 import { getCachedRetrievalContext, setCachedRetrievalContext } from '../cache';
 import { classifyAndExpand } from '../query-utils';
 import { getCrossReferences } from '../datasets/tsk';
-import { ENABLE_RETRIEVAL_DEBUG, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
+import { ENABLE_RETRIEVAL_DEBUG } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
 import { CONTEXT_CACHE_VERSION } from './types';
 import type { RetrievalInstrumentation } from './types';
@@ -125,7 +125,9 @@ export async function retrieveContextForQuery(
     const translated = await applyTranslationOverride(enriched, translation);
     const deduped = dedupeByVerseId(translated);
     const normalized = normalizeVerses(deduped).slice(0, topK);
-    await setCachedRetrievalContext({ query, translation, version: CONTEXT_CACHE_VERSION }, normalized);
+    await setCachedRetrievalContext({ query, translation, version: CONTEXT_CACHE_VERSION }, normalized).catch(
+      (err) => console.warn('Failed to cache retrieval context', err)
+    );
     return cloneVerses(normalized);
   }
 

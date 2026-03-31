@@ -47,3 +47,6 @@ Dataset&RetrievalEnrichment.md
 # generated benchmark outputs
 project-docs/benchmark/latest-report.json
 project-docs/benchmark/latest-report.md
+.vscode/settings.json
+verify_regex.js
+.vscode/settings.json
