@@ -210,18 +210,19 @@ function buildPrompt(
 
 async function findPreferredCachedResponse(
   query: string,
-  translation: string
+  translation: string,
+  historyHash?: string
 ): Promise<CacheLookupResult | null> {
   const cacheCandidates = CACHE_MODEL_CANDIDATES.map((modelKey) => ({
     modelKey,
-    cacheKey: buildCacheKey({ query, translation, model: modelKey }),
+    cacheKey: buildCacheKey({ query, translation, model: modelKey, historyHash }),
   }));
 
   const results = await Promise.all(
     cacheCandidates.map(async ({ modelKey, cacheKey }) => ({
       modelKey,
       cacheKey,
-      response: await getCachedResponse({ query, translation, model: modelKey }),
+      response: await getCachedResponse({ query, translation, model: modelKey, historyHash }),
     }))
   );
 
@@ -263,14 +264,14 @@ async function incrementRateLimitCounter(rateLimitKey: string): Promise<number |
 async function executeUncachedPipeline(options: {
   query: string;
   requestedTranslation: string;
-  groqApiKey?: string;
   modelHistory: ModelHistoryMessage[];
+  historyHash?: string;
   requestId: string;
 }): Promise<PipelineExecutionResult> {
   const pipelineMetrics: Partial<LatencyMetrics> = {};
 
   const retrieveStartedAt = performance.now();
-  const verses = await retrieveContextForQuery(options.query, options.requestedTranslation, options.groqApiKey, {
+  const verses = await retrieveContextForQuery(options.query, options.requestedTranslation, undefined, {
     requestId: options.requestId,
     onMetric: (metric, durationMs) => {
       pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
@@ -289,7 +290,6 @@ async function executeUncachedPipeline(options: {
   const generation = await generateWithFallback(prompt, {
     maxTokens: 2048,
     temperature: 0.1,
-    apiKey: options.groqApiKey,
     onTiming: (durationMs) => { pipelineMetrics.llm_ms = roundLatencyMs(durationMs); },
   });
 
@@ -320,7 +320,7 @@ async function executeUncachedPipeline(options: {
 
   if (verses.length > 0 && !/No supporting passages found/i.test(normalizedResponse.content)) {
     await setCachedResponse(
-      { query: options.query, translation: options.requestedTranslation, model: normalizedModelUsed },
+      { query: options.query, translation: options.requestedTranslation, model: normalizedModelUsed, historyHash: options.historyHash },
       { verses, context, prompt: finalPrompt, response: normalizedResponse.content, modelUsed: normalizedResponse.modelUsed }
     );
   }
@@ -351,8 +351,6 @@ export async function POST(req: Request) {
   try {
     await dataValidationPromise;
     const { messages, translation } = await req.json();
-    const authHeader = req.headers.get('Authorization');
-    const customApiKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
     const baseUrl =
       req.headers.get('origin') ||
       (() => {
@@ -389,7 +387,7 @@ export async function POST(req: Request) {
         Boolean(message && message.content && message.content.trim())
       );
 
-    const groqApiKey = customApiKey || process.env.GROQ_API_KEY;
+    const groqApiKey = process.env.GROQ_API_KEY;
     debugLog('Provider keys:', {
       hasGemini: Boolean(process.env.GEMINI_API_KEY),
       hasOpenRouter: Boolean(process.env.OPENROUTER_API_KEY),
@@ -472,11 +470,12 @@ export async function POST(req: Request) {
 
     const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
     const modelHistory = history.map((m) => ({ role: m.role, content: m.content }));
+    const historyHash = modelHistory.length > 0 ? hashModelHistory(modelHistory) : undefined;
 
     let cached = null as Awaited<ReturnType<typeof getCachedResponse>>;
     let cachedKey: string | null = null;
     const cacheLookupStartedAt = performance.now();
-    const preferredCachedResult = await findPreferredCachedResponse(query, requestedTranslation);
+    const preferredCachedResult = await findPreferredCachedResponse(query, requestedTranslation, historyHash);
     if (preferredCachedResult) {
       cached = preferredCachedResult.response;
       cachedKey = preferredCachedResult.cacheKey;
@@ -554,7 +553,7 @@ export async function POST(req: Request) {
     } else {
       debugLog('In-flight dedup MISS – starting pipeline', inflightKey);
       pipelinePromise = executeUncachedPipeline({
-        query, requestedTranslation, groqApiKey, modelHistory, requestId,
+        query, requestedTranslation, modelHistory, historyHash, requestId,
       }).finally(() => {
         if (inflightRequests.get(inflightKey) === pipelinePromise) {
           inflightRequests.delete(inflightKey);

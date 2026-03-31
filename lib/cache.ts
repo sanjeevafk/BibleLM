@@ -31,6 +31,7 @@ type CacheKeyInput = {
   query: string;
   translation: string;
   model: string;
+  historyHash?: string;
 };
 
 type RetrievalContextCacheKeyInput = {
@@ -39,8 +40,8 @@ type RetrievalContextCacheKeyInput = {
   version: string;
 };
 
-function buildCacheKey({ query, translation, model }: CacheKeyInput): string {
-  const input = `${query}\u0000${translation}\u0000${model}`;
+function buildCacheKey({ query, translation, model, historyHash }: CacheKeyInput): string {
+  const input = `${query}\u0000${translation}\u0000${model}${historyHash ? `\u0000${historyHash}` : ''}`;
   return crypto.createHash('sha256').update(input).digest('hex');
 }
 

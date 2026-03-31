@@ -7,7 +7,6 @@ import Fuse from 'fuse.js';
 import { getCrossReferences } from '../datasets/tsk';
 import { ENABLE_RETRIEVAL_DEBUG, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
-import bibleIndexData from '../../data/bible-index.json';
 import {
   RETRIEVAL_CONFIG,
   type VerseResult,
@@ -22,21 +21,17 @@ import {
 } from './types';
 import { tokenizeFallbackQuery } from './verse-utils';
 
-const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
-
-// ---------------------------------------------------------------------------
-// Lexical search (Fuse.js)
-// ---------------------------------------------------------------------------
-
-const LEXICAL_DOCS: LexicalDoc[] = Object.values(BIBLE_INDEX).map((verse) => ({
-  verseId: verse.reference,
-  text: verse.text,
-}));
-
 let lexicalFuse: Fuse<LexicalDoc> | null = null;
 
-export function getLexicalFuse(): Fuse<LexicalDoc> {
+export async function getLexicalFuse(): Promise<Fuse<LexicalDoc>> {
   if (!lexicalFuse) {
+    const bibleIndexData = (await import('../../data/bible-index.json')).default;
+    const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
+    const LEXICAL_DOCS: LexicalDoc[] = Object.values(BIBLE_INDEX).map((verse) => ({
+      verseId: verse.reference,
+      text: verse.text,
+    }));
+
     lexicalFuse = new Fuse(LEXICAL_DOCS, {
       keys: ['text'],
       includeScore: true,
@@ -212,7 +207,7 @@ export async function hybridSearch(
 ): Promise<VerseResult[]> {
   const topK = clampTopK(options?.topK);
   const translation = options?.translation || 'BSB';
-  const fuse = getLexicalFuse();
+  const fuse = await getLexicalFuse();
   const lexicalHits = fuse.search(query, { limit: topK * 3 });
 
   const scored: RankedVerse[] = lexicalHits.map((hit, index) => ({

@@ -256,7 +256,8 @@ export async function fallbackBundledLexicalSearch(
   limit = 6
 ): Promise<VerseContext[]> {
   const topK = Math.max(1, Math.floor(limit));
-  const hits = getLexicalFuse().search(query, { limit: topK * 3 });
+  const fuse = await getLexicalFuse();
+  const hits = fuse.search(query, { limit: topK * 3 });
   const verseIds = hits.map((hit) => hit.item.verseId).slice(0, topK);
   return fetchVersesByIds(verseIds, translation);
 }

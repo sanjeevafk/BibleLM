@@ -14,21 +14,21 @@ type WindowEntry = {
 
 const store = new Map<string, WindowEntry>();
 
-// Basic cleanup to prevent unbounded memory growth — runs every 5 minutes.
-let cleanupScheduled = false;
-function scheduleCleanup(windowMs: number): void {
-  if (cleanupScheduled) return;
-  cleanupScheduled = true;
-  setTimeout(() => {
-    const now = Date.now();
-    for (const [key, entry] of store.entries()) {
-      entry.timestamps = entry.timestamps.filter((ts) => now - ts < windowMs);
-      if (entry.timestamps.length === 0) {
-        store.delete(key);
-      }
+// Basic cleanup to prevent unbounded memory growth — runs on request if needed.
+let lastCleanup = 0;
+const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+function performCleanup(windowMs: number): void {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL) return;
+  lastCleanup = now;
+
+  for (const [key, entry] of store.entries()) {
+    entry.timestamps = entry.timestamps.filter((ts) => now - ts < windowMs);
+    if (entry.timestamps.length === 0) {
+      store.delete(key);
     }
-    cleanupScheduled = false;
-  }, 5 * 60 * 1000);
+  }
 }
 
 export type InMemoryRateLimitResult = {
@@ -46,7 +46,7 @@ export function inMemoryRateLimit(
   windowMs: number
 ): InMemoryRateLimitResult {
   const now = Date.now();
-  scheduleCleanup(windowMs);
+  performCleanup(windowMs);
 
   let entry = store.get(key);
   if (!entry) {

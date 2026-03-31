@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState, useCallback, useLayoutEffect, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useLayoutEffect, useSyncExternalStore } from 'react';
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
@@ -8,22 +8,12 @@ import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TranslationSelect } from './TranslationSelect';
-import { Moon, Plus, Settings, Sun } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Moon, Plus, Sun } from 'lucide-react';
 
 type ChatInnerProps = {
-  customKey: string;
-  onCustomKeyChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   onNewChat: () => void;
-  key?: React.Key;
 };
 
 const TRANSLATION_STORAGE_KEY = 'biblelm-translation';
@@ -35,15 +25,6 @@ export function Chat() {
     () => () => {},
     () => true,
     () => false
-  );
-
-  const customKey = useSyncExternalStore(
-    (onStoreChange: () => void) => {
-      window.addEventListener('storage', onStoreChange);
-      return () => window.removeEventListener('storage', onStoreChange);
-    },
-    () => (typeof window !== 'undefined' ? localStorage.getItem('groq-api-key') || '' : ''),
-    () => ''
   );
 
   const DARK_MODE_KEY = 'biblelm-dark-mode';
@@ -69,11 +50,6 @@ export function Chat() {
     }
   }, [isDarkMode, mounted]);
 
-  const saveCustomKey = (e: React.ChangeEvent<HTMLInputElement>) => {
-    localStorage.setItem('groq-api-key', e.target.value);
-    window.dispatchEvent(new Event('storage'));
-  };
-
   const toggleDarkMode = () => {
     const next = !document.documentElement.classList.contains('dark');
     document.documentElement.classList.toggle('dark', next);
@@ -90,8 +66,6 @@ export function Chat() {
   return (
     <ChatInner
       key={resetKey}
-      customKey={customKey}
-      onCustomKeyChange={saveCustomKey}
       isDarkMode={isDarkMode}
       toggleDarkMode={toggleDarkMode}
       onNewChat={handleNewChat}
@@ -100,8 +74,6 @@ export function Chat() {
 }
 
 function ChatInner({
-  customKey,
-  onCustomKeyChange,
   isDarkMode,
   toggleDarkMode,
   onNewChat,
@@ -125,7 +97,7 @@ function ChatInner({
     return response;
   }, []);
 
-  const transport = useMemo(
+  const transport = React.useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
         fetch: chatFetch,
@@ -158,20 +130,17 @@ function ChatInner({
   const handleScroll = useCallback(() => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      // If within 100px of bottom, enable auto-scroll
       const atBottom = scrollHeight - scrollTop - clientHeight < 100;
       shouldAutoScroll.current = atBottom;
     }
   }, []);
 
-  // Use useLayoutEffect to prevent flicker/jumps during renders
   useLayoutEffect(() => {
     if (shouldAutoScroll.current) {
       scrollToBottom();
     }
   }, [messages, isLoading, scrollToBottom]);
 
-  // Initial scroll on mount
   useEffect(() => {
     scrollToBottom();
   }, [scrollToBottom]);
@@ -185,7 +154,6 @@ function ChatInner({
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
 
-    // Force auto-scroll to bottom when user sends a message
     shouldAutoScroll.current = true;
 
     try {
@@ -195,11 +163,9 @@ function ChatInner({
           body: {
             translation: selectedTranslation,
           },
-          headers: customKey ? { Authorization: `Bearer ${customKey}` } : undefined,
         }
       );
       setInput('');
-      // Ensure we scroll after sending
       setTimeout(() => scrollToBottom(true), 50);
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -240,39 +206,6 @@ function ChatInner({
             <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="rounded-full w-9 h-9 hover:bg-muted/80">
               {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 hover:bg-muted/80">
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72 mt-2">
-                <DropdownMenuLabel className="font-serif text-lg px-3 pt-3">Settings</DropdownMenuLabel>
-                <DropdownMenuSeparator className="mx-2" />
-                <div className="p-3 space-y-4">
-                  <div className="space-y-1.5 text-xs text-muted-foreground leading-normal">
-                    <p>
-                      The Librarian currently operates on a free, rate-limited resource.
-                    </p>
-                    <p>
-                      To ensure uninterrupted service and deeper research capabilities, you may provide your own API key.
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">API Key (Stored Locally)</label>
-                    <Input
-                      type="password"
-                      placeholder="Enter Groq API key..."
-                      value={customKey}
-                      onChange={onCustomKeyChange}
-                      className="h-10 text-sm rounded-lg"
-                    />
-                    <p className="text-[10px] text-muted-foreground italic">Your key never leaves your browser.</p>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       </header>
