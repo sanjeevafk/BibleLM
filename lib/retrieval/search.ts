@@ -253,16 +253,20 @@ export async function hybridSearch(
   }));
 
   // Phase 3: Conditional Semantic Re-ranking
-  // Gating: Only trigger if BM25 top match is low confidence OR gap is small
-  const top1Score = scored[0]?.score || 0;
-  const scoreGap = top1Score - (scored[1]?.score || 0);
-  const semanticGatingThreshold = 0.85; // BM25 max normalized score
-  const gapThreshold = 0.15; // Confidence gap
+  // Gating: Only trigger if BM25 top match is low confidence OR gap is small.
+  // Note: We use raw BM25 scores for gating because min-max normalization 
+  // always sets the top hit to 1.0, making it useless for confidence gating.
+  const rawTop1 = bm25Hits[0]?.score || 0;
+  const rawTop2 = bm25Hits[1]?.score || 0;
+  const rawGap = rawTop1 - rawTop2;
+  
+  const semanticGatingThreshold = 12.0; // Raw BM25 score for "strong" match
+  const gapThreshold = 1.5; // Raw score gap for "clear" winner
   
   let finalRanked = scored;
   let semanticTriggered = false;
 
-  if (top1Score < semanticGatingThreshold || scoreGap < gapThreshold) {
+  if (rawTop1 < semanticGatingThreshold || rawGap < gapThreshold) {
     semanticTriggered = true;
     const verseTexts = new Map(bm25Hits.map(h => [h.doc.id, h.doc.text]));
     const reRanked = await reRankSemantic(query, scored, verseTexts);

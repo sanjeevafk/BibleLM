@@ -31,7 +31,7 @@ export function expandTheologicalQuery(query: string): string {
 
   for (const word of words) {
     expanded.push(word);
-    
+
     // Check for exact matches in the synonym map
     if (THEOLOGICAL_SYNONYMS[word]) {
       expanded.push(...THEOLOGICAL_SYNONYMS[word]);
@@ -48,7 +48,7 @@ export function expandTheologicalQuery(query: string): string {
   if (query.toLowerCase().includes("eternal life") && !expanded.includes("immortality")) {
     expanded.push(...THEOLOGICAL_SYNONYMS["eternal life"]);
   }
-   if (query.toLowerCase().includes("end times") && !expanded.includes("eschaton")) {
+  if (query.toLowerCase().includes("end times") && !expanded.includes("eschaton")) {
     expanded.push(...THEOLOGICAL_SYNONYMS["end times"]);
   }
 

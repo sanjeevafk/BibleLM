@@ -4,7 +4,7 @@ import { BM25Engine } from '../lib/retrieval/bm25';
 
 async function buildIndex() {
   console.log('--- BM25 Index Builder ---');
-  
+
   const indexPath = path.join(process.cwd(), 'data', 'bible-full-index.json');
   const outputPath = path.join(process.cwd(), 'data', 'bm25-state.json');
 
@@ -24,12 +24,15 @@ async function buildIndex() {
 
   console.log('Exporting state...');
   const state = engine.exportState();
-  
+
   console.log(`Writing state to ${outputPath}...`);
   fs.writeFileSync(outputPath, JSON.stringify(state));
-  
+
   const stats = fs.statSync(outputPath);
   console.log(`Success! BM25 state file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
 }
 
-buildIndex().catch(console.error);
+buildIndex().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

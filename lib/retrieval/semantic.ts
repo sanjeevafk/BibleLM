@@ -43,20 +43,34 @@ export async function reRankSemantic(
     const docEmbeddings = (docResult.embeddings || []).map((e: any) => e.values);
 
     // 3. Compute similarity and blend
+    const bm25Scores = candidates.map((c) => c.score);
+    const bm25Min = Math.min(...bm25Scores);
+    const bm25Max = Math.max(...bm25Scores);
+    const bm25Range = bm25Max - bm25Min || 1; // Derive bounds from current batch
+
     const scored = candidates.map((candidate, i) => {
       const docEmbedding = docEmbeddings[i];
       if (!docEmbedding) return candidate;
 
       const similarity = dotProduct(queryEmbedding, docEmbedding);
-      
+
+      // Normalize Similarity to [0, 1]
+      // dotProduct on normalized embeddings yields cosine similarity in [-1, 1]
+      const normalizedSimilarity = (similarity + 1) / 2;
+
+      // Normalize BM25 score to [0, 1]
+      // min-max normalization against the current batch window
+      const normalizedBM25 = Math.max(0, Math.min(1, (candidate.score - bm25Min) / bm25Range));
+
       // Blend Lexical and Semantic scores
+      // higher alpha weights semantic similarity more heavily
       const alpha = 0.65;
-      const blendedScore = (alpha * similarity) + ((1 - alpha) * candidate.score);
+      const blendedScore = alpha * normalizedSimilarity + (1 - alpha) * normalizedBM25;
 
       return {
         ...candidate,
         score: blendedScore,
-        semanticSimilarity: similarity
+        semanticSimilarity: similarity,
       };
     });
 
