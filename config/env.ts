@@ -42,7 +42,7 @@ const envSchema = z.object({
     .or(z.literal('')),
 
   /** Upstash Redis REST token (required when URL is set). */
-  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 
   // ── Database ──────────────────────────────────────────────────────────────
   /** PostgreSQL connection string (optional — falls back to local JSON index). */
@@ -91,7 +91,7 @@ const refinedSchema = envSchema.superRefine((data, ctx) => {
     // Non-fatal: the context-only fallback path can still respond.
     console.warn(
       '[env] WARNING: No LLM provider API key is configured. ' +
-        'Responses will fall back to context-only mode (no generative answer).'
+      'Responses will fall back to context-only mode (no generative answer).'
     );
   }
 });

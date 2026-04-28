@@ -12,7 +12,10 @@
 export interface VectorStoreQuery {
   /** Raw natural-language question. */
   text: string;
-  /** Maximum number of ranked results to return. */
+  /** 
+   * Maximum number of ranked results to return.
+   * Implementations should default to a reasonable limit (e.g., 10) when undefined.
+   */
   topK?: number;
   /** Optional Bible translation hint (may be used for metadata filtering). */
   translation?: string;

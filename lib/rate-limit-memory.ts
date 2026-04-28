@@ -34,11 +34,20 @@ const store = new Map<string, WindowEntry>();
 
 // Emit a one-time warning when this module is loaded in a serverless context
 // so the issue is visible in deployment logs, not just in source comments.
-if (process.env.VERCEL || process.env.NEXT_RUNTIME === 'edge') {
+// Detect common serverless/edge platforms
+const isServerless =
+  process.env.VERCEL ||
+  process.env.NEXT_RUNTIME === 'edge' ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.FUNCTION_NAME ||  // Google Cloud Functions
+  process.env.FUNCTION_TARGET ||  // Google Cloud Functions (newer)
+  typeof (globalThis as any).EdgeRuntime !== 'undefined';  // Cloudflare Workers
+
+if (isServerless) {
   console.warn(
-    '[rate-limit-memory] WARNING: In-memory rate limiting is active in a serverless '
-    + 'environment. State is NOT shared across isolates. Configure UPSTASH_REDIS_REST_URL '
-    + 'and UPSTASH_REDIS_REST_TOKEN to enable distributed rate limiting.'
+    '[rate-limit-memory] WARNING: In-memory rate limiting is active in a serverless ' +
+    'environment. State is NOT shared across isolates. Configure UPSTASH_REDIS_REST_URL ' +
+    'and UPSTASH_REDIS_REST_TOKEN to enable distributed rate limiting.'
   );
 }
 

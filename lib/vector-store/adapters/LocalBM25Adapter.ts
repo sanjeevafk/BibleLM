@@ -94,16 +94,21 @@ export class LocalBM25Adapter implements IVectorStore {
     } catch {
       console.warn(`[${this.name}] bm25-state.json not found; falling back to full in-memory index.`);
 
-      const bibleIndexData = (await import('../../../data/bible-full-index.json')).default;
-      const BIBLE_INDEX = bibleIndexData as Record<string, { text: string }>;
+      try {
+        const bibleIndexData = (await import('../../../data/bible-full-index.json')).default;
+        const BIBLE_INDEX = bibleIndexData as Record<string, { text: string }>;
 
-      this.engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
-        k1: RETRIEVAL_CONFIG.bm25.k1,
-        b: RETRIEVAL_CONFIG.bm25.b,
-        phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
-      });
+        this.engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
+          k1: RETRIEVAL_CONFIG.bm25.k1,
+          b: RETRIEVAL_CONFIG.bm25.b,
+          phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
+        });
 
-      console.log(`[${this.name}] Full in-memory BM25 index built as fallback.`);
+        console.log(`[${this.name}] Full in-memory BM25 index built as fallback.`);
+      } catch (fallbackError) {
+        console.error(`[${this.name}] Failed to load fallback index:`, fallbackError);
+        throw new Error(`${this.name} initialization failed: no valid BM25 index available`);
+      }
     }
   }
 }

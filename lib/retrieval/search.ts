@@ -71,7 +71,7 @@ export async function getBM25Engine(): Promise<BM25Engine> {
           phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
         });
       }
-      
+
       bm25Engine = engine;
       return engine;
     })();
@@ -279,12 +279,10 @@ export async function hybridSearch(
   // will almost always score below 12.0, triggering a 300-600ms embedding API call
   // for the simplest possible queries. This is a critical latency regression.
   //
-  // NEW GATING LOGIC (two independent conditions; either triggers semantics):
-  //   1. Word-count gate: Skip semantic re-ranking entirely for queries < 4 words.
-  //      Short queries have a small, well-defined vocabulary; BM25 is sufficient.
-  //   2. Relative score-drop gate: If the normalised score gap between rank-1 and
-  //      rank-5 is small (< 0.15), the BM25 ranking is ambiguous and semantic
-  //      re-ranking is worth the latency cost.
+  // NEW GATING LOGIC (both conditions must be met to trigger semantics):
+  //   1. Word-count gate: Query must have >= 4 words (short queries skip semantics).
+  //   2. Ambiguity gate: Normalised score gap between rank-1 and rank-5 must be
+  //      small (< 0.15), indicating BM25 ranking is uncertain.
   const queryWordCount = query.trim().split(/\s+/).filter(Boolean).length;
   const WORD_COUNT_GATE = 4;         // Queries with fewer words skip semantics
   const RELATIVE_GAP_THRESHOLD = 0.15; // Normalised score gap that signals ambiguity

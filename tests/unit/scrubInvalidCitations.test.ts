@@ -12,22 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import type { VerseContext } from '../../lib/bible-fetch';
 
-// ---------------------------------------------------------------------------
-// Inline the function under test
-// (mirrors app/api/chat/lib/citation-scrubber.ts implementation)
-// ---------------------------------------------------------------------------
-
-/**
- * Removes any [BOOK CHAPTER:VERSE] citation markers from `text` that do not
- * correspond to a verse in `validVerses`.
- */
-function scrubInvalidCitations(text: string, validVerses: VerseContext[]): string {
-  const validRefs = new Set(validVerses.map((v) => v.reference.trim().toUpperCase()));
-  return text.replace(/\[([^\]]+)\]/g, (match, inner: string) => {
-    const normalized = inner.trim().toUpperCase();
-    return validRefs.has(normalized) ? match : '';
-  });
-}
+import { scrubInvalidCitations } from '../../app/api/chat/lib/citation-scrubber';
 
 // ---------------------------------------------------------------------------
 // Fixtures
