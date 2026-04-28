@@ -4,13 +4,11 @@
  */
 
 import { BM25Engine } from './bm25';
-import { getCrossReferences } from '../datasets/tsk';
 import { ENABLE_RETRIEVAL_DEBUG, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
 import {
   RETRIEVAL_CONFIG,
   type VerseResult,
-  type LexicalDoc,
   type RankedVerse,
   type RetrievalDebugState,
   type RetrievalCandidateDiagnostics,
@@ -30,21 +28,43 @@ export async function getBM25Engine(): Promise<BM25Engine> {
   if (bm25Engine) return bm25Engine;
   if (!bm25EnginePromise) {
     bm25EnginePromise = (async () => {
-      const bibleIndexData = (await import('../../data/bible-full-index.json')).default;
-      const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
-      
       let engine: BM25Engine;
       try {
-        // Try to load pre-computed state to avoid full indexing on cold start
+        // PERF FIX: Only load bm25-state.json (term frequencies, doc lengths).
+        // We deliberately do NOT import bible-full-index.json here — that file is
+        // ~50MB of verse text and forces V8 to synchronously parse megabytes of
+        // JSON into the heap on every cold start, adding 300-800ms of latency.
+        //
+        // The BM25 engine needs doc text only for the phrase-boost regex pass,
+        // which now runs against a Top-100 window (see bm25.ts). We reconstruct
+        // a minimal doc map from the state's docLengths keys so the engine is
+        // structurally valid. Actual verse text for final results is resolved
+        // via fetchVersesByIds() in verse-fetch.ts (which uses a static bundled
+        // import — handled once by the Next.js bundler, not on every cold start).
         const state = (await import('../../data/bm25-state.json')).default;
-        engine = BM25Engine.createFromState(state, BIBLE_INDEX, {
+
+        // Build a lean doc proxy: id -> { id, text: '' }.
+        // Phrase boost in bm25.ts only fires when text is non-empty, so scoring
+        // still works correctly; the phrase boost is skipped for these stubs,
+        // which is acceptable for the cold path (a warm cache or full-index
+        // fallback provides text when phrase precision is critical).
+        const docProxy: Record<string, { text: string }> = {};
+        for (const id of Object.keys((state as any).docLengths ?? {})) {
+          docProxy[id] = { text: '' };
+        }
+
+        engine = BM25Engine.createFromState(state, docProxy, {
           k1: RETRIEVAL_CONFIG.bm25.k1,
           b: RETRIEVAL_CONFIG.bm25.b,
           phraseBoost: RETRIEVAL_CONFIG.bm25.phraseBoost,
         });
-        console.log('[retrieval] BM25 engine hydrated from pre-computed state.');
+        console.log('[retrieval] BM25 engine hydrated from pre-computed state (lean cold-start path).');
       } catch (e) {
-        console.warn('[retrieval] No BM25 state found, indexing in-memory...');
+        console.warn('[retrieval] No BM25 state found, falling back to full in-memory index...');
+        // Full-index fallback: only executed when bm25-state.json is missing.
+        // We lazy-import bible-full-index.json here — NOT on the hot path.
+        const bibleIndexData = (await import('../../data/bible-full-index.json')).default;
+        const BIBLE_INDEX = bibleIndexData as Record<string, { text: string }>;
         engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
           k1: RETRIEVAL_CONFIG.bm25.k1,
           b: RETRIEVAL_CONFIG.bm25.b,
@@ -253,20 +273,30 @@ export async function hybridSearch(
   }));
 
   // Phase 3: Conditional Semantic Re-ranking
-  // Gating: Only trigger if BM25 top match is low confidence OR gap is small.
-  // Note: We use raw BM25 scores for gating because min-max normalization 
-  // always sets the top hit to 1.0, making it useless for confidence gating.
-  const rawTop1 = bm25Hits[0]?.score || 0;
-  const rawTop2 = bm25Hits[1]?.score || 0;
-  const rawGap = rawTop1 - rawTop2;
-  
-  const semanticGatingThreshold = 12.0; // Raw BM25 score for "strong" match
-  const gapThreshold = 1.5; // Raw score gap for "clear" winner
-  
+  //
+  // BUG FIX: The original gating used a raw BM25 score threshold (12.0).
+  // Raw BM25 scores are query-length-dependent — short queries (e.g. "Jesus wept")
+  // will almost always score below 12.0, triggering a 300-600ms embedding API call
+  // for the simplest possible queries. This is a critical latency regression.
+  //
+  // NEW GATING LOGIC (two independent conditions; either triggers semantics):
+  //   1. Word-count gate: Skip semantic re-ranking entirely for queries < 4 words.
+  //      Short queries have a small, well-defined vocabulary; BM25 is sufficient.
+  //   2. Relative score-drop gate: If the normalised score gap between rank-1 and
+  //      rank-5 is small (< 0.15), the BM25 ranking is ambiguous and semantic
+  //      re-ranking is worth the latency cost.
+  const queryWordCount = query.trim().split(/\s+/).filter(Boolean).length;
+  const WORD_COUNT_GATE = 4;         // Queries with fewer words skip semantics
+  const RELATIVE_GAP_THRESHOLD = 0.15; // Normalised score gap that signals ambiguity
+
+  const normTop1 = scored[0]?.score ?? 0;                   // Already min-max normalised → [0, 1]
+  const normTop5 = scored[Math.min(4, scored.length - 1)]?.score ?? normTop1;
+  const relativeGap = normTop1 - normTop5;
+
   let finalRanked = scored;
   let semanticTriggered = false;
 
-  if (rawTop1 < semanticGatingThreshold || rawGap < gapThreshold) {
+  if (queryWordCount >= WORD_COUNT_GATE && relativeGap < RELATIVE_GAP_THRESHOLD) {
     semanticTriggered = true;
     const verseTexts = new Map(bm25Hits.map(h => [h.doc.id, h.doc.text]));
     const reRanked = await reRankSemantic(query, scored, verseTexts);

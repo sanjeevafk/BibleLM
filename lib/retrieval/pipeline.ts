@@ -22,7 +22,7 @@ import {
 } from './search';
 import {
   fetchVersesByIds,
-  fetchContextWindow,
+  fetchContextWindowsBatch,
   attachIndexedOriginals,
   applyTranslationOverride,
   retrieveContextViaApis,
@@ -148,19 +148,20 @@ export async function retrieveContextForQuery(
   const fetchVersesStartedAt = performance.now();
   
   // Phase 4: Context Window Expansion
-  // We expand the top 3 hits if they are not already part of a range
-  const expandedVerses: VerseContext[] = [];
+  // N+1 FIX: Previously, fetchContextWindow was called per-ID inside a .map(),
+  // creating N separate DB/API fetches. fetchContextWindowsBatch collects all
+  // window refs for the expansion IDs in a single deduplicated pass, then
+  // issues exactly one fetchVersesByIds call for all of them.
   const expansionLimit = 3;
-  
-  const expansionTasks = limitedIds.slice(0, expansionLimit).map(id => fetchContextWindow(id, translation, 1));
+  const expansionIds = limitedIds.slice(0, expansionLimit);
   const remainingIds = limitedIds.slice(expansionLimit);
-  const remainingTask = remainingIds.length > 0 ? fetchVersesByIds(remainingIds, translation) : Promise.resolve([]);
-  
-  const allResults = await Promise.all([...expansionTasks, remainingTask]);
-  for (const res of allResults) {
-    expandedVerses.push(...res);
-  }
-  
+
+  const [batchExpanded, remainingVerses] = await Promise.all([
+    fetchContextWindowsBatch(expansionIds, translation, 1),
+    remainingIds.length > 0 ? fetchVersesByIds(remainingIds, translation) : Promise.resolve([]),
+  ]);
+
+  const expandedVerses: VerseContext[] = [...batchExpanded, ...remainingVerses];
   let verses = expandedVerses;
   recordRetrievalMetric(instrumentation, 'fetch_verses_db_ms', fetchVersesStartedAt);
 

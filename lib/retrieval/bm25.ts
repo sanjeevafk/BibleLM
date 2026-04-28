@@ -120,30 +120,32 @@ export class BM25Engine {
       }
     }
 
-    // Apply Phrase Boost
+    // Sort by raw BM25 score first, then apply phrase boost only to Top 100
+    // to avoid blocking the event loop with regex on 15,000+ matched documents.
+    const PHRASE_BOOST_CANDIDATE_LIMIT = 100;
+    const sortedCandidates = Array.from(scores.entries())
+      .map(([docId, score]) => ({ doc: this.docs.get(docId)!, score }))
+      .sort((a, b) => b.score - a.score);
+
     const normalizeForPhrase = (text: string) =>
       text.toLowerCase().replace(/[^\w\s']/g, ' ').replace(/\s+/g, ' ').trim();
 
     const normalizedQuery = normalizeForPhrase(query);
     if (normalizedQuery.length > 5) { // Only boost longer queries
-      for (const [docId, score] of scores.entries()) {
-        const doc = this.docs.get(docId)!;
-        const normalizedDoc = normalizeForPhrase(doc.text);
-
+      // Apply phrase boost only to Top 100 candidates — not the full matched set
+      const boostWindow = sortedCandidates.slice(0, PHRASE_BOOST_CANDIDATE_LIMIT);
+      for (const candidate of boostWindow) {
+        const normalizedDoc = normalizeForPhrase(candidate.doc.text);
         if (normalizedDoc.includes(normalizedQuery)) {
-          scores.set(docId, score * this.phraseBoost);
+          candidate.score *= this.phraseBoost;
         }
       }
+      // Re-sort the boost window since scores changed, then stitch back
+      boostWindow.sort((a, b) => b.score - a.score);
+      sortedCandidates.splice(0, PHRASE_BOOST_CANDIDATE_LIMIT, ...boostWindow);
     }
 
-    // Sort and return
-    return Array.from(scores.entries())
-      .map(([docId, score]) => ({
-        doc: this.docs.get(docId)!,
-        score
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    return sortedCandidates.slice(0, limit);
   }
 
   /**

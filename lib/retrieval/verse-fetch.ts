@@ -275,6 +275,42 @@ export async function fetchContextWindow(
 }
 
 // ---------------------------------------------------------------------------
+// fetchContextWindowsBatch — batch context window fetch (single DB pass)
+// ---------------------------------------------------------------------------
+
+/**
+ * Retrieves surrounding context verses for multiple verseIds in a single
+ * DB/API call, eliminating the N+1 pattern that occurs when fetchContextWindow
+ * is called separately inside a .map().
+ *
+ * For each verseId we expand a window of [verse-windowSize .. verse+windowSize],
+ * deduplicate all refs across every ID, then fetch them all at once.
+ */
+export async function fetchContextWindowsBatch(
+  verseIds: string[],
+  translation: string,
+  windowSize: number = 1
+): Promise<VerseContext[]> {
+  if (verseIds.length === 0) return [];
+
+  const allRefs = new Set<string>();
+
+  for (const verseId of verseIds) {
+    const parsed = parseReferenceKey(verseId);
+    if (!parsed) continue;
+    for (let i = -windowSize; i <= windowSize; i++) {
+      const v = parsed.verse + i;
+      if (v > 0) {
+        allRefs.add(`${parsed.book} ${parsed.chapter}:${v}`);
+      }
+    }
+  }
+
+  // Single bulk fetch for all window refs across all target verses
+  return fetchVersesByIds(Array.from(allRefs), translation);
+}
+
+// ---------------------------------------------------------------------------
 // fallBackBundledLexicalSearch — search using local bible-index.json
 // ---------------------------------------------------------------------------
 

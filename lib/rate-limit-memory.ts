@@ -4,8 +4,25 @@
  *
  * Each key maps to an array of request timestamps.
  * On each check, stale timestamps (older than windowMs) are pruned.
- * This is NOT cluster-safe — each serverless instance has its own state.
- * For multi-instance production workloads, configure Upstash Redis instead.
+ *
+ * ⚠️  SERVERLESS DELUSION WARNING ⚠️
+ * This module is UNSAFE for production serverless / Edge deployments:
+ *
+ *   1. STATELESS ISOLATES — Each Vercel / Cloudflare Worker isolate has its own
+ *      independent heap. Memory written by isolate A is NEVER visible to isolate B.
+ *      Concurrent requests will bypass the limit entirely when routed to different
+ *      isolates.
+ *
+ *   2. COLD STARTS — The `store` Map is reset to empty on every cold start.
+ *      A burst of requests that each land on a fresh isolate will all pass through,
+ *      defeating the rate limit entirely.
+ *
+ * This module is safe ONLY for:
+ *   - Local development / testing
+ *   - Single-process Node.js servers (not serverless)
+ *
+ * For multi-instance production workloads, configure Upstash Redis instead
+ * and use the `ratelimit` helper from `@upstash/ratelimit`.
  */
 
 type WindowEntry = {
@@ -14,6 +31,16 @@ type WindowEntry = {
 };
 
 const store = new Map<string, WindowEntry>();
+
+// Emit a one-time warning when this module is loaded in a serverless context
+// so the issue is visible in deployment logs, not just in source comments.
+if (process.env.VERCEL || process.env.NEXT_RUNTIME === 'edge') {
+  console.warn(
+    '[rate-limit-memory] WARNING: In-memory rate limiting is active in a serverless '
+    + 'environment. State is NOT shared across isolates. Configure UPSTASH_REDIS_REST_URL '
+    + 'and UPSTASH_REDIS_REST_TOKEN to enable distributed rate limiting.'
+  );
+}
 
 // Basic cleanup to prevent unbounded memory growth — runs on request if needed.
 let lastCleanup = 0;
