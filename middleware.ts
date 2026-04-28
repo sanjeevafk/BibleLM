@@ -16,7 +16,7 @@ const ALLOWED_ORIGINS = new Set(
 );
 
 const CORS_HEADERS_BASE: Record<string, string> = {
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-translation, x-bible-translation',
   'Access-Control-Max-Age': '86400',
 };
