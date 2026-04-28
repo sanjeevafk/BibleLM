@@ -68,7 +68,7 @@ BibleLM operates entirely on the Edge (Vercel Edge Runtime) for sub-second globa
 
 ## Datasets & Attributions
 
-BibleLM is built on open-license and public domain datasets:
+BibleLM is built on open-license and public domain datasets. The processed dataset is available on [Hugging Face](https://huggingface.co/datasets/sanjeevafk/biblelm):
 *   **Translations**: Berean Standard Bible (BSB) as default. KJV, WEB, ASV fallbacks.
 *   **Original Languages**: OpenHebrewBible (CC BY-NC 4.0) for clause segmentation and BHS-WLC alignments. OpenGNT (CC BY-NC 4.0) for Greek morphology.
 *   **Lexicons**: Strong's Exhaustive Concordance mapping.
