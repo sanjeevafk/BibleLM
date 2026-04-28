@@ -14,6 +14,9 @@
     "benchmark:regression": "ts-node --project tsconfig.scripts.json tests/benchmark/check-regressions.ts project-docs/benchmark/latest-report.json",
     "benchmark:flags": "ts-node --project tsconfig.scripts.json tests/benchmark/check-feature-flags.ts",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint --no-warn-ignored app components lib tests scripts *.ts *.mjs",
     "type-check": "tsc --noEmit"
   },
@@ -50,12 +53,15 @@
     "@types/pg": "^8.18.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^4.1.5",
     "dotenv": "^17.3.1",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.1.6",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5",
+    "zod": "^4.3.6"
   },
   "overrides": {
     "minimatch": "^10.2.4"
