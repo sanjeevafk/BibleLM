@@ -1,0 +1,32 @@
+# Docker build artifacts
+.next
+out
+
+# Source and dev files (not needed in image)
+node_modules
+.git
+.gitignore
+.github
+.vscode
+.env*
+!.env.example
+
+# Local datasets (raw sources — already processed into data/)
+datasets/
+
+# TypeScript build info (regenerated during docker build)
+*.tsbuildinfo
+
+# Test artifacts
+coverage/
+tests/
+
+# Docs / scripts not needed at runtime
+project-docs/
+scripts/
+*.md
+!README.md
+
+# OS noise
+.DS_Store
+Thumbs.db

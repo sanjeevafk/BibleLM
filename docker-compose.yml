@@ -1,0 +1,77 @@
+# =============================================================================
+# BibleLM — Docker Compose (self-hosted stack)
+#
+# Usage:
+#   cp .env.example .env.local          # fill in API keys
+#   docker compose up --build           # first run: builds image
+#   docker compose up                   # subsequent runs (uses cache)
+#   docker compose down                 # stop
+#
+# Services:
+#   biblelm   — Next.js app (port 3000)
+#   redis     — Optional Upstash-compatible Redis for rate limiting / caching
+#               Remove this service if you rely on the Upstash cloud.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # BibleLM Next.js application
+  # ---------------------------------------------------------------------------
+  biblelm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: biblelm:latest
+    container_name: biblelm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # ── LLM Providers ──────────────────────────────────────────────────────
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
+
+      # ── Rate Limiting / Caching ─────────────────────────────────────────────
+      # Point at the local redis service defined below.
+      # Override with Upstash cloud credentials if you prefer the managed service.
+      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-http://redis:8079}
+      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-local-dev-token}
+
+      # ── Runtime ────────────────────────────────────────────────────────────
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Local Redis (Upstash-compatible REST gateway via upstash/redis-local)
+  # Provides distributed rate limiting and response caching without needing
+  # a paid Upstash account in self-hosted mode.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: biblelm-redis
+    restart: unless-stopped
+    # Persist data across restarts so the response cache survives container
+    # recreation. Remove the volume mount to run fully ephemeral.
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis_data:
+    driver: local
