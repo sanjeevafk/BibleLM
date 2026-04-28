@@ -1,177 +1,101 @@
-# BibleLM
+# BibleLM: The Sola Scriptura Engine
 
-**A zero-cost, edge-first, neutrality-enforced Bible chatbot** using Retrieval-Augmented Generation (RAG) to deliver **exact verse quotes**, **original-language (Hebrew/Greek) insights**, and **Treasury of Scripture Knowledge (TSK)** cross-references without theological bias, modern commentary, or hallucinated content.
+**An uncompromising, text-first Retrieval-Augmented Generation (RAG) architecture** designed to deliver exact verse quotes, original-language (Hebrew/Greek) lexical data, and Treasury of Scripture Knowledge (TSK) cross-references. 
 
-**Live demo**: https://biblelm.vercel.app  
+Built to eliminate LLM "preachiness" and modern cultural relativization, BibleLM functions as a strict "Sola Scriptura" (Scripture Alone) engine. It forces base models to answer complex theological queries using raw, cited text and structural linguistics rather than external commentary or interpretive bias.
 
-## Core Philosophy
+**Live Demo**: [https://biblelm.vercel.app](https://biblelm.vercel.app)
 
-- **Scripture-First and Absolute Neutrality** — Every response **must** quote real verses with chapter:verse citations. No interpretation, application, denominational slant, political framing, or moralizing allowed. The system prompt rigidly enforces this.
-- **Zero-Cost Operation** — Runs indefinitely on Vercel **Hobby** tier and Gemini **free** tier (Gemini 2.5 Flash primary). No paid vector DBs, no heavy compute, no always-on servers.
-- **Speed and Reliability** — Common queries (< 200ms) via pre-computed BM25 indexing and Edge Functions. Rare verses fallback gracefully to external APIs.
-- **Original-Language Fidelity** — Hebrew (OSHB) / Greek (SBLGNT) word popups with Strong's number, transliteration, and gloss — no loose paraphrasing.
+---
+
+## The Engineering Challenge
+
+Standard LLMs are trained to be conversational, safe, and agreeable. When asked complex or controversial theological questions, they tend to synthesize "balanced" essays that dilute strict biblical prohibitions with modern moralizing or cultural relativism. 
+
+**BibleLM solves this through strict architectural constraints:**
+1. **Citation-Locking:** The system prompt forces the LLM to *only* use the verses provided in the retrieval context. A post-generation scrubbing middleware strips any hallucinations.
+2. **Lexical Tethering:** Every verse retrieved is enriched with its underlying Hebrew/Greek morphology (via OpenHebrewBible & OpenGNT). The LLM is forced to output Strong's numbers and transliterations, tethering its response to structural data rather than creative text generation.
+3. **Algorithmic Textual Conclusions:** Instead of relying on the LLM to interpret severity, the system instructs the LLM to evaluate the *vocabulary* of the retrieved text (e.g., if the text contains words like "abomination" or prescribes "death"), forcing the LLM to output a direct, text-bound conclusion without softening.
 
 ## System Architecture
 
-```text
-+-----------------------+      +-----------------------+      +-----------------------+
-|                       |      |                       |      |                       |
-|   Client App (UI)     +----->|  Vercel Edge API      +----->|  Primary LLM          |
-|   Next.js React       |      |  (/api/chat)          |      |  (Gemini 2.5 Flash)   |
-|                       |      |                       |      |                       |
-+-----------------------+      +-----------+-----------+      +-----------+-----------+
-                                           |                              |
-                                           v                              v (Fallback)
-+-----------------------+      +-----------+-----------+      +-----------+-----------+
-|                       |      |                       |      |                       |
-|   Upstash Redis       |<-----+  Hybrid Retrieval V3  |      |  Secondary LLMs       |
-|   (Rate Limit/Cache)  |      |  (BM25 + Semantic)    |      |  (OpenRouter, Groq,   |
-|                       |      |                       |      |   HuggingFace)        |
-+-----------------------+      +-----------+-----------+      +-----------------------+
-                                           |
-                                           v
-                               +-----------+-----------+
-                               |                       |
-                               |  Static Data Bundles  |
-                               |  (JSON, BSB, TSK,     |
-                               |   Morphology)         |
-                               |                       |
-                               +-----------------------+
-```
-
-Next.js 16 (App Router) and Vercel Edge runtime. Fully stateless where possible; lightweight Upstash Redis used for rate-limiting and response caching.
-
-### Tech Stack
-
-- **Framework** — Next.js 16 (App Router, Server Actions, React Server Components)
-- **Styling** — Tailwind CSS and shadcn/ui
-- **LLM Integration** — Vercel AI SDK and provider SDKs (@google/genai, OpenRouter, @ai-sdk/groq, @huggingface/inference)
-- **Primary LLM** — Gemini 2.5 Flash (`GEMINI_API_KEY`) with streamed generation
-- **Fallback Models (ordered)**  
-  - OpenRouter (llama-3.1-8b-instruct)
-  - Groq (llama-3.3-70b-versatile)
-  - Hugging Face Inference (Meta-Llama-3.1-8B-Instruct)
-- **Retrieval (V3 Hybrid)** — Advanced 4-stage pipeline:
-  1. **Query Expansion**: Theological synonym mapping to improve concept-to-verse recall.
-  2. **Lexical Search (BM25)**: Custom engine using the full 31,086 verse BSB index with smoothed IDF and pre-computed state.
-  3. **Conditional Semantic Gating**: Semantic re-ranking (Google text-embedding-004) only triggers if lexical confidence is low.
-  4. **Context Expansion**: Narrative windowing (±1 verse) with automated sequential merging.
-- **Caching** — Upstash Redis for query-to-verses and final answer caching (72h TTL).
-- **Data (Datasets and Attributions)** — Public domain and open-license sources:
-  - **BSB** (Berean Standard Bible) — Default translation.
-  - **KJV, WEB, ASV** — Public domain, sourced from scrollmapper CSV exports.
-  - **OpenHebrewBible Subset** — Clause segmentation, poetic division, BHS-WLC alignments, and extended glosses. Processed from eliranwong/OpenHebrewBible — CC BY-NC 4.0 (attribution required).
-  - **OpenGNT Greek NT Layers** — Morphology, interlinear glosses, and clause tagging built from OpenGNT sources — CC BY-NC 4.0.
-  - **Strong's Exhaustive Concordance** — Core lexicon and dictionary mappings.
-  - **Treasury of Scripture Knowledge (TSK)** — Ranked thematic cross-references.
-
-### Request Lifecycle (Detailed RAG Flow)
+BibleLM operates entirely on the Edge (Vercel Edge Runtime) for sub-second global latency. It uses a custom **Stateless Hybrid Retrieval** system to avoid the overhead, latency, and cost of a managed Vector Database.
 
 ```text
-User Query
-    |
-    v
-[ Theological Synonym Expansion ] ---> (e.g., "Messiah" -> "Christ", "Anointed")
-    |
-    v
-[ Lexical Search (BM25) ] ---> Uses pre-computed index state (<10ms)
-    |
-    +---> Top Result Confidence High?
-                 |
-                YES ───────────────────────────┐
-                 |                             |
-                 NO                            |
-                 |                             v
-                 v             [ Context Window Expansion (±1 Verse) ]
-[ Semantic Re-ranking ]                        |
-  (Top 50 candidates sent to                   |
-   Gemini Embedding API)                       v
-                 |               [ Build Strict Citation Prompt ]
-                 |                             |
-                 └─────────────────────────────┤
-                                               v
-                             [ Inference & Streaming (LLM) ]
+┌─────────────────┐      ┌──────────────────────────┐      ┌─────────────────────┐
+│                 │      │  Next.js Edge API Route  │      │  Primary LLM        │
+│  Client UI      ├─────►│  (Rate Limiting &        ├─────►│  (Gemini 2.5 Flash) │
+│  (React 19)     │      │   In-Flight Dedupe)      │      │  (Strict Temp: 0.1) │
+│                 │      └────────────┬─────────────┘      └──────────┬──────────┘
+└─────────────────┘                   │                               │
+                                      ▼                               ▼ (Fallback)
+┌─────────────────┐      ┌──────────────────────────┐      ┌─────────────────────┐
+│  Upstash Redis  │      │  Retrieval Pipeline V3   │      │  Secondary LLMs     │
+│  (Response Cache│◄────►│  (Query Expansion ->     │      │  (OpenRouter, Groq, │
+│   & IP Limits)  │      │   Hybrid Search)         │      │   Llama-3.3 70B)    │
+└─────────────────┘      └────────────┬─────────────┘      └─────────────────────┘
+                                      │
+                                      ▼
+                         ┌──────────────────────────┐
+                         │  Static Edge Data Store  │
+                         │  - Serialized BM25 State │
+                         │  - BSB/Originals JSON    │
+                         │  - TSK Cross-References  │
+                         └──────────────────────────┘
 ```
 
-1. **Client to /api/chat (POST, Edge)**  
-   Sends message history array in Vercel AI SDK format.
+### The 4-Stage Retrieval Pipeline
 
-2. **Theological Query Expansion**  
-   User keywords are expanded using the theological synonym map (e.g., 'messiah' -> 'christ, anointed').
+1. **Theological Query Expansion:** User queries are intercepted and expanded via a domain-specific synonym map (e.g., "Messiah" -> "Christ, Anointed") to increase lexical recall.
+2. **Lexical Search (BM25):** The primary retrieval engine. To bypass the ~1s cold-start penalty of indexing 31,000 verses on the Edge, the engine's TF/IDF term frequency state is pre-computed at build time and serialized to JSON. At runtime, the engine hydrates in <10ms.
+3. **Conditional Semantic Gating:** If the top BM25 match yields low confidence or the gap between candidates is too narrow, the pipeline seamlessly falls back to a Semantic Re-ranking layer, fetching embeddings (Google `text-embedding-004`) for the top 50 candidates and blending scores (65% Semantic / 35% BM25).
+4. **Context Windowing (Narrative Expansion):** Top lexical hits are expanded into narrative blocks (neighboring verses ±1) and merged into coherent reading sections before being injected into the prompt context.
 
-3. **Lexical Search (BM25)**  
-   The expanded query hits the pre-computed BM25 engine. The engine hydrates in <10ms from the serialized state.
+## Tech Stack
 
-4. **Semantic Re-ranking (Conditional)**  
-   If the top BM25 match score is low or the gap is small, the system triggers semantic re-ranking for the top 50 candidates using the Gemini Embedding API.
+*   **Framework**: Next.js 16 (App Router, Server Actions, Edge API Routes)
+*   **AI Integration**: Vercel AI SDK, Google GenAI SDK, @ai-sdk/groq
+*   **Infrastructure**: Vercel (Hosting), Upstash Redis (Caching/Rate Limiting)
+*   **Retrieval**: Custom TypeScript BM25 Engine + Gemini Embeddings
+*   **Styling**: Tailwind CSS v4, shadcn/ui
 
-5. **Context Windowing**  
-   Top hits are expanded into narrative blocks (neighboring verses) and merged into coherent reading sections.
+## Performance & Optimization
 
-6. **Prompt Engineering**  
-   The system prompt (~800 tokens) enforces citation-only constraints. Temperature is set to 0.1 for maximum factual fidelity.
+*   **Stateless Scaling**: The entire search index and lexical datasets are bundled as static JSON chunks, fitting within Vercel's strict 50MB deployment limit.
+*   **Edge-Native Rate Limiting**: Implements a Redis-backed atomic sliding window (via custom Lua script), gracefully degrading to an in-memory map if Redis is unreachable.
+*   **Request Deduplication**: In-flight identical requests are hashed and deduped at the route level to prevent API abuse and conserve LLM tokens.
+*   **Latency Profile**: Warm lexical queries resolve in `~60-150ms`. Semantic-gated queries add `~300-500ms`. Final streamed time-to-first-token (TTFT) averages `< 1.2s`.
 
-7. **Inference and Streaming**  
-   Gemini/OpenRouter/Groq outputs are normalized to a unified streaming format for the UI.
+## Datasets & Attributions
 
-## Key Features
-
-- **Neutral Citation Engine** — Forces exact verse quoting with citations.
-- **Original-Language Tooltips** — Click any tagged word for Strong's number, transliteration, and gloss popup.
-- **TSK Cross-References** — Thematic links shown inline and ranked by relevance.
-- **Translation Toggle** — BSB default with KJV/WEB/ASV available.
-- **Free-Tier Friendly** — Optimized for edge functions and free-tier API limits.
-- **Controversy-Resistant** — Designed to handle divisive topics without editorializing.
-
-## Test Queries (Neutrality and Accuracy Smoke Tests)
-
-1. "What does the Bible say about abortion?"  
-   (Expect Ps 139:13-16, Ex 21:22-25)
-2. "What is the biblical view of homosexuality?"  
-   (Expect Lev 18:22, 20:13; Rom 1:26-27; 1 Cor 6:9-11)
-3. "Is divorce allowed in the Bible?"  
-   (Expect Mal 2:16; Matt 5:31-32, 19:3-9)
-4. "Does the Bible support slavery?"  
-   (Expect Ex 21; Eph 6:5-9; Philemon)
-5. "Can women be pastors according to Scripture?"  
-   (Expect 1 Tim 2:11-15; Gal 3:28; Rom 16:1-7)
-
-## Performance and Optimization
-
-- **Cold Start**: Optimized via `data/bm25-state.json`. Indexing is bypassed at runtime for a 50% faster startup (~550ms cold start).
-- **Warm Latency**: Lexical-only queries respond in ~60-150ms. Semantic-gated queries add ~300-500ms based on API round-trips.
-- **Data Bundling**: All Bible data is pre-parsed and pre-processed into static JSON fragments to fit within Vercel's 50MB deployment limit.
+BibleLM is built on open-license and public domain datasets:
+*   **Translations**: Berean Standard Bible (BSB) as default. KJV, WEB, ASV fallbacks.
+*   **Original Languages**: OpenHebrewBible (CC BY-NC 4.0) for clause segmentation and BHS-WLC alignments. OpenGNT (CC BY-NC 4.0) for Greek morphology.
+*   **Lexicons**: Strong's Exhaustive Concordance mapping.
+*   **Cross-References**: Treasury of Scripture Knowledge (TSK).
 
 ## Development Setup
 
-```bash
-# 1. Clone and install
+\`\`\`bash
+# 1. Clone repository
 git clone https://github.com/voidcommit-afk/BibleLM.git
 cd BibleLM
+
+# 2. Install dependencies
 npm install
 
-# 2. Configure Environment
+# 3. Configure Environment
 cp .env.example .env.local
 # Required: GEMINI_API_KEY
-# Optional: UPSTASH_REDIS_REST_URL/TOKEN, OPENROUTER_API_KEY
-
-# 3. Build Data Bundles
-# Aggregates BSB index and parses Strong's/Hebrew/Greek
-npm run build:data 
+# Optional (but recommended for prod): UPSTASH_REDIS_REST_URL/TOKEN
 
 # 4. Pre-compute Retrieval Index
-# Generates the BM25 state for high-performance retrieval
-ts-node --project tsconfig.scripts.json scripts/build-retrieval-index.ts
+# Generates the BM25 state map for high-performance edge retrieval
+npx ts-node --project tsconfig.scripts.json scripts/build-retrieval-index.ts
 
 # 5. Run Dev Server
 npm run dev
-```
-
-## Maintenance and Monitoring
-
-- **Benchmark Suite**: `scripts/benchmark-retrieval.ts` verifies search accuracy (MRR/Precision).
-- **Refresh Index**: If the Bible datasets are updated, rerun `scripts/build-retrieval-index.ts` to update the BM25 term frequencies.
+\`\`\`
 
 ## License
-
-MIT
+MIT License
