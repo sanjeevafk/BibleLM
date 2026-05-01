@@ -5,13 +5,14 @@
  */
 
 import { Pool } from 'pg';
+import fs from 'fs';
+import path from 'path';
 import { ensureDbReady, getDbPool } from '../db';
 import {
   fetchVerseTextWithFallback,
   type VerseContext,
 } from '../bible-fetch';
 import { getTranslationVerse } from '../translations';
-import bibleIndexData from '../../data/bible-full-index.json';
 import { LOCAL_TRANSLATIONS } from './types';
 import { parseReferenceKey, cloneVerses } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
@@ -19,7 +20,23 @@ import { enrichOriginalLanguages } from './enrichment';
 import { getBM25Engine } from './search';
 import type { RetrievalDebugState } from './types';
 
-const BIBLE_INDEX = bibleIndexData as Record<string, VerseContext>;
+let bibleIndexCache: Record<string, VerseContext> | null = null;
+
+function getBibleIndexPath(): string {
+  return path.join(process.cwd(), 'data', 'bible-full-index.json');
+}
+
+function getBibleIndex(): Record<string, VerseContext> {
+  if (bibleIndexCache) return bibleIndexCache;
+  try {
+    const raw = fs.readFileSync(getBibleIndexPath(), 'utf8');
+    bibleIndexCache = JSON.parse(raw) as Record<string, VerseContext>;
+  } catch (error) {
+    console.warn('[retrieval] bible-full-index.json load failed; indexed fallback unavailable.', error);
+    bibleIndexCache = {};
+  }
+  return bibleIndexCache;
+}
 
 // ---------------------------------------------------------------------------
 // Reference key parsing
@@ -147,7 +164,7 @@ export async function resolveVerseText(verseId: string, translation: string): Pr
 
   // BSB uses the bundled bible-index.json
   if (translation === 'BSB') {
-    const indexed = BIBLE_INDEX[verseId];
+    const indexed = getBibleIndex()[verseId];
     if (indexed?.text) {
       return {
         reference: verseId,
@@ -238,8 +255,9 @@ export async function applyTranslationOverride(verses: VerseContext[], translati
 // ---------------------------------------------------------------------------
 
 export function attachIndexedOriginals(verses: VerseContext[]): void {
+  const index = getBibleIndex();
   for (const verse of verses) {
-    const indexed = BIBLE_INDEX[verse.reference];
+    const indexed = index[verse.reference];
     if (indexed?.original && indexed.original.length > 0) {
       verse.original = indexed.original.map((orig) => ({ ...orig }));
     }
@@ -398,7 +416,7 @@ export async function retrieveContextViaApis(
         const refStr = `${ref.book} ${ref.chapter}:${ref.verse}${ref.endVerse ? '-' + ref.endVerse : ''}`;
         if (verses.some((v) => v.reference === refKey || v.reference.startsWith(refKey + '-'))) return null;
 
-        const dbMatch = BIBLE_INDEX[`${ref.book} ${ref.chapter}:${ref.verse}`];
+        const dbMatch = getBibleIndex()[`${ref.book} ${ref.chapter}:${ref.verse}`];
         if (dbMatch && canUseIndex) return cloneVerses([{ ...dbMatch, translation: 'BSB' }])[0];
 
         if (LOCAL_TRANSLATIONS.has(translation)) {

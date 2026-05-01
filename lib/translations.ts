@@ -2,18 +2,18 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import zlib from 'zlib';
-import bibleIndexData from '../data/bible-full-index.json';
 
 type TranslationBook = Record<string, Record<string, string>>;
 type IndexedVerse = { text?: string };
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'translations');
 const INDEX_PATH = path.join(process.cwd(), 'data', 'translations-index.json');
+const BIBLE_INDEX_PATH = path.join(process.cwd(), 'data', 'bible-full-index.json');
 
 const indexCache: Record<string, Record<string, string>> = {};
 const bookCache = new Map<string, TranslationBook | null>();
 const inFlight = new Map<string, Promise<TranslationBook | null>>();
-const BIBLE_INDEX = bibleIndexData as Record<string, IndexedVerse>;
+let bibleIndexCache: Record<string, IndexedVerse> | null = null;
 
 const brotliDecompress = promisify(zlib.brotliDecompress);
 const gunzip = promisify(zlib.gunzip);
@@ -279,6 +279,18 @@ function loadIndexSync(): void {
 
 loadIndexSync();
 
+function getBibleIndex(): Record<string, IndexedVerse> {
+  if (bibleIndexCache) return bibleIndexCache;
+  try {
+    const raw = fs.readFileSync(BIBLE_INDEX_PATH, 'utf8');
+    bibleIndexCache = JSON.parse(raw) as Record<string, IndexedVerse>;
+  } catch (error) {
+    console.warn('[translations] bible-full-index fallback unavailable.', error);
+    bibleIndexCache = {};
+  }
+  return bibleIndexCache;
+}
+
 function normalizeTranslation(input: string): string {
   const upper = input.trim().toUpperCase();
   return TRANSLATION_ALIASES[upper] || upper;
@@ -342,26 +354,6 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
   return loader;
 }
 
-function getWebIndexedVerse(reference: string): string | null {
-  const direct = BIBLE_INDEX[reference]?.text;
-  if (direct) return direct;
-
-  const dotted = reference.match(/^([A-Z0-9]{3})\s+(\d+):(\d+)(?:\s*-\s*(\d+))?$/i);
-  if (!dotted) return null;
-  const book = normalizeBook(dotted[1]);
-  const chapter = Number.parseInt(dotted[2], 10);
-  const start = Number.parseInt(dotted[3], 10);
-  const end = dotted[4] ? Number.parseInt(dotted[4], 10) : start;
-
-  const parts: string[] = [];
-  for (let verse = start; verse <= end; verse += 1) {
-    const key = `${book} ${chapter}:${verse}`;
-    const text = BIBLE_INDEX[key]?.text;
-    if (text) parts.push(text);
-  }
-  return parts.length > 0 ? parts.join(' ') : null;
-}
-
 function parseReference(ref: string): { book: string; chapter: number; verse: number; endVerse?: number } | null {
   const cleaned = ref.trim();
   const match = cleaned.match(/^(.+?)\s+(\d+):(\d+)(?:\s*-\s*(\d+))?$/);
@@ -385,6 +377,27 @@ function parseReference(ref: string): { book: string; chapter: number; verse: nu
   return null;
 }
 
+function getWebIndexedVerse(reference: string): string | null {
+  const bibleIndex = getBibleIndex();
+  const direct = bibleIndex[reference]?.text;
+  if (direct) return direct;
+
+  const dotted = reference.match(/^([A-Z0-9]{3})\s+(\d+):(\d+)(?:\s*-\s*(\d+))?$/i);
+  if (!dotted) return null;
+  const book = normalizeBook(dotted[1]);
+  const chapter = Number.parseInt(dotted[2], 10);
+  const start = Number.parseInt(dotted[3], 10);
+  const end = dotted[4] ? Number.parseInt(dotted[4], 10) : start;
+
+  const parts: string[] = [];
+  for (let verse = start; verse <= end; verse += 1) {
+    const key = `${book} ${chapter}:${verse}`;
+    const text = bibleIndex[key]?.text;
+    if (text) parts.push(text);
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
 export async function getTranslationVerse(
   reference: string,
   translation: string
@@ -394,13 +407,9 @@ export async function getTranslationVerse(
   if (!parsed) return null;
 
   const normalizedTranslation = normalizeTranslation(translation);
-
   if (normalizedTranslation === 'WEB') {
     const indexed = getWebIndexedVerse(`${parsed.book} ${parsed.chapter}:${parsed.verse}${parsed.endVerse ? `-${parsed.endVerse}` : ''}`);
-    if (indexed) {
-      return indexed;
-    }
-    console.warn(`[translations] WEB indexed verse missing for ${reference}`);
+    if (indexed) return indexed;
   }
 
   const data = await loadBook(translation, parsed.book);
