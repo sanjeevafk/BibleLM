@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 import { Pool } from 'pg';
+import { isDatasetAvailable } from './dataset-utils';
 
 dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 dotenv.config();
@@ -46,6 +47,7 @@ const STRONGS_HEBREW_PATH =
 
 const BATCH_SIZE = Number.parseInt(process.env.BATCH_SIZE || '200', 10);
 const EMBED_BATCH_SIZE = Number.parseInt(process.env.EMBED_BATCH_SIZE || '64', 10);
+const DATASET_MANIFEST_PATH = process.env.DATASET_MANIFEST_PATH || path.join(process.cwd(), 'data', 'topics.json');
 
 const BOOK_MAP: Record<string, string> = {
   genesis: 'GEN',
@@ -214,6 +216,19 @@ const BOOK_MAP: Record<string, string> = {
   revelation: 'REV',
   rev: 'REV'
 };
+
+function ensureVersionedDatasetsReady(): void {
+  if (!fs.existsSync(DATASET_MANIFEST_PATH)) {
+    console.warn(`[dataset] Optional manifest not found at ${DATASET_MANIFEST_PATH}; continuing.`);
+    return;
+  }
+
+  if (!isDatasetAvailable(DATASET_MANIFEST_PATH)) {
+    throw new Error(
+      `Dataset metadata validation failed for ${DATASET_MANIFEST_PATH}. Rebuild datasets before seeding.`
+    );
+  }
+}
 
 function normalizeBook(raw: string): string {
   const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -695,6 +710,7 @@ async function ensureSchema(pool: Pool) {
 }
 
 async function main() {
+  ensureVersionedDatasetsReady();
   if (!POSTGRES_URL) {
     throw new Error('POSTGRES_URL is not set');
   }
