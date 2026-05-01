@@ -1,0 +1,1331 @@
+{
+  "dataset_version": "2026-03-retrieval-enrichment",
+  "generated_at": "2026-05-01T08:35:37.894Z",
+  "generator": "scripts/build-topic-datasets.ts",
+  "items": [
+    {
+      "id": "about-forgiveness",
+      "label": "About Forgiveness",
+      "synonyms": [
+        "about",
+        "forgiveness"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "adoption",
+      "label": "Adoption",
+      "synonyms": [
+        "Adoption",
+        "child of God",
+        "heirs",
+        "sons of God"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "adulterer",
+      "label": "Adulterer",
+      "synonyms": [
+        "adulterer"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "adulterous",
+      "label": "Adulterous",
+      "synonyms": [
+        "adulterous"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "adultery",
+      "label": "Adultery",
+      "synonyms": [
+        "adultery",
+        "infidelity",
+        "unfaithfulness"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "adultery-in-heart",
+      "label": "Adultery In Heart",
+      "synonyms": [
+        "adultery",
+        "heart"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "amalekite",
+      "label": "Amalekite",
+      "synonyms": [
+        "amalekite"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "amorite",
+      "label": "Amorite",
+      "synonyms": [
+        "amorite"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "angels",
+      "label": "Angels",
+      "synonyms": [
+        "Angels",
+        "heavenly hosts",
+        "messengers"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "anointing",
+      "label": "Anointing",
+      "synonyms": [
+        "Anointing",
+        "chrism",
+        "consecration"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "antichrist",
+      "label": "Antichrist",
+      "synonyms": [
+        "Antichrist",
+        "beast",
+        "man of lawlessness"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "apostles",
+      "label": "Apostles",
+      "synonyms": [
+        "Apostles",
+        "disciples",
+        "sent ones"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "armor-of-god",
+      "label": "Armor of God",
+      "synonyms": [
+        "Armor",
+        "shield of faith",
+        "spiritual warfare"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "arsenokoit",
+      "label": "Arsenokoit",
+      "synonyms": [
+        "arsenokoit"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "ascension",
+      "label": "Ascension",
+      "synonyms": [
+        "Ascension",
+        "exalted",
+        "taken up"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "assurance",
+      "label": "Assurance",
+      "synonyms": [
+        "Assurance",
+        "certainty",
+        "confidence"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "atonement",
+      "label": "Atonement",
+      "synonyms": [
+        "Atonement",
+        "blood sacrifice",
+        "propitiation",
+        "reconciliation"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "baptism",
+      "label": "Baptism",
+      "synonyms": [
+        "Baptism",
+        "immersion",
+        "washing"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "beatitudes",
+      "label": "Beatitudes",
+      "synonyms": [
+        "Beatitudes",
+        "blessed are",
+        "sermon blessings"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "biblical-women",
+      "label": "Biblical Women",
+      "synonyms": [
+        "biblical",
+        "women"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "blaspheme",
+      "label": "Blaspheme",
+      "synonyms": [
+        "blaspheme"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "blasphemy",
+      "label": "Blasphemy",
+      "synonyms": [
+        "blasphemy"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "blessing",
+      "label": "Blessing",
+      "synonyms": [
+        "Blessing",
+        "favor",
+        "prosperity"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "body-of-christ",
+      "label": "Body of Christ",
+      "synonyms": [
+        "Christ",
+        "church unity",
+        "members"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "calling",
+      "label": "Calling",
+      "synonyms": [
+        "Calling",
+        "summoned",
+        "vocation"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "canaanite",
+      "label": "Canaanite",
+      "synonyms": [
+        "canaanite"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "canaanite-conquest",
+      "label": "Canaanite Conquest",
+      "synonyms": [
+        "Canaanite",
+        "Conquest",
+        "devoted to destruction",
+        "herem"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "charity",
+      "label": "Charity",
+      "synonyms": [
+        "almsgiving",
+        "Charity",
+        "generosity"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "cheating",
+      "label": "Cheating",
+      "synonyms": [
+        "cheating"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "children",
+      "label": "Children",
+      "synonyms": [
+        "Children",
+        "little ones",
+        "offspring"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "church",
+      "label": "Church",
+      "synonyms": [
+        "assembly",
+        "Church",
+        "ekklesia"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "comfort",
+      "label": "Comfort",
+      "synonyms": [
+        "Comfort",
+        "consolation",
+        "encouragement"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "communion",
+      "label": "Communion",
+      "synonyms": [
+        "breaking bread",
+        "Communion",
+        "lord's supper"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "compassion",
+      "label": "Compassion",
+      "synonyms": [
+        "Compassion",
+        "mercy",
+        "pity"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "confession",
+      "label": "Confession",
+      "synonyms": [
+        "acknowledgement",
+        "Confession",
+        "repentant speech"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "conquest-of-canaan",
+      "label": "Conquest Of Canaan",
+      "synonyms": [
+        "canaan",
+        "conquest"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "contentment",
+      "label": "Contentment",
+      "synonyms": [
+        "Contentment",
+        "satisfaction",
+        "sufficiency"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "covenant",
+      "label": "Covenant",
+      "synonyms": [
+        "covenant",
+        "promise",
+        "testament"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "creation",
+      "label": "Creation",
+      "synonyms": [
+        "Creation",
+        "genesis",
+        "maker"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "cross",
+      "label": "Cross",
+      "synonyms": [
+        "calvary",
+        "Cross",
+        "crucifixion"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "curse-god",
+      "label": "Curse God",
+      "synonyms": [
+        "curse"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "death",
+      "label": "Death",
+      "synonyms": [
+        "Death",
+        "grave",
+        "sheol"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "deceit",
+      "label": "Deceit",
+      "synonyms": [
+        "deceit"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "deceive",
+      "label": "Deceive",
+      "synonyms": [
+        "deceive"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "deception",
+      "label": "Deception",
+      "synonyms": [
+        "deception"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "demons",
+      "label": "Demons",
+      "synonyms": [
+        "Demons",
+        "evil spirits",
+        "unclean spirits"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "depression",
+      "label": "Depression",
+      "synonyms": [
+        "Depression",
+        "discouragement",
+        "downcast"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "destroy-canaan",
+      "label": "Destroy Canaan",
+      "synonyms": [
+        "canaan",
+        "destroy"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "destroy-canaanites",
+      "label": "Destroy Canaanites",
+      "synonyms": [
+        "canaanites",
+        "destroy"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "destroy-the-canaanites",
+      "label": "Destroy The Canaanites",
+      "synonyms": [
+        "canaanites",
+        "destroy"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "devote-to-destruction",
+      "label": "Devote To Destruction",
+      "synonyms": [
+        "destruction",
+        "devote"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "devotion",
+      "label": "Devotion",
+      "synonyms": [
+        "dedication",
+        "Devotion",
+        "piety"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "discernment",
+      "label": "Discernment",
+      "synonyms": [
+        "Discernment",
+        "spiritual insight",
+        "wisdom judgment"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "discipleship",
+      "label": "Discipleship",
+      "synonyms": [
+        "Discipleship",
+        "follow me",
+        "learn from Christ"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "divorce",
+      "label": "Divorce",
+      "synonyms": [
+        "divorce",
+        "remarriage",
+        "separation"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "election",
+      "label": "Election",
+      "synonyms": [
+        "chosen",
+        "Election",
+        "foreknown"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "encouragement",
+      "label": "Encouragement",
+      "synonyms": [
+        "edification",
+        "Encouragement",
+        "strengthening"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "end-times",
+      "label": "End Times",
+      "synonyms": [
+        "eschatology",
+        "last days",
+        "Times"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "equality",
+      "label": "Equality",
+      "synonyms": [
+        "equality"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "eschatology",
+      "label": "Eschatology",
+      "synonyms": [
+        "eschatology"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "eternal-life",
+      "label": "Eternal Life",
+      "synonyms": [
+        "Eternal",
+        "everlasting life",
+        "life forever"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "evangelism",
+      "label": "Evangelism",
+      "synonyms": [
+        "Evangelism",
+        "gospel witness",
+        "great commission"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "explain-romans",
+      "label": "Explain Romans",
+      "synonyms": [
+        "explain",
+        "romans"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "faith",
+      "label": "Faith",
+      "synonyms": [
+        "belief",
+        "Faith",
+        "trust"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "false-gods",
+      "label": "False Gods",
+      "synonyms": [
+        "false"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "false-witness",
+      "label": "False Witness",
+      "synonyms": [
+        "false",
+        "witness"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "falsehood",
+      "label": "Falsehood",
+      "synonyms": [
+        "falsehood"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "family",
+      "label": "Family",
+      "synonyms": [
+        "Family",
+        "household",
+        "kinship"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "fasting",
+      "label": "Fasting",
+      "synonyms": [
+        "abstinence",
+        "Fasting",
+        "humbling oneself"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "fear",
+      "label": "Fear",
+      "synonyms": [
+        "anxiety",
+        "dread"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "fellowship",
+      "label": "Fellowship",
+      "synonyms": [
+        "communion",
+        "Fellowship",
+        "koinonia"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "female",
+      "label": "Female",
+      "synonyms": [
+        "female"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "feminism",
+      "label": "Feminism",
+      "synonyms": [
+        "feminism"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "forgiveness",
+      "label": "Forgiveness",
+      "synonyms": [
+        "Forgiveness",
+        "mercy",
+        "pardon",
+        "remission"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "fornication",
+      "label": "Fornication",
+      "synonyms": [
+        "fornication"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "freedom",
+      "label": "Freedom",
+      "synonyms": [
+        "Freedom",
+        "liberty",
+        "release"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "friendship",
+      "label": "Friendship",
+      "synonyms": [
+        "brotherhood",
+        "companionship",
+        "Friendship"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "fruit-of-the-spirit",
+      "label": "Fruit of the Spirit",
+      "synonyms": [
+        "Fruit",
+        "love joy peace",
+        "Spirit",
+        "spiritual fruit"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "gay",
+      "label": "Gay",
+      "synonyms": [],
+      "parentId": null
+    },
+    {
+      "id": "gender-roles",
+      "label": "Gender Roles",
+      "synonyms": [
+        "gender",
+        "roles"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "generosity",
+      "label": "Generosity",
+      "synonyms": [
+        "charity",
+        "Generosity",
+        "giving"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "genocide",
+      "label": "Genocide",
+      "synonyms": [
+        "genocide"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "gentleness",
+      "label": "Gentleness",
+      "synonyms": [
+        "Gentleness",
+        "meekness",
+        "soft answer"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "girgashite",
+      "label": "Girgashite",
+      "synonyms": [
+        "girgashite"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "glory",
+      "label": "Glory",
+      "synonyms": [
+        "Glory",
+        "majesty",
+        "radiance"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "god-commanded-genocide",
+      "label": "God Commanded Genocide",
+      "synonyms": [
+        "commanded",
+        "genocide"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "god-the-father",
+      "label": "God the Father",
+      "synonyms": [
+        "abba",
+        "Father",
+        "heavenly father"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "gospel",
+      "label": "Gospel",
+      "synonyms": [
+        "euangelion",
+        "good news",
+        "Gospel"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "grace",
+      "label": "Grace",
+      "synonyms": [
+        "Grace",
+        "kindness",
+        "unmerited favor"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "gratitude",
+      "label": "Gratitude",
+      "synonyms": [
+        "Gratitude",
+        "thankfulness",
+        "thanksgiving"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "graven-image",
+      "label": "Graven Image",
+      "synonyms": [
+        "graven",
+        "image"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "greed",
+      "label": "Greed",
+      "synonyms": [
+        "avarice",
+        "covetousness",
+        "Greed"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "guidance",
+      "label": "Guidance",
+      "synonyms": [
+        "direction",
+        "Guidance",
+        "led by God"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "headship",
+      "label": "Headship",
+      "synonyms": [
+        "headship"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "healing",
+      "label": "Healing",
+      "synonyms": [
+        "Healing",
+        "restoration",
+        "wholeness"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "heaven",
+      "label": "Heaven",
+      "synonyms": [
+        "Heaven",
+        "kingdom above",
+        "paradise"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "hell",
+      "label": "Hell",
+      "synonyms": [
+        "gehenna",
+        "lake of fire"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "herem",
+      "label": "Herem",
+      "synonyms": [
+        "herem"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "heroic-women",
+      "label": "Heroic Women",
+      "synonyms": [
+        "heroic",
+        "women"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "hittite",
+      "label": "Hittite",
+      "synonyms": [
+        "hittite"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "hivite",
+      "label": "Hivite",
+      "synonyms": [
+        "hivite"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "holiness",
+      "label": "Holiness",
+      "synonyms": [
+        "Holiness",
+        "sanctity",
+        "set apart"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "homicide",
+      "label": "Homicide",
+      "synonyms": [
+        "homicide"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "homosexual",
+      "label": "Homosexual",
+      "synonyms": [
+        "homosexual"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "homosexuality",
+      "label": "Homosexuality",
+      "synonyms": [
+        "homosexuality",
+        "men with men",
+        "same sex"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "hope",
+      "label": "Hope",
+      "synonyms": [
+        "confident waiting",
+        "expectation"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "hospitality",
+      "label": "Hospitality",
+      "synonyms": [
+        "Hospitality",
+        "table fellowship",
+        "welcome strangers"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "humility",
+      "label": "Humility",
+      "synonyms": [
+        "Humility",
+        "lowliness",
+        "meekness"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "husbands",
+      "label": "Husbands",
+      "synonyms": [
+        "husbands"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "idolater",
+      "label": "Idolater",
+      "synonyms": [
+        "idolater"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "idolatry",
+      "label": "Idolatry",
+      "synonyms": [
+        "false worship",
+        "idolatry",
+        "idols"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "idols",
+      "label": "Idols",
+      "synonyms": [
+        "idols"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "imago-dei",
+      "label": "Imago Dei",
+      "synonyms": [
+        "human dignity",
+        "image of God",
+        "Imago"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "incarnation",
+      "label": "Incarnation",
+      "synonyms": [
+        "God with us",
+        "Incarnation",
+        "word made flesh"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "infidelity",
+      "label": "Infidelity",
+      "synonyms": [
+        "infidelity"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "inheritance",
+      "label": "Inheritance",
+      "synonyms": [
+        "heir",
+        "Inheritance",
+        "portion"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "intercession",
+      "label": "Intercession",
+      "synonyms": [
+        "Intercession",
+        "mediating prayer",
+        "prayer for others"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "israel",
+      "label": "Israel",
+      "synonyms": [
+        "chosen nation",
+        "Israel",
+        "jacob"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "jealousy",
+      "label": "Jealousy",
+      "synonyms": [
+        "coveting others",
+        "envy",
+        "Jealousy"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "jebusite",
+      "label": "Jebusite",
+      "synonyms": [
+        "jebusite"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "jesus-christ",
+      "label": "Jesus Christ",
+      "synonyms": [
+        "Christ",
+        "Jesus",
+        "messiah",
+        "son of God"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "john",
+      "label": "John",
+      "synonyms": [],
+      "parentId": null
+    },
+    {
+      "id": "joy",
+      "label": "Joy",
+      "synonyms": [
+        "gladness",
+        "rejoicing"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "judgment",
+      "label": "Judgment",
+      "synonyms": [
+        "accountability",
+        "Judgment",
+        "justice day"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "justice",
+      "label": "Justice",
+      "synonyms": [
+        "equity",
+        "Justice",
+        "righteous judgment"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "kill",
+      "label": "Kill",
+      "synonyms": [],
+      "parentId": null
+    },
+    {
+      "id": "killing",
+      "label": "Killing",
+      "synonyms": [
+        "killing"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "kingdom-of-god",
+      "label": "Kingdom of God",
+      "synonyms": [
+        "Kingdom",
+        "kingdom of heaven",
+        "reign of God"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "law",
+      "label": "Law",
+      "synonyms": [
+        "commandments",
+        "torah"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "leadership",
+      "label": "Leadership",
+      "synonyms": [
+        "elders",
+        "Leadership",
+        "shepherding"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "lent",
+      "label": "Lent",
+      "synonyms": [
+        "fasting season",
+        "penitence"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "lesbian",
+      "label": "Lesbian",
+      "synonyms": [
+        "lesbian"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "liar",
+      "label": "Liar",
+      "synonyms": [],
+      "parentId": null
+    },
+    {
+      "id": "lie",
+      "label": "Lie",
+      "synonyms": [],
+      "parentId": null
+    },
+    {
+      "id": "life",
+      "label": "Life",
+      "synonyms": [
+        "abundant life",
+        "living water"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "light",
+      "label": "Light",
+      "synonyms": [
+        "illumination",
+        "lamp",
+        "Light"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "love",
+      "label": "Love",
+      "synonyms": [
+        "agape",
+        "charity"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "lust",
+      "label": "Lust",
+      "synonyms": [
+        "desire",
+        "sexual craving"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "lustful",
+      "label": "Lustful",
+      "synonyms": [
+        "lustful"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "lying",
+      "label": "Lying",
+      "synonyms": [
+        "lying"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "malakoi",
+      "label": "Malakoi",
+      "synonyms": [
+        "malakoi"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "marital-faithfulness",
+      "label": "Marital Faithfulness",
+      "synonyms": [
+        "faithfulness",
+        "marital"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "marriage",
+      "label": "Marriage",
+      "synonyms": [
+        "husband and wife",
+        "Marriage",
+        "one flesh"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "masturbation",
+      "label": "Masturbation",
+      "synonyms": [
+        "masturbation"
+      ],
+      "parentId": null
+    }
+  ]
+}
