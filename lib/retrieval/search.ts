@@ -4,7 +4,7 @@
  */
 
 import { BM25Engine } from './bm25';
-import { ENABLE_RETRIEVAL_DEBUG, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
+import { ENABLE_RETRIEVAL_DEBUG, ENABLE_SEMANTIC_RERANKER, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
 import {
   RETRIEVAL_CONFIG,
@@ -18,7 +18,7 @@ import {
   TSK_CONFIG,
 } from './types';
 import { expandTheologicalQuery } from './synonyms';
-import { reRankSemantic } from './semantic';
+import { embedQuery, rankSemanticFromQueryEmbedding } from './semantic';
 import { tokenizeFallbackQuery } from './verse-utils';
 
 let bm25Engine: BM25Engine | null = null;
@@ -148,6 +148,27 @@ function roundRetrievalDiagnostic(value: number): number {
   return Number(value.toFixed(6));
 }
 
+function fuseWithRrf(lexical: RankedVerse[], semantic: RankedVerse[], rrfK: number): RankedVerse[] {
+  const lexicalRankMap = new Map<string, number>();
+  const semanticRankMap = new Map<string, number>();
+
+  lexical.forEach((hit, index) => lexicalRankMap.set(hit.verseId, index + 1));
+  semantic.forEach((hit, index) => semanticRankMap.set(hit.verseId, index + 1));
+
+  const fused = lexical.map((hit) => {
+    const lexicalRank = lexicalRankMap.get(hit.verseId) ?? Number.MAX_SAFE_INTEGER;
+    const semanticRank = semanticRankMap.get(hit.verseId);
+    const lexicalContribution = 1 / (rrfK + lexicalRank);
+    const semanticContribution = semanticRank ? 1 / (rrfK + semanticRank) : 0;
+    return {
+      ...hit,
+      score: lexicalContribution + semanticContribution,
+    };
+  });
+
+  return fused.sort((a, b) => b.score - a.score);
+}
+
 function computeRetrievalEntropy(scored: RankedVerse[]): number {
   if (scored.length <= 1) return 0;
   const totalScore = scored.reduce((sum, hit) => sum + hit.score, 0);
@@ -249,7 +270,13 @@ export async function hybridSearch(
 
   // Phase 2: Theological Query Expansion
   const expandedQuery = expandTheologicalQuery(query);
-  const bm25Hits = engine.search(expandedQuery, RETRIEVAL_CONFIG.bm25.candidateLimit);
+  const queryWordCount = query.trim().split(/\s+/).filter(Boolean).length;
+  const WORD_COUNT_GATE = 4;
+  const semanticEligible = ENABLE_SEMANTIC_RERANKER && queryWordCount >= WORD_COUNT_GATE;
+
+  const bm25Promise = Promise.resolve(engine.search(expandedQuery, RETRIEVAL_CONFIG.bm25.candidateLimit));
+  const queryEmbeddingPromise = semanticEligible ? embedQuery(query) : Promise.resolve(null);
+  const [bm25Hits, queryEmbedding] = await Promise.all([bm25Promise, queryEmbeddingPromise]);
 
 
 
@@ -272,20 +299,10 @@ export async function hybridSearch(
     rankLexical: index + 1,
   }));
 
-  // Phase 3: Conditional Semantic Re-ranking
-  //
-  // BUG FIX: The original gating used a raw BM25 score threshold (12.0).
-  // Raw BM25 scores are query-length-dependent — short queries (e.g. "Jesus wept")
-  // will almost always score below 12.0, triggering a 300-600ms embedding API call
-  // for the simplest possible queries. This is a critical latency regression.
-  //
-  // NEW GATING LOGIC (both conditions must be met to trigger semantics):
-  //   1. Word-count gate: Query must have >= 4 words (short queries skip semantics).
-  //   2. Ambiguity gate: Normalised score gap between rank-1 and rank-5 must be
-  //      small (< 0.15), indicating BM25 ranking is uncertain.
-  const queryWordCount = query.trim().split(/\s+/).filter(Boolean).length;
-  const WORD_COUNT_GATE = 4;         // Queries with fewer words skip semantics
-  const RELATIVE_GAP_THRESHOLD = 0.15; // Normalised score gap that signals ambiguity
+  // Phase 3: Conditional Semantic Re-ranking.
+  // Semantics is eligible by word-count and feature flag, then activated only
+  // when BM25 confidence gap indicates ambiguity.
+  const RELATIVE_GAP_THRESHOLD = 0.15;
 
   const normTop1 = scored[0]?.score ?? 0;                   // Already min-max normalised → [0, 1]
   const normTop5 = scored[Math.min(4, scored.length - 1)]?.score ?? normTop1;
@@ -294,11 +311,11 @@ export async function hybridSearch(
   let finalRanked = scored;
   let semanticTriggered = false;
 
-  if (queryWordCount >= WORD_COUNT_GATE && relativeGap < RELATIVE_GAP_THRESHOLD) {
+  if (semanticEligible && queryEmbedding && relativeGap < RELATIVE_GAP_THRESHOLD) {
     semanticTriggered = true;
     const verseTexts = new Map(bm25Hits.map(h => [h.doc.id, h.doc.text]));
-    const reRanked = await reRankSemantic(query, scored, verseTexts);
-    finalRanked = reRanked;
+    const semanticRanked = await rankSemanticFromQueryEmbedding(queryEmbedding, scored, verseTexts);
+    finalRanked = fuseWithRrf(scored, semanticRanked, RETRIEVAL_CONFIG.rrf.k);
   }
 
 
