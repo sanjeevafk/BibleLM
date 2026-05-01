@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import type { RankedVerse } from './types';
+import { getCachedEmbedding, setCachedEmbedding } from '../cache';
+import { classifyAndExpand } from '../query-utils';
 
 /**
  * Re-ranks the top BM25 candidates using semantic embeddings from Google GenAI.
@@ -14,7 +16,20 @@ function getEmbeddingModel() {
   return (genAI as any).getGenerativeModel({ model: 'text-embedding-004' });
 }
 
+const EMBEDDING_MODEL = 'text-embedding-004';
+
 export async function embedQuery(query: string): Promise<number[] | null> {
+  const normalizedQuery = classifyAndExpand(query).normalizedQuery.trim().toLowerCase();
+  const cacheKey = {
+    normalizedQuery: normalizedQuery.replace(/\s+/g, ' '),
+    embeddingModel: EMBEDDING_MODEL,
+  };
+
+  const cachedEmbedding = await getCachedEmbedding(cacheKey);
+  if (cachedEmbedding && cachedEmbedding.length > 0) {
+    return cachedEmbedding;
+  }
+
   const model = getEmbeddingModel();
   if (!model) {
     console.warn('[retrieval] Gemini API key missing, skipping semantic re-ranking.');
@@ -25,7 +40,11 @@ export async function embedQuery(query: string): Promise<number[] | null> {
       content: { role: 'user', parts: [{ text: query }] },
       taskType: 'RETRIEVAL_QUERY',
     });
-    return queryResult.embedding.values;
+    const embedding = queryResult.embedding.values as number[];
+    if (embedding.length > 0) {
+      await setCachedEmbedding(cacheKey, embedding);
+    }
+    return embedding;
   } catch (error) {
     console.warn('[retrieval] Query embedding failed, skipping semantic re-ranking:', error);
     return null;
