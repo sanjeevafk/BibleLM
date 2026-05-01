@@ -172,12 +172,12 @@ function isAllowedCitation(citation: string, whitelist: Set<string>): boolean {
  */
 export function scrubInvalidCitations(content: string, verses: VerseContext[]): string {
   const whitelist = buildCitationWhitelistSet(verses);
-  if (whitelist.size === 0) return content;
-
   const citations = extractCitations(content);
-  const invalidCitations = Array.from(
-    new Set(citations.filter((citation) => !isAllowedCitation(citation, whitelist)))
-  );
+  if (citations.length === 0) return content;
+
+  const invalidCitations = whitelist.size === 0
+    ? Array.from(new Set(citations))
+    : Array.from(new Set(citations.filter((citation) => !isAllowedCitation(citation, whitelist))));
 
   if (invalidCitations.length === 0) return content;
 
