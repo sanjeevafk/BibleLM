@@ -7,7 +7,11 @@
 import { getCachedRetrievalContext, setCachedRetrievalContext } from '../cache';
 import { classifyAndExpand } from '../query-utils';
 import { getCrossReferences } from '../datasets/tsk';
-import { ENABLE_DETERMINISTIC_RERANKER, ENABLE_RETRIEVAL_DEBUG } from '../feature-flags';
+import {
+  ENABLE_DETERMINISTIC_RERANKER,
+  ENABLE_RETRIEVAL_DEBUG,
+  ENABLE_TOPIC_RETRIEVAL_BOOST,
+} from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
 import { CONTEXT_CACHE_VERSION } from './types';
 import type { RetrievalInstrumentation } from './types';
@@ -30,13 +34,26 @@ import {
   extractDirectReferences,
 } from './verse-fetch';
 import { enrichOriginalLanguages } from './enrichment';
+import { embedQuery } from './semantic';
 
 type VerseMetadataRecord = {
   verseId?: string;
   confidence?: number;
 };
+type TopicDatasetItem = {
+  id: string;
+  label: string;
+  synonyms: string[];
+};
+type VerseTopicAssignment = { id: string; confidence: number };
+type VerseTopicRecord = { verseId: string; topics: VerseTopicAssignment[] };
 
 let verseMetadataByIdPromise: Promise<Map<string, number>> | null = null;
+let topicDatasetPromise: Promise<TopicDatasetItem[] | null> | null = null;
+let verseTopicDatasetPromise: Promise<Map<string, Map<string, number>> | null> | null = null;
+let topicEmbeddingCachePromise: Promise<Map<string, number[]> | null> | null = null;
+
+const TOPIC_EMBED_THRESHOLD = 0.35;
 
 async function getVerseMetadataConfidenceMap(): Promise<Map<string, number>> {
   if (!verseMetadataByIdPromise) {
@@ -62,11 +79,133 @@ async function getVerseMetadataConfidenceMap(): Promise<Map<string, number>> {
   return verseMetadataByIdPromise;
 }
 
+async function getTopicDataset(): Promise<TopicDatasetItem[] | null> {
+  if (!topicDatasetPromise) {
+    topicDatasetPromise = (async () => {
+      try {
+        const raw = (await import('../../data/topics.json')).default as { items?: TopicDatasetItem[] };
+        const items = Array.isArray(raw?.items) ? raw.items : [];
+        return items.map((item) => ({
+          id: String(item.id || '').trim().toLowerCase(),
+          label: String(item.label || '').trim(),
+          synonyms: Array.isArray(item.synonyms) ? item.synonyms.map((s) => String(s).trim()) : [],
+        })).filter((item) => item.id.length > 0);
+      } catch (error) {
+        topicDatasetPromise = null;
+        console.warn('[retrieval] topics.json missing/invalid; topic boost disabled.', error);
+        return null;
+      }
+    })();
+  }
+  return topicDatasetPromise;
+}
+
+async function getVerseTopicDataset(): Promise<Map<string, Map<string, number>> | null> {
+  if (!verseTopicDatasetPromise) {
+    verseTopicDatasetPromise = (async () => {
+      try {
+        const raw = (await import('../../data/verse-topics.json')).default as { items?: VerseTopicRecord[] };
+        const items = Array.isArray(raw?.items) ? raw.items : [];
+        const map = new Map<string, Map<string, number>>();
+        for (const item of items) {
+          const verseId = String(item.verseId || '').trim().toUpperCase();
+          if (!verseId) continue;
+          const assignments = new Map<string, number>();
+          for (const topic of item.topics ?? []) {
+            const id = String(topic.id || '').trim().toLowerCase();
+            const confidence = Math.max(0, Math.min(1, Number(topic.confidence ?? 0)));
+            if (!id || confidence <= 0) continue;
+            assignments.set(id, Math.max(assignments.get(id) ?? 0, confidence));
+          }
+          if (assignments.size > 0) map.set(verseId, assignments);
+        }
+        return map;
+      } catch (error) {
+        verseTopicDatasetPromise = null;
+        console.warn('[retrieval] verse-topics.json missing/invalid; topic boost disabled.', error);
+        return null;
+      }
+    })();
+  }
+  return verseTopicDatasetPromise;
+}
+
+function tokenOverlapScore(queryTokens: Set<string>, candidateTokens: Set<string>): number {
+  if (queryTokens.size === 0 || candidateTokens.size === 0) return 0;
+  let hits = 0;
+  for (const token of candidateTokens) {
+    if (queryTokens.has(token)) hits += 1;
+  }
+  return hits / candidateTokens.size;
+}
+
+function tokenize(text: string): string[] {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+}
+
+async function detectMatchedTopics(normalizedQuery: string): Promise<Set<string>> {
+  const topics = await getTopicDataset();
+  if (!topics || topics.length === 0) return new Set();
+
+  const queryTokens = new Set(tokenize(normalizedQuery));
+  const lexicalMatches: Array<{ id: string; score: number }> = [];
+  for (const topic of topics) {
+    const candidateTokens = new Set(tokenize(`${topic.label} ${topic.synonyms.join(' ')}`));
+    const score = tokenOverlapScore(queryTokens, candidateTokens);
+    if (score > 0) lexicalMatches.push({ id: topic.id, score });
+  }
+
+  lexicalMatches.sort((a, b) => b.score - a.score);
+  const strongLexical = lexicalMatches.filter((m) => m.score >= 0.4).slice(0, 3);
+  if (strongLexical.length > 0) return new Set(strongLexical.map((m) => m.id));
+
+  const weakLexical = lexicalMatches.slice(0, 3);
+  if (weakLexical.length > 0 && weakLexical[0].score >= 0.2) {
+    return new Set(weakLexical.map((m) => m.id));
+  }
+
+  // Lexical is weak — fall back to embedding similarity.
+  const queryEmbedding = await embedQuery(normalizedQuery);
+  if (!queryEmbedding) return new Set();
+
+  if (!topicEmbeddingCachePromise) {
+    topicEmbeddingCachePromise = (async () => {
+      const cache = new Map<string, number[]>();
+      for (const topic of topics) {
+        const embedding = await embedQuery(`${topic.label}. ${topic.synonyms.slice(0, 4).join(', ')}`);
+        if (embedding && embedding.length > 0) cache.set(topic.id, embedding);
+      }
+      return cache;
+    })();
+  }
+
+  const topicEmbeddings = await topicEmbeddingCachePromise;
+  if (!topicEmbeddings || topicEmbeddings.size === 0) return new Set();
+
+  const scored: Array<{ id: string; score: number }> = [];
+  for (const topic of topics) {
+    const embedding = topicEmbeddings.get(topic.id);
+    if (!embedding || embedding.length !== queryEmbedding.length) continue;
+    let dot = 0;
+    for (let i = 0; i < embedding.length; i += 1) dot += queryEmbedding[i] * embedding[i];
+    scored.push({ id: topic.id, score: dot });
+  }
+
+  return new Set(
+    scored
+      .filter((entry) => entry.score >= TOPIC_EMBED_THRESHOLD)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((entry) => entry.id)
+  );
+}
+
 async function applyDeterministicReranker(
   candidates: Array<{ verseId: string; score?: number }>,
   directRefIds: string[],
   topK: number,
-  debugState: ReturnType<typeof createRetrievalDebugState> | undefined
+  debugState: ReturnType<typeof createRetrievalDebugState> | undefined,
+  matchedTopics?: Set<string>
 ): Promise<string[]> {
   if (candidates.length === 0) return [];
 
@@ -75,6 +214,7 @@ async function applyDeterministicReranker(
   const primaryRefs = candidates.slice(0, topK).map((c) => c.verseId.trim().toUpperCase());
   const primaryRefSet = new Set(primaryRefs);
   const crossReferenceSet = new Set<string>();
+  const verseTopicDataset = matchedTopics && matchedTopics.size > 0 ? await getVerseTopicDataset() : null;
 
   const crossReferences = await Promise.all(primaryRefs.map((reference) => getCrossReferences(reference)));
   for (const refs of crossReferences) {
@@ -94,17 +234,27 @@ async function applyDeterministicReranker(
       const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
       const metadataSignal = metadataConfidence.get(verseId) ?? 0.5;
       const crossReferenceSignal = crossReferenceSet.has(verseId) ? 1 : 0;
+      let topicSignal = 0;
+      if (matchedTopics && matchedTopics.size > 0 && verseTopicDataset) {
+        const assigned = verseTopicDataset.get(verseId);
+        if (assigned) {
+          for (const topicId of matchedTopics) {
+            topicSignal = Math.max(topicSignal, assigned.get(topicId) ?? 0);
+          }
+        }
+      }
       const finalScore =
         fusedScore +
         (0.15 * directReferenceSignal) +
         (0.10 * metadataSignal) +
+        (0.10 * topicSignal) +
         (0.05 * crossReferenceSignal);
 
       if (debugState) {
         addDecisionTrace(
           debugState,
           verseId,
-          `deterministic_reranker:fused=${fusedScore.toFixed(4)},direct=${directReferenceSignal.toFixed(1)},metadata=${metadataSignal.toFixed(4)},cross_ref=${crossReferenceSignal.toFixed(1)},final=${finalScore.toFixed(4)}`
+          `deterministic_reranker:fused=${fusedScore.toFixed(4)},direct=${directReferenceSignal.toFixed(1)},metadata=${metadataSignal.toFixed(4)},topic=${topicSignal.toFixed(4)},cross_ref=${crossReferenceSignal.toFixed(1)},final=${finalScore.toFixed(4)}`
         );
       }
 
@@ -178,6 +328,10 @@ export async function retrieveContextForQuery(
 
   const topK = clampTopK();
   const { domain, intent, expandedQuery, normalizedQuery, negationHints } = classifyAndExpand(query);
+  const matchedTopics =
+    ENABLE_TOPIC_RETRIEVAL_BOOST
+      ? await detectMatchedTopics(normalizedQuery)
+      : new Set<string>();
   const directRefs = extractDirectReferences(normalizedQuery);
   const hasRangedDirectRefs = directRefs.some(
     (ref) => typeof ref.endVerse === 'number' && ref.endVerse > ref.verse
@@ -225,7 +379,7 @@ export async function retrieveContextForQuery(
   );
 
   const candidateOrder = ENABLE_DETERMINISTIC_RERANKER
-    ? await applyDeterministicReranker(hybridResults, directRefIds, topK, debugState)
+    ? await applyDeterministicReranker(hybridResults, directRefIds, topK, debugState, matchedTopics)
     : hybridResults.map((result) => result.verseId.trim().toUpperCase());
 
   const orderedIds: string[] = [];
