@@ -11,8 +11,10 @@ import {
   ENABLE_DETERMINISTIC_RERANKER,
   ENABLE_PASSAGE_RETRIEVAL,
   ENABLE_RETRIEVAL_DEBUG,
+  ENABLE_TSK_CLUSTER_BOOST,
   ENABLE_TOPIC_RETRIEVAL_BOOST,
 } from '../feature-flags';
+import { ensureDbReady, getDbPool } from '../db';
 import type { VerseContext } from '../bible-fetch';
 import { CONTEXT_CACHE_VERSION } from './types';
 import type { RetrievalInstrumentation } from './types';
@@ -58,6 +60,10 @@ let verseTopicDatasetPromise: Promise<Map<string, Map<string, number>> | null> |
 let topicEmbeddingCachePromise: Promise<Map<string, number[]> | null> | null = null;
 
 const TOPIC_EMBED_THRESHOLD = 0.35;
+const MAX_CLUSTER_CANDIDATES = 8;
+const MAX_CLUSTER_MEMBERS_CONSIDERED = 12;
+const MAX_CLUSTER_BOOST_APPLIED = 5;
+const CLUSTER_LIKE_TOKEN_LIMIT = 4;
 
 async function getVerseMetadataConfidenceMap(): Promise<Map<string, number>> {
   if (!verseMetadataByIdPromise) {
@@ -147,6 +153,63 @@ function tokenize(text: string): string[] {
   return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
 }
 
+type TskClusterRow = {
+  members: string[];
+  vote_total: number;
+};
+
+async function getClusterBoostScores(normalizedQuery: string): Promise<Map<string, number>> {
+  if (!ENABLE_TSK_CLUSTER_BOOST) return new Map<string, number>();
+
+  const tokens = Array.from(new Set(tokenize(normalizedQuery))).slice(0, CLUSTER_LIKE_TOKEN_LIMIT);
+  if (tokens.length === 0) return new Map<string, number>();
+
+  try {
+    await ensureDbReady();
+    const pool = getDbPool();
+    if (!pool) return new Map<string, number>();
+
+    const likeClauses = tokens.map((_, idx) => `label LIKE ?`).join(' OR ');
+    const sql = `
+      SELECT members, vote_total
+      FROM tsk_clusters
+      WHERE ${likeClauses}
+      ORDER BY vote_total DESC
+      LIMIT ?
+    `;
+    const params = [...tokens.map((token) => `%${token}%`), MAX_CLUSTER_CANDIDATES];
+    const result = await pool.query<{ members: string | null; vote_total: number | null }>(sql, params);
+    const rows = result.rows;
+
+    const verseScores = new Map<string, number>();
+    for (const row of rows) {
+      if (verseScores.size >= MAX_CLUSTER_BOOST_APPLIED) break;
+      const rawMembers = typeof row.members === 'string' ? row.members : '';
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawMembers);
+      } catch {
+        parsed = [];
+      }
+      const cluster: TskClusterRow = {
+        members: Array.isArray(parsed) ? parsed.map((item) => String(item).trim().toUpperCase()).filter(Boolean) : [],
+        vote_total: typeof row.vote_total === 'number' ? row.vote_total : 0,
+      };
+      if (cluster.members.length === 0 || cluster.vote_total <= 0) continue;
+      const clusterSignal = Math.max(0, Math.min(1, cluster.vote_total / 250));
+      for (const verseId of cluster.members.slice(0, MAX_CLUSTER_MEMBERS_CONSIDERED)) {
+        if (verseScores.size >= MAX_CLUSTER_BOOST_APPLIED && !verseScores.has(verseId)) break;
+        const existing = verseScores.get(verseId) ?? 0;
+        if (clusterSignal > existing) verseScores.set(verseId, clusterSignal);
+      }
+    }
+    return verseScores;
+  } catch (error) {
+    console.warn('[retrieval] cluster boost unavailable; continuing without cluster signal.', error);
+    return new Map<string, number>();
+  }
+}
+
 async function detectMatchedTopics(normalizedQuery: string): Promise<Set<string>> {
   const topics = await getTopicDataset();
   if (!topics || topics.length === 0) return new Set();
@@ -209,7 +272,8 @@ async function applyDeterministicReranker(
   directRefIds: string[],
   topK: number,
   debugState: ReturnType<typeof createRetrievalDebugState> | undefined,
-  matchedTopics?: Set<string>
+  matchedTopics?: Set<string>,
+  clusterScores?: Map<string, number>
 ): Promise<string[]> {
   if (candidates.length === 0) return [];
 
@@ -238,6 +302,7 @@ async function applyDeterministicReranker(
       const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
       const metadataSignal = metadataConfidence.get(verseId) ?? 0.5;
       const crossReferenceSignal = crossReferenceSet.has(verseId) ? 1 : 0;
+      const clusterSignal = clusterScores?.get(verseId) ?? 0;
       let topicSignal = 0;
       if (matchedTopics && matchedTopics.size > 0 && verseTopicDataset) {
         const assigned = verseTopicDataset.get(verseId);
@@ -252,13 +317,14 @@ async function applyDeterministicReranker(
         (0.15 * directReferenceSignal) +
         (0.10 * metadataSignal) +
         (0.10 * topicSignal) +
+        (0.06 * clusterSignal) +
         (0.05 * crossReferenceSignal);
 
       if (debugState) {
         addDecisionTrace(
           debugState,
           verseId,
-          `deterministic_reranker:fused=${fusedScore.toFixed(4)},direct=${directReferenceSignal.toFixed(1)},metadata=${metadataSignal.toFixed(4)},topic=${topicSignal.toFixed(4)},cross_ref=${crossReferenceSignal.toFixed(1)},final=${finalScore.toFixed(4)}`
+          `deterministic_reranker:fused=${fusedScore.toFixed(4)},direct=${directReferenceSignal.toFixed(1)},metadata=${metadataSignal.toFixed(4)},topic=${topicSignal.toFixed(4)},cluster=${clusterSignal.toFixed(4)},cross_ref=${crossReferenceSignal.toFixed(1)},final=${finalScore.toFixed(4)}`
         );
       }
 
@@ -389,9 +455,17 @@ export async function retrieveContextForQuery(
     { topK, translation, negationHints, topicalExpansionMode: intent === 'TOPICAL_QUERY' },
     debugState
   );
+  const clusterScores = await getClusterBoostScores(normalizedQuery);
 
   const candidateOrder = ENABLE_DETERMINISTIC_RERANKER
-    ? await applyDeterministicReranker(hybridResults, directRefIds, topK, debugState, matchedTopics)
+    ? await applyDeterministicReranker(
+      hybridResults,
+      directRefIds,
+      topK,
+      debugState,
+      matchedTopics,
+      clusterScores
+    )
     : hybridResults.map((result) => result.verseId.trim().toUpperCase());
 
   const orderedIds: string[] = [];
