@@ -11,6 +11,7 @@ export function numberFromEnv(value: string | undefined, fallback: number): numb
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+// Retrieval rollout flags (defaults documented in project-docs/benchmark-rollout.md)
 export const ENABLE_SEMANTIC_RERANKER = isEnabled(process.env.ENABLE_SEMANTIC_RERANKER);
 export const ENABLE_DETERMINISTIC_RERANKER = process.env.ENABLE_DETERMINISTIC_RERANKER !== '0';
 export const ENABLE_TOPIC_RETRIEVAL_BOOST = isEnabled(process.env.ENABLE_TOPIC_RETRIEVAL_BOOST);

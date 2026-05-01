@@ -39,6 +39,19 @@ export const RETRIEVAL_CONFIG = {
   },
 } as const;
 
+export const RETRIEVAL_SCORE_WEIGHTS = {
+  directReference: 0.15,
+  metadata: 0.10,
+  topic: 0.10,
+  passage: 0.08,
+  cluster: 0.06,
+  crossReference: 0.05,
+} as const;
+
+export const RETRIEVAL_ENRICHMENT_LIMITS = {
+  maxPassageCandidates: 10,
+  passageOverlapMergeThreshold: 0.6,
+} as const;
 
 export const TSK_CONFIG = {
   MIN_CORE_VERSE_COUNT: 4,

@@ -16,7 +16,11 @@ import {
 } from '../feature-flags';
 import { ensureDbReady, getDbPool } from '../db';
 import type { VerseContext } from '../bible-fetch';
-import { CONTEXT_CACHE_VERSION } from './types';
+import {
+  CONTEXT_CACHE_VERSION,
+  RETRIEVAL_ENRICHMENT_LIMITS,
+  RETRIEVAL_SCORE_WEIGHTS,
+} from './types';
 import type { RetrievalInstrumentation } from './types';
 import { cloneVerses, normalizeVerses, dedupeByVerseId } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
@@ -153,6 +157,11 @@ function tokenize(text: string): string[] {
   return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
 }
 
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
 type TskClusterRow = {
   members: string[];
   vote_total: number;
@@ -196,7 +205,7 @@ async function getClusterBoostScores(normalizedQuery: string): Promise<Map<strin
         vote_total: typeof row.vote_total === 'number' ? row.vote_total : 0,
       };
       if (cluster.members.length === 0 || cluster.vote_total <= 0) continue;
-      const clusterSignal = Math.max(0, Math.min(1, cluster.vote_total / 250));
+      const clusterSignal = clamp01(cluster.vote_total / 250);
       for (const verseId of cluster.members.slice(0, MAX_CLUSTER_MEMBERS_CONSIDERED)) {
         if (verseScores.size >= MAX_CLUSTER_BOOST_APPLIED && !verseScores.has(verseId)) break;
         const existing = verseScores.get(verseId) ?? 0;
@@ -208,6 +217,22 @@ async function getClusterBoostScores(normalizedQuery: string): Promise<Map<strin
     console.warn('[retrieval] cluster boost unavailable; continuing without cluster signal.', error);
     return new Map<string, number>();
   }
+}
+
+function buildPassageSignalScores(
+  mergedPassages: Awaited<ReturnType<typeof fetchPassageWindowCandidates>>
+): Map<string, number> {
+  const passageScores = new Map<string, number>();
+  for (const candidate of mergedPassages.slice(0, RETRIEVAL_ENRICHMENT_LIMITS.maxPassageCandidates)) {
+    const score = clamp01(candidate.score);
+    for (const verseId of candidate.verseIds) {
+      const normalized = verseId.trim().toUpperCase();
+      if (!normalized) continue;
+      const prev = passageScores.get(normalized) ?? 0;
+      if (score > prev) passageScores.set(normalized, score);
+    }
+  }
+  return passageScores;
 }
 
 async function detectMatchedTopics(normalizedQuery: string): Promise<Set<string>> {
@@ -273,7 +298,8 @@ async function applyDeterministicReranker(
   topK: number,
   debugState: ReturnType<typeof createRetrievalDebugState> | undefined,
   matchedTopics?: Set<string>,
-  clusterScores?: Map<string, number>
+  clusterScores?: Map<string, number>,
+  passageScores?: Map<string, number>
 ): Promise<string[]> {
   if (candidates.length === 0) return [];
 
@@ -300,31 +326,41 @@ async function applyDeterministicReranker(
       const verseId = candidate.verseId.trim().toUpperCase();
       const fusedScore = typeof candidate.score === 'number' ? candidate.score : fallbackBaseScore(index);
       const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
-      const metadataSignal = metadataConfidence.get(verseId) ?? 0.5;
+      const metadataSignal = clamp01(metadataConfidence.get(verseId) ?? 0.5);
       const crossReferenceSignal = crossReferenceSet.has(verseId) ? 1 : 0;
-      const clusterSignal = clusterScores?.get(verseId) ?? 0;
+      const clusterSignal = clamp01(clusterScores?.get(verseId) ?? 0);
+      const passageSignal = ENABLE_PASSAGE_RETRIEVAL ? clamp01(passageScores?.get(verseId) ?? 0) : 0;
       let topicSignal = 0;
       if (matchedTopics && matchedTopics.size > 0 && verseTopicDataset) {
         const assigned = verseTopicDataset.get(verseId);
         if (assigned) {
           for (const topicId of matchedTopics) {
-            topicSignal = Math.max(topicSignal, assigned.get(topicId) ?? 0);
+            topicSignal = Math.max(topicSignal, clamp01(assigned.get(topicId) ?? 0));
           }
         }
       }
+      // Canonical scoring formula for enriched retrieval signals:
+      // final_score = fused_score
+      //   + 0.15 * direct_reference_signal
+      //   + 0.10 * metadata_confidence
+      //   + 0.10 * topic_signal          (ENABLE_TOPIC_RETRIEVAL_BOOST)
+      //   + 0.08 * passage_signal        (ENABLE_PASSAGE_RETRIEVAL)
+      //   + 0.06 * cluster_signal        (ENABLE_TSK_CLUSTER_BOOST)
+      //   + 0.05 * cross_reference_signal
       const finalScore =
         fusedScore +
-        (0.15 * directReferenceSignal) +
-        (0.10 * metadataSignal) +
-        (0.10 * topicSignal) +
-        (0.06 * clusterSignal) +
-        (0.05 * crossReferenceSignal);
+        (RETRIEVAL_SCORE_WEIGHTS.directReference * directReferenceSignal) +
+        (RETRIEVAL_SCORE_WEIGHTS.metadata * metadataSignal) +
+        (RETRIEVAL_SCORE_WEIGHTS.topic * topicSignal) +
+        (RETRIEVAL_SCORE_WEIGHTS.passage * passageSignal) +
+        (RETRIEVAL_SCORE_WEIGHTS.cluster * clusterSignal) +
+        (RETRIEVAL_SCORE_WEIGHTS.crossReference * crossReferenceSignal);
 
       if (debugState) {
         addDecisionTrace(
           debugState,
           verseId,
-          `deterministic_reranker:fused=${fusedScore.toFixed(4)},direct=${directReferenceSignal.toFixed(1)},metadata=${metadataSignal.toFixed(4)},topic=${topicSignal.toFixed(4)},cluster=${clusterSignal.toFixed(4)},cross_ref=${crossReferenceSignal.toFixed(1)},final=${finalScore.toFixed(4)}`
+          `deterministic_reranker:fused=${fusedScore.toFixed(4)},direct=${directReferenceSignal.toFixed(1)},metadata=${metadataSignal.toFixed(4)},topic=${topicSignal.toFixed(4)},passage=${passageSignal.toFixed(4)},cluster=${clusterSignal.toFixed(4)},cross_ref=${crossReferenceSignal.toFixed(1)},final=${finalScore.toFixed(4)}`
         );
       }
 
@@ -456,6 +492,14 @@ export async function retrieveContextForQuery(
     debugState
   );
   const clusterScores = await getClusterBoostScores(normalizedQuery);
+  const passageCandidates =
+    ENABLE_PASSAGE_RETRIEVAL
+      ? mergeOverlappingPassages(
+        await fetchPassageWindowCandidates(normalizedQuery, RETRIEVAL_ENRICHMENT_LIMITS.maxPassageCandidates),
+        RETRIEVAL_ENRICHMENT_LIMITS.passageOverlapMergeThreshold
+      )
+      : [];
+  const passageScores = buildPassageSignalScores(passageCandidates);
 
   const candidateOrder = ENABLE_DETERMINISTIC_RERANKER
     ? await applyDeterministicReranker(
@@ -464,7 +508,8 @@ export async function retrieveContextForQuery(
       topK,
       debugState,
       matchedTopics,
-      clusterScores
+      clusterScores,
+      passageScores
     )
     : hybridResults.map((result) => result.verseId.trim().toUpperCase());
 
@@ -499,10 +544,13 @@ export async function retrieveContextForQuery(
 
   const passageRetrievalEnabled = intent === 'VERSE_EXPLANATION' || isLowRetrievalConfidence(hybridResults, topK);
   if (ENABLE_PASSAGE_RETRIEVAL && passageRetrievalEnabled) {
-    const passageCandidates = await fetchPassageWindowCandidates(normalizedQuery, 10);
-    const mergedPassages = mergeOverlappingPassages(passageCandidates, 0.6);
+    const mergedPassages = passageCandidates;
     const passageVerseIds = Array.from(
-      new Set(mergedPassages.slice(0, 10).flatMap((candidate) => candidate.verseIds))
+      new Set(
+        mergedPassages
+          .slice(0, RETRIEVAL_ENRICHMENT_LIMITS.maxPassageCandidates)
+          .flatMap((candidate) => candidate.verseIds)
+      )
     );
     if (passageVerseIds.length > 0) {
       const passageVerses = await fetchVersesByIds(passageVerseIds, translation);
