@@ -40,43 +40,123 @@
     "expectedTopRefs": ["MAT 6:12", "COL 3:13", "ACT 10:43", "2CO 2:10", "JHN 20:23"]
   },
   {
-    "id": "forgiveness-topical",
-    "category": "topical_enrichment_query",
+    "id": "faith-vs-works",
+    "category": "topical_query",
     "cacheMode": "miss",
-    "query": "What does the Bible say about forgiveness?",
+    "query": "faith and works",
     "translation": "BSB",
-    "expectedTopRefs": ["MAT 6:14", "COL 3:13", "EPH 4:32"]
+    "expectedTopRefs": ["JAS 2:24", "EPH 2:8-9", "ROM 3:28"]
   },
   {
-    "id": "lords-prayer-explanation",
-    "category": "explanation_enrichment_query",
+    "id": "love-your-enemies",
+    "category": "teaching_query",
     "cacheMode": "miss",
-    "query": "Explain Matthew 6:9",
+    "query": "love your enemies",
     "translation": "BSB",
-    "expectedTopRefs": ["MAT 6:9", "MAT 6:10", "MAT 6:11"]
+    "expectedTopRefs": ["MAT 5:44", "LUK 6:27"]
   },
   {
-    "id": "john-3-16-direct",
-    "category": "direct_enrichment_query",
+    "id": "ten-commandments",
+    "category": "law_query",
     "cacheMode": "miss",
-    "query": "John 3:16",
+    "query": "the ten commandments",
     "translation": "BSB",
-    "expectedTopRefs": ["JHN 3:16"]
+    "expectedTopRefs": ["EXO 20:1", "DEU 5:6"]
   },
   {
-    "id": "creation-passage",
-    "category": "passage_enrichment_query",
+    "id": "jesus-wept",
+    "category": "direct_verse_query",
+    "cacheMode": "miss",
+    "query": "Jesus wept",
+    "translation": "BSB",
+    "expectedTopRefs": ["JHN 11:35"]
+  },
+  {
+    "id": "damascus-conversion",
+    "category": "narrative_query",
+    "cacheMode": "miss",
+    "query": "Paul conversion on road to Damascus",
+    "translation": "BSB",
+    "expectedTopRefs": ["ACT 9:3", "ACT 22:6", "ACT 26:12"]
+  },
+  {
+    "id": "creation-account",
+    "category": "passage_query",
     "cacheMode": "miss",
     "query": "Genesis creation account",
     "translation": "BSB",
     "expectedTopRefs": ["GEN 1:1", "GEN 1:2", "GEN 1:3"]
   },
   {
-    "id": "atonement-cluster",
-    "category": "cluster_enrichment_query",
+    "id": "great-commission",
+    "category": "teaching_query",
     "cacheMode": "miss",
-    "query": "atonement and sacrifice for sin",
+    "query": "great commission",
     "translation": "BSB",
-    "expectedTopRefs": ["HEB 9:22", "LEV 17:11", "ROM 5:11"]
+    "expectedTopRefs": ["MAT 28:19", "MAT 28:20", "MRK 16:15"]
+  },
+  {
+    "id": "fruit-of-spirit",
+    "category": "topical_query",
+    "cacheMode": "miss",
+    "query": "fruit of the spirit",
+    "translation": "BSB",
+    "expectedTopRefs": ["GAL 5:22", "GAL 5:23"]
+  },
+  {
+    "id": "armor-of-god",
+    "category": "topical_query",
+    "cacheMode": "miss",
+    "query": "armor of God",
+    "translation": "BSB",
+    "expectedTopRefs": ["EPH 6:11", "EPH 6:12", "EPH 6:13"]
+  },
+  {
+    "id": "lord-is-shepherd",
+    "category": "psalm_query",
+    "cacheMode": "miss",
+    "query": "the Lord is my shepherd",
+    "translation": "BSB",
+    "expectedTopRefs": ["PSA 23:1"]
+  },
+  {
+    "id": "new-covenant",
+    "category": "theology_query",
+    "cacheMode": "miss",
+    "query": "new covenant",
+    "translation": "BSB",
+    "expectedTopRefs": ["JER 31:31", "HEB 8:8", "LUK 22:20"]
+  },
+  {
+    "id": "resurrection-hope",
+    "category": "theology_query",
+    "cacheMode": "miss",
+    "query": "resurrection of the dead",
+    "translation": "BSB",
+    "expectedTopRefs": ["1CO 15:52", "JHN 11:25", "ACT 24:15"]
+  },
+  {
+    "id": "beatitudes",
+    "category": "teaching_query",
+    "cacheMode": "miss",
+    "query": "blessed are the poor in spirit",
+    "translation": "BSB",
+    "expectedTopRefs": ["MAT 5:3", "MAT 5:4", "MAT 5:5"]
+  },
+  {
+    "id": "greatest-commandment",
+    "category": "teaching_query",
+    "cacheMode": "miss",
+    "query": "greatest commandment",
+    "translation": "BSB",
+    "expectedTopRefs": ["MAT 22:37", "MAT 22:39", "MRK 12:30"]
+  },
+  {
+    "id": "just-shall-live-by-faith",
+    "category": "theology_query",
+    "cacheMode": "miss",
+    "query": "the righteous shall live by faith",
+    "translation": "BSB",
+    "expectedTopRefs": ["HAB 2:4", "ROM 1:17", "GAL 3:11"]
   }
 ]

@@ -14,6 +14,12 @@ const indexCache: Record<string, Record<string, string>> = {};
 const bookCache = new Map<string, TranslationBook | null>();
 const inFlight = new Map<string, Promise<TranslationBook | null>>();
 let bibleIndexCache: Record<string, IndexedVerse> | null = null;
+const SILENT_TRANSLATION_WARNINGS = process.env.BIBLELM_SILENT_TRANSLATION_WARNINGS === '1';
+
+function warnTranslation(message: string, ...args: unknown[]): void {
+  if (SILENT_TRANSLATION_WARNINGS) return;
+  console.warn(message, ...args);
+}
 
 const brotliDecompress = promisify(zlib.brotliDecompress);
 const gunzip = promisify(zlib.gunzip);
@@ -414,19 +420,19 @@ export async function getTranslationVerse(
 
   const data = await loadBook(translation, parsed.book);
   if (!data) {
-    console.warn(`[translations] No translation data for ${normalizedTranslation} ${parsed.book}`);
+    warnTranslation(`[translations] No translation data for ${normalizedTranslation} ${parsed.book}`);
     return null;
   }
   const chapterData = data[String(parsed.chapter)];
   if (!chapterData) {
-    console.warn(`[translations] Missing chapter ${parsed.chapter} for ${normalizedTranslation} ${parsed.book}`);
+    warnTranslation(`[translations] Missing chapter ${parsed.chapter} for ${normalizedTranslation} ${parsed.book}`);
     return null;
   }
 
   if (!parsed.endVerse || parsed.endVerse === parsed.verse) {
     const verseText = chapterData[String(parsed.verse)] || null;
     if (!verseText) {
-      console.warn(`[translations] Missing verse ${parsed.book} ${parsed.chapter}:${parsed.verse} in ${normalizedTranslation}`);
+      warnTranslation(`[translations] Missing verse ${parsed.book} ${parsed.chapter}:${parsed.verse} in ${normalizedTranslation}`);
     }
     return verseText;
   }
@@ -437,7 +443,7 @@ export async function getTranslationVerse(
     if (text) parts.push(text);
   }
   if (parts.length === 0) {
-    console.warn(`[translations] Missing verse range ${reference} in ${normalizedTranslation}`);
+    warnTranslation(`[translations] Missing verse range ${reference} in ${normalizedTranslation}`);
     return null;
   }
   return parts.join(' ');

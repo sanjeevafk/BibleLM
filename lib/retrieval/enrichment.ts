@@ -115,6 +115,7 @@ function formatOpenGntLayers(layers: OpenGntVerseLayers): string {
 // ---------------------------------------------------------------------------
 
 export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<VerseContext[]> {
+  const allowExternalFallback = process.env.BIBLELM_DISABLE_EXTERNAL_FALLBACK !== '1';
   const normalizeHebrew = (input: string) =>
     input.replace(/[\u0591-\u05C7]/g, '').replace(/[^\u0590-\u05FF]/g, '');
 
@@ -168,7 +169,7 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
         }
       }
 
-      if (!hasOriginals) {
+      if (!hasOriginals && allowExternalFallback) {
         try {
           const isOT = OT_BOOKS.has(verse.reference.split(' ')[0]);
           const trans = isOT ? 'WLC' : 'TR';

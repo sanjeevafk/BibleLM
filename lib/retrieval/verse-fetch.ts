@@ -22,6 +22,15 @@ import type { RetrievalDebugState } from './types';
 
 let bibleIndexCache: Record<string, VerseContext> | null = null;
 
+function shouldUseDb(): boolean {
+  if (process.env.BIBLELM_DISABLE_DB === '1') return false;
+  return Boolean(process.env.POSTGRES_URL && process.env.POSTGRES_URL.trim());
+}
+
+function shouldUseExternalFallback(): boolean {
+  return process.env.BIBLELM_DISABLE_EXTERNAL_FALLBACK !== '1';
+}
+
 function getBibleIndexPath(): string {
   return path.join(process.cwd(), 'data', 'bible-full-index.json');
 }
@@ -175,6 +184,11 @@ export async function resolveVerseText(verseId: string, translation: string): Pr
     }
   }
 
+  // External API fallback (optional for deterministic/offline JSON-only runs)
+  if (!shouldUseExternalFallback()) {
+    return null;
+  }
+
   // External API fallback
   const parsed = parseReferenceKey(verseId);
   if (parsed) {
@@ -204,7 +218,7 @@ export async function fetchVersesByIds(verseIds: string[], translation: string):
 
   const byId = new Map<string, VerseContext>();
 
-  if (refs.length > 0) {
+  if (refs.length > 0 && shouldUseDb()) {
     try {
       await ensureDbReady();
       const pool = getDbPool();
@@ -375,6 +389,9 @@ export async function fetchPassageWindowCandidates(
   query: string,
   maxCandidates = 10
 ): Promise<PassageCandidate[]> {
+  if (!shouldUseDb()) {
+    return [];
+  }
   try {
     await ensureDbReady();
     const pool = getDbPool();

@@ -60,6 +60,30 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 
 ---
 
+## Benchmark Snapshot
+
+- Latest report: [project-docs/benchmark/latest-report.md](project-docs/benchmark/latest-report.md)
+- JSON report: [project-docs/benchmark/latest-report.json](project-docs/benchmark/latest-report.json)
+- Methodology: [project-docs/benchmark/EVAL-METHOD.md](project-docs/benchmark/EVAL-METHOD.md)
+- Change log: [project-docs/benchmark/CHANGELOG.md](project-docs/benchmark/CHANGELOG.md)
+- Rollout guardrails: [project-docs/benchmark-rollout.md](project-docs/benchmark-rollout.md)
+
+Run:
+
+```bash
+npm run benchmark:sample
+npm run benchmark:live
+npm run benchmark:regression
+```
+
+Primary retrieval quality metrics:
+- `hit_at_1`
+- `hit_at_5`
+- `mrr`
+- `precision_at_5`
+
+---
+
 ## Tech Stack
 
 *   **Frontend/API**: Next.js 16 (App Router), React 19, Tailwind CSS v4.

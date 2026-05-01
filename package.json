@@ -10,7 +10,7 @@
     "build:translations": "ts-node --project tsconfig.scripts.json scripts/build-translations.ts",
     "build:opengnt": "ts-node --project tsconfig.scripts.json scripts/build-opengnt.ts",
     "benchmark:sample": "ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode sample",
-    "benchmark:live": "ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode live",
+    "benchmark:live": "BIBLELM_DISABLE_DB=1 BIBLELM_DISABLE_EXTERNAL_FALLBACK=1 BIBLELM_SILENT_TRANSLATION_WARNINGS=1 ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode live",
     "benchmark:contract": "ts-node --project tsconfig.scripts.json tests/benchmark/check-route-contract.ts",
     "benchmark:regression": "ts-node --project tsconfig.scripts.json tests/benchmark/check-regressions.ts project-docs/benchmark/latest-report.json",
     "benchmark:flags": "ts-node --project tsconfig.scripts.json tests/benchmark/check-feature-flags.ts",
