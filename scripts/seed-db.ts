@@ -27,6 +27,12 @@ type CrossRefRow = {
   target: VerseRef;
   votes: number | null;
 };
+type PassageWindowRow = {
+  passageId: string;
+  anchorVerse: string;
+  verseIds: string[];
+  text: string;
+};
 
 const POSTGRES_URL = process.env.POSTGRES_URL;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -44,6 +50,8 @@ const STRONGS_GREEK_PATH =
 const STRONGS_HEBREW_PATH =
   process.env.STRONGS_HEBREW_PATH ||
   path.join(process.cwd(), 'strongs-master/hebrew/strongs-hebrew-dictionary.js');
+const PASSAGE_WINDOWS_PATH =
+  process.env.PASSAGE_WINDOWS_PATH || path.join(process.cwd(), 'data', 'passage-windows.json');
 
 const BATCH_SIZE = Number.parseInt(process.env.BATCH_SIZE || '200', 10);
 const EMBED_BATCH_SIZE = Number.parseInt(process.env.EMBED_BATCH_SIZE || '64', 10);
@@ -550,6 +558,85 @@ async function seedCrossReferences(pool: Pool) {
   }
 }
 
+async function loadPassageWindows(): Promise<PassageWindowRow[]> {
+  if (!fs.existsSync(PASSAGE_WINDOWS_PATH)) return [];
+  const raw = JSON.parse(fs.readFileSync(PASSAGE_WINDOWS_PATH, 'utf8')) as {
+    items?: Array<{
+      passageId?: string;
+      anchorVerse?: string;
+      verseIds?: string[];
+      text?: string;
+    }>;
+  };
+  return (raw.items ?? [])
+    .filter((item) => item.passageId && item.anchorVerse && Array.isArray(item.verseIds) && item.text)
+    .map((item) => ({
+      passageId: String(item.passageId),
+      anchorVerse: String(item.anchorVerse),
+      verseIds: item.verseIds!.map((id) => String(id).toUpperCase()),
+      text: String(item.text),
+    }));
+}
+
+async function insertPassageWindowBatch(
+  pool: Pool,
+  rows: PassageWindowRow[],
+  embeddings?: number[][]
+) {
+  const values: Array<string | string[] | null> = [];
+  const placeholders: string[] = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const base = i * 6;
+    placeholders.push(
+      `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`
+    );
+    values.push(
+      row.passageId,
+      row.anchorVerse,
+      row.verseIds,
+      row.text,
+      '2026-03-retrieval-enrichment',
+      embeddings ? toVectorString(embeddings[i]) : null
+    );
+  }
+
+  await pool.query(
+    `INSERT INTO passage_windows (
+      passage_id,
+      anchor_verse,
+      verse_ids,
+      text,
+      dataset_version,
+      embedding
+    ) VALUES ${placeholders.join(', ')}
+     ON CONFLICT (passage_id) DO UPDATE SET
+      anchor_verse = EXCLUDED.anchor_verse,
+      verse_ids = EXCLUDED.verse_ids,
+      text = EXCLUDED.text,
+      dataset_version = EXCLUDED.dataset_version,
+      embedding = COALESCE(EXCLUDED.embedding, passage_windows.embedding)`,
+    values
+  );
+}
+
+async function seedPassageWindows(pool: Pool) {
+  const rows = await loadPassageWindows();
+  if (rows.length === 0) {
+    console.log('No passage windows found; skipping passage_windows seed.');
+    return;
+  }
+
+  const canEmbed = Boolean(GROQ_API_KEY && GROQ_EMBEDDING_MODEL);
+  for (let i = 0; i < rows.length; i += EMBED_BATCH_SIZE) {
+    const batch = rows.slice(i, i + EMBED_BATCH_SIZE);
+    const embeddings = canEmbed ? await embedTexts(batch.map((row) => row.text)) : undefined;
+    await insertPassageWindowBatch(pool, batch, embeddings);
+    console.log(`Inserted passage windows ${i + 1}-${i + batch.length}`);
+  }
+}
+
 function extractJsonObject(text: string): string {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -707,6 +794,17 @@ async function ensureSchema(pool: Pool) {
        target_verse
      );`,
   );
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS passage_windows (
+      passage_id TEXT PRIMARY KEY,
+      anchor_verse TEXT NOT NULL,
+      verse_ids TEXT[] NOT NULL,
+      text TEXT NOT NULL,
+      dataset_version TEXT NOT NULL,
+      embedding_model TEXT NOT NULL DEFAULT 'text-embedding-3-small',
+      embedding vector(384)
+    );`
+  );
 }
 
 async function main() {
@@ -725,6 +823,7 @@ async function main() {
     await seedStrongs(pool);
     await seedCrossReferences(pool);
     await seedVerses(pool);
+    await seedPassageWindows(pool);
   } finally {
     await pool.end();
   }
