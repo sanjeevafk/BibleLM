@@ -8,10 +8,22 @@ type TopicItem = {
   synonyms: string[];
   parentId: string | null;
 };
+type VerseTopicAssignment = {
+  id: string;
+  confidence: number;
+  provenance: 'metadata_tag' | 'tsk' | 'heuristic';
+};
+type VerseTopicsRecord = {
+  verseId: string;
+  topics: VerseTopicAssignment[];
+};
 
 const ROOT = process.cwd();
 const OUTPUT_TOPICS = path.join(ROOT, 'data', 'topics.json');
+const OUTPUT_VERSE_TOPICS = path.join(ROOT, 'data', 'verse-topics.json');
+const OUTPUT_TOPIC_VERSE_INDEX = path.join(ROOT, 'data', 'topic-verse-index.json');
 const VERSE_METADATA_PATH = path.join(ROOT, 'data', 'verse-metadata.json');
+const BIBLE_INDEX_PATH = path.join(ROOT, 'data', 'bible-full-index.json');
 const BENCHMARK_SCENARIOS_PATH = path.join(ROOT, 'tests', 'benchmark', 'fixtures', 'scenarios.json');
 const TOPIC_GUARDS_PATH = path.join(ROOT, 'lib', 'retrieval', 'topic-guards.ts');
 
@@ -270,7 +282,144 @@ function main(): void {
   };
 
   fs.writeFileSync(OUTPUT_TOPICS, JSON.stringify(payload, null, 2));
-  console.log(JSON.stringify({ output: OUTPUT_TOPICS, item_count: items.length }, null, 2));
+  const { verseTopics, topicVerseIndex } = buildVerseTopicIndexes(items);
+  fs.writeFileSync(
+    OUTPUT_VERSE_TOPICS,
+    JSON.stringify({ ...buildDatasetMetadata('scripts/build-topic-datasets.ts'), items: verseTopics }, null, 2)
+  );
+  fs.writeFileSync(
+    OUTPUT_TOPIC_VERSE_INDEX,
+    JSON.stringify({ ...buildDatasetMetadata('scripts/build-topic-datasets.ts'), items: topicVerseIndex }, null, 2)
+  );
+
+  console.log(
+    JSON.stringify(
+      {
+        output_topics: OUTPUT_TOPICS,
+        output_verse_topics: OUTPUT_VERSE_TOPICS,
+        output_topic_verse_index: OUTPUT_TOPIC_VERSE_INDEX,
+        topic_count: items.length,
+        verse_topic_count: verseTopics.length,
+        topic_index_count: Object.keys(topicVerseIndex).length,
+      },
+      null,
+      2
+    )
+  );
 }
 
 main();
+
+function normalizeVerseId(verseId: string): string {
+  return verseId.trim().toUpperCase();
+}
+
+function includesToken(text: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`, 'i').test(text);
+}
+
+function buildVerseTopicIndexes(topics: TopicItem[]): {
+  verseTopics: VerseTopicsRecord[];
+  topicVerseIndex: Record<string, string[]>;
+} {
+  const metadataRows = JSON.parse(fs.readFileSync(VERSE_METADATA_PATH, 'utf8')) as Array<{
+    verseId?: string;
+    themeTags?: string[];
+  }>;
+  const bibleIndex = JSON.parse(fs.readFileSync(BIBLE_INDEX_PATH, 'utf8')) as Record<string, { text?: string }>;
+  const topicById = new Map(topics.map((topic) => [topic.id, topic]));
+  const topicVerseIndex = new Map<string, Set<string>>();
+  const verseTopics: VerseTopicsRecord[] = [];
+
+  const byVerseMetadata = new Map<string, string[]>();
+  for (const row of metadataRows) {
+    const verseId = row.verseId ? normalizeVerseId(row.verseId) : '';
+    if (!verseId) continue;
+    const tags = (row.themeTags ?? []).map((tag) => toKebab(String(tag)));
+    if (tags.length === 0) continue;
+    byVerseMetadata.set(verseId, tags);
+  }
+
+  const forgivenessTskAnchors = new Set(['MAT 6:14', 'COL 3:13', 'EPH 4:32']);
+
+  const verseIds = Object.keys(bibleIndex).sort((a, b) => a.localeCompare(b));
+  for (const rawVerseId of verseIds) {
+    const verseId = normalizeVerseId(rawVerseId);
+    const text = String(bibleIndex[rawVerseId]?.text || '').toLowerCase();
+    const assignments: VerseTopicAssignment[] = [];
+
+    for (const tag of byVerseMetadata.get(verseId) ?? []) {
+      if (!topicById.has(tag)) continue;
+      assignments.push({ id: tag, confidence: 0.9, provenance: 'metadata_tag' });
+    }
+
+    if (forgivenessTskAnchors.has(verseId)) {
+      assignments.push({ id: 'forgiveness', confidence: 0.85, provenance: 'tsk' });
+    }
+
+    const heuristicCandidates: Array<{ id: string; confidence: number }> = [];
+    for (const topic of topics) {
+      if (topic.id === 'forgiveness' && /forgiv|pardon|mercy/.test(text)) {
+        heuristicCandidates.push({ id: topic.id, confidence: 0.75 });
+        continue;
+      }
+      if (topic.id === 'prayer' && /pray|prayer|supplication/.test(text)) {
+        heuristicCandidates.push({ id: topic.id, confidence: 0.72 });
+        continue;
+      }
+      if (topic.id === 'love' && /love|charity|beloved/.test(text)) {
+        heuristicCandidates.push({ id: topic.id, confidence: 0.7 });
+        continue;
+      }
+      if (topic.id === 'faith' && /faith|believe|trust/.test(text)) {
+        heuristicCandidates.push({ id: topic.id, confidence: 0.68 });
+        continue;
+      }
+
+      for (const synonym of topic.synonyms.slice(0, 4)) {
+        const token = synonym.toLowerCase();
+        if (token.length < 4) continue;
+        if (includesToken(text, token)) {
+          heuristicCandidates.push({ id: topic.id, confidence: 0.5 });
+          break;
+        }
+      }
+    }
+
+    for (const candidate of heuristicCandidates) {
+      assignments.push({ id: candidate.id, confidence: candidate.confidence, provenance: 'heuristic' });
+    }
+
+    const merged = new Map<string, VerseTopicAssignment>();
+    for (const assignment of assignments) {
+      if (assignment.confidence < 0.4) continue;
+      const existing = merged.get(assignment.id);
+      if (!existing || assignment.confidence > existing.confidence) {
+        merged.set(assignment.id, assignment);
+      }
+    }
+
+    const limited = Array.from(merged.values())
+      .sort((a, b) => (b.confidence - a.confidence) || a.id.localeCompare(b.id))
+      .slice(0, 3);
+
+    if (limited.length === 0) continue;
+
+    verseTopics.push({ verseId, topics: limited });
+    for (const assignment of limited) {
+      if (!topicVerseIndex.has(assignment.id)) topicVerseIndex.set(assignment.id, new Set());
+      topicVerseIndex.get(assignment.id)!.add(verseId);
+    }
+  }
+
+  const topicIndexObject: Record<string, string[]> = {};
+  for (const [topicId, refs] of Array.from(topicVerseIndex.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+    topicIndexObject[topicId] = Array.from(refs).sort((a, b) => a.localeCompare(b));
+  }
+
+  return {
+    verseTopics: verseTopics.sort((a, b) => a.verseId.localeCompare(b.verseId)),
+    topicVerseIndex: topicIndexObject,
+  };
+}
