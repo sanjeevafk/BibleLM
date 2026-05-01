@@ -25,16 +25,25 @@ export const THEOLOGICAL_SYNONYMS: Record<string, string[]> = {
  * Expands a query string by injecting synonyms for recognized theological terms.
  * Example: "messiah promise" -> "messiah christ anointed shiloh son of david promise"
  */
-export function expandTheologicalQuery(query: string): string {
+export function expandTheologicalQuery(
+  query: string,
+  options?: { negationHints?: NegationHint[]; maxSynonymsPerTerm?: number }
+): string {
   const words = query.toLowerCase().split(/\s+/);
   const expanded: string[] = [];
+  const hasNegationHints = (options?.negationHints?.length ?? 0) > 0;
+  const maxSynonymsPerTerm = options?.maxSynonymsPerTerm;
 
   for (const word of words) {
     expanded.push(word);
 
     // Check for exact matches in the synonym map
-    if (THEOLOGICAL_SYNONYMS[word]) {
-      expanded.push(...THEOLOGICAL_SYNONYMS[word]);
+    if (!hasNegationHints && THEOLOGICAL_SYNONYMS[word]) {
+      const terms =
+        typeof maxSynonymsPerTerm === 'number'
+          ? THEOLOGICAL_SYNONYMS[word].slice(0, Math.max(0, maxSynonymsPerTerm))
+          : THEOLOGICAL_SYNONYMS[word];
+      expanded.push(...terms);
     }
 
     // Check for "holy spirit" etc. (two-word phrases)
@@ -42,15 +51,16 @@ export function expandTheologicalQuery(query: string): string {
   }
 
   // Handle common two-word phrases
-  if (query.toLowerCase().includes("holy spirit") && !expanded.includes("comforter")) {
-    expanded.push(...THEOLOGICAL_SYNONYMS["holy spirit"]);
+  if (!hasNegationHints && query.toLowerCase().includes("holy spirit") && !expanded.includes("comforter")) {
+    expanded.push(...THEOLOGICAL_SYNONYMS["holy spirit"].slice(0, maxSynonymsPerTerm));
   }
-  if (query.toLowerCase().includes("eternal life") && !expanded.includes("immortality")) {
-    expanded.push(...THEOLOGICAL_SYNONYMS["eternal life"]);
+  if (!hasNegationHints && query.toLowerCase().includes("eternal life") && !expanded.includes("immortality")) {
+    expanded.push(...THEOLOGICAL_SYNONYMS["eternal life"].slice(0, maxSynonymsPerTerm));
   }
-  if (query.toLowerCase().includes("end times") && !expanded.includes("eschaton")) {
-    expanded.push(...THEOLOGICAL_SYNONYMS["end times"]);
+  if (!hasNegationHints && query.toLowerCase().includes("end times") && !expanded.includes("eschaton")) {
+    expanded.push(...THEOLOGICAL_SYNONYMS["end times"].slice(0, maxSynonymsPerTerm));
   }
 
   return Array.from(new Set(expanded)).join(' ');
 }
+import type { NegationHint } from '../query-utils';

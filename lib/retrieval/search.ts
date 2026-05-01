@@ -6,6 +6,7 @@
 import { BM25Engine } from './bm25';
 import { ENABLE_RETRIEVAL_DEBUG, ENABLE_SEMANTIC_RERANKER, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
+import type { NegationHint } from '../query-utils';
 import {
   RETRIEVAL_CONFIG,
   type VerseResult,
@@ -261,7 +262,7 @@ export function clampTopK(topK?: number): number {
 
 export async function hybridSearch(
   query: string,
-  options?: { topK?: number; translation?: string },
+  options?: { topK?: number; translation?: string; negationHints?: NegationHint[]; topicalExpansionMode?: boolean },
   debugState?: RetrievalDebugState
 ): Promise<VerseResult[]> {
   const topK = clampTopK(options?.topK);
@@ -269,7 +270,10 @@ export async function hybridSearch(
   const engine = await getBM25Engine();
 
   // Phase 2: Theological Query Expansion
-  const expandedQuery = expandTheologicalQuery(query);
+  const expandedQuery = expandTheologicalQuery(query, {
+    negationHints: options?.negationHints,
+    maxSynonymsPerTerm: options?.topicalExpansionMode ? 2 : undefined,
+  });
   const queryWordCount = query.trim().split(/\s+/).filter(Boolean).length;
   const WORD_COUNT_GATE = 4;
   const semanticEligible = ENABLE_SEMANTIC_RERANKER && queryWordCount >= WORD_COUNT_GATE;

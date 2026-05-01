@@ -92,7 +92,7 @@ export async function retrieveContextForQuery(
   }
 
   const topK = clampTopK();
-  const { domain, intent, expandedQuery, normalizedQuery } = classifyAndExpand(query);
+  const { domain, intent, expandedQuery, normalizedQuery, negationHints } = classifyAndExpand(query);
   const directRefs = extractDirectReferences(normalizedQuery);
   const hasRangedDirectRefs = directRefs.some(
     (ref) => typeof ref.endVerse === 'number' && ref.endVerse > ref.verse
@@ -133,7 +133,11 @@ export async function retrieveContextForQuery(
   }
 
   // Hybrid search path
-  const hybridResults = await hybridSearch(expandedQuery, { topK, translation }, debugState);
+  const hybridResults = await hybridSearch(
+    expandedQuery,
+    { topK, translation, negationHints, topicalExpansionMode: intent === 'TOPICAL_QUERY' },
+    debugState
+  );
 
   const orderedIds: string[] = [];
   const seenIds = new Set<string>();

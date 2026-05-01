@@ -11,7 +11,7 @@ type ExpansionRule = {
   additions: string[];
 };
 
-export type NegationHint = 'not' | 'without' | 'except';
+export type NegationHint = 'not' | 'without' | 'except' | 'never';
 
 const DOMAIN_RULES: DomainRule[] = [
   {
@@ -82,7 +82,15 @@ const PRESERVED_PHRASES = [
   'suffering servant',
 ];
 
-const NEGATION_HINTS: NegationHint[] = ['not', 'without', 'except'];
+const NEGATION_HINTS: NegationHint[] = ['not', 'without', 'except', 'never'];
+const FILLER_PREFIXES = [
+  'what does the bible say about',
+  'what does scripture say about',
+  'tell me about',
+  'explain',
+  'can you explain',
+  'help me understand',
+];
 
 const BOOK_NORMALIZATION_RULES: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /\bjn\b/gi, replacement: 'John' },
@@ -136,6 +144,24 @@ function normalizeReferenceSpacing(query: string): string {
     .replace(/\b([A-Za-z]+)\s*(\d+)\b/g, '$1 $2')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function stripFillerPrefix(query: string): string {
+  const normalized = query.trim();
+  for (const prefix of FILLER_PREFIXES) {
+    const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[\\s,:-]*`, 'i');
+    if (pattern.test(normalized)) {
+      return normalized.replace(pattern, '').trim();
+    }
+  }
+  return normalized;
+}
+
+function extractQuotedPhrases(query: string): string[] {
+  const matches = query.match(/"([^"]+)"/g) ?? [];
+  return matches
+    .map((match) => match.replace(/"/g, '').trim().toLowerCase())
+    .filter(Boolean);
 }
 
 function extractPreservedPhrases(query: string): string[] {
@@ -203,7 +229,8 @@ export function classifyAndExpand(query: string): {
   expandedQuery: string;
   negationHints: NegationHint[];
 } {
-  const normalizedQuery = normalizeReferenceSpacing(query);
+  const strippedQuery = stripFillerPrefix(query);
+  const normalizedQuery = normalizeReferenceSpacing(strippedQuery || query);
   const loweredQuery = normalizedQuery.toLowerCase();
   const intent = classifyIntent(normalizedQuery);
   let domain: QueryDomain = 'general';
@@ -215,18 +242,29 @@ export function classifyAndExpand(query: string): {
     }
   }
 
-  const preservedPhrases = extractPreservedPhrases(loweredQuery);
+  const preservedPhrases = dedupeParts([
+    ...extractQuotedPhrases(normalizedQuery),
+    ...extractPreservedPhrases(loweredQuery),
+  ]);
   const negationHints = detectNegationHints(loweredQuery);
   const cleanedTokens = cleanupLowValueTokens(normalizedQuery, preservedPhrases);
   const shouldBypassExpansion = intent === 'DIRECT_REFERENCE';
 
+  const matchedExpansionRules =
+    shouldBypassExpansion
+      ? []
+      : (EXPANSION_RULES[domain] ?? []).filter((rule) => matchesKeyword(loweredQuery, rule.trigger));
+
   const expansions =
     shouldBypassExpansion
       ? []
-      : (EXPANSION_RULES[domain] ?? [])
-          .filter((rule) => matchesKeyword(loweredQuery, rule.trigger))
-          .flatMap((rule) => rule.additions)
-          .filter((term) => !loweredQuery.includes(term.toLowerCase()));
+      : intent === 'TOPICAL_QUERY'
+        ? (matchedExpansionRules[0]?.additions ?? [])
+            .slice(0, 2)
+            .filter((term) => !loweredQuery.includes(term.toLowerCase()))
+        : matchedExpansionRules
+            .flatMap((rule) => rule.additions)
+            .filter((term) => !loweredQuery.includes(term.toLowerCase()));
 
   if (shouldBypassExpansion) {
     return {
@@ -239,7 +277,7 @@ export function classifyAndExpand(query: string): {
   }
 
   const cleanedQuery = dedupeParts(
-    cleanedTokens.filter((token) => !preservedPhrases.includes(token) && !negationHints.includes(token as NegationHint))
+    cleanedTokens.filter((token) => !preservedPhrases.includes(token))
   ).join(' ');
   const quotedPhrases = preservedPhrases.map((phrase) => `"${phrase}"`);
   const baseQuery = cleanedQuery || quotedPhrases.join(' ') || normalizedQuery;
