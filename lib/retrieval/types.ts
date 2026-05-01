@@ -2,6 +2,7 @@
  * Shared types and constants for the retrieval subsystem.
  * No logic — import from here to avoid circular dependencies.
  */
+import { numberFromEnv } from '../feature-flags';
 
 export const OT_BOOKS = new Set([
   'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI',
@@ -22,10 +23,13 @@ export const CONTEXT_CACHE_VERSION = 'v3';
 
 export const RETRIEVAL_CONFIG = {
   bm25: {
-    k1: 1.2,
-    b: 0.65,
-    phraseBoost: 1.5,
-    candidateLimit: 25,
+    k1: numberFromEnv(process.env.BM25_K1, 1.2),
+    b: numberFromEnv(process.env.BM25_B, 0.65),
+    phraseBoost: numberFromEnv(process.env.BM25_PHRASE_BOOST, 1.5),
+    candidateLimit: Math.max(1, Math.floor(numberFromEnv(process.env.BM25_CANDIDATE_LIMIT, 25))),
+  },
+  rrf: {
+    k: Math.max(1, Math.floor(numberFromEnv(process.env.RRF_K, 60))),
   },
   finalCandidateWindow: {
     default: 5,
