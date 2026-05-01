@@ -9,6 +9,7 @@ import { classifyAndExpand } from '../query-utils';
 import { getCrossReferences } from '../datasets/tsk';
 import {
   ENABLE_DETERMINISTIC_RERANKER,
+  ENABLE_PASSAGE_RETRIEVAL,
   ENABLE_RETRIEVAL_DEBUG,
   ENABLE_TOPIC_RETRIEVAL_BOOST,
 } from '../feature-flags';
@@ -26,6 +27,8 @@ import {
   logRetrievalDiagnostics,
 } from './search';
 import {
+  fetchPassageWindowCandidates,
+  mergeOverlappingPassages,
   fetchVersesByIds,
   fetchContextWindowsBatch,
   attachIndexedOriginals,
@@ -35,6 +38,7 @@ import {
 } from './verse-fetch';
 import { enrichOriginalLanguages } from './enrichment';
 import { embedQuery } from './semantic';
+import { TSK_CONFIG } from './types';
 
 type VerseMetadataRecord = {
   verseId?: string;
@@ -312,6 +316,14 @@ function recordRetrievalMetric(
   instrumentation?.onMetric?.(metric, performance.now() - startedAt);
 }
 
+function isLowRetrievalConfidence(hybridResults: Array<{ score?: number }>, topK: number): boolean {
+  if (hybridResults.length === 0) return true;
+  const top = hybridResults.slice(0, Math.min(topK, 5));
+  if (top.length === 0) return true;
+  const avg = top.reduce((sum, row) => sum + (typeof row.score === 'number' ? row.score : 0), 0) / top.length;
+  return avg < TSK_CONFIG.MIN_RETRIEVAL_CONFIDENCE;
+}
+
 export async function retrieveContextForQuery(
   query: string,
   translation: string,
@@ -410,6 +422,33 @@ export async function retrieveContextForQuery(
 
   const expandedVerses: VerseContext[] = [...batchExpanded, ...remainingVerses];
   let verses = expandedVerses;
+
+  const passageRetrievalEnabled = intent === 'VERSE_EXPLANATION' || isLowRetrievalConfidence(hybridResults, topK);
+  if (ENABLE_PASSAGE_RETRIEVAL && passageRetrievalEnabled) {
+    const passageCandidates = await fetchPassageWindowCandidates(normalizedQuery, 10);
+    const mergedPassages = mergeOverlappingPassages(passageCandidates, 0.6);
+    const passageVerseIds = Array.from(
+      new Set(mergedPassages.slice(0, 10).flatMap((candidate) => candidate.verseIds))
+    );
+    if (passageVerseIds.length > 0) {
+      const passageVerses = await fetchVersesByIds(passageVerseIds, translation);
+      const byRef = new Map(verses.map((v) => [v.reference.trim().toUpperCase(), v]));
+      for (const verse of passageVerses) {
+        byRef.set(verse.reference.trim().toUpperCase(), verse);
+      }
+      const directRefSet = new Set(directRefIds.map((id) => id.trim().toUpperCase()));
+      const ordered = Array.from(byRef.values()).sort((a, b) => {
+        const aRef = a.reference.trim().toUpperCase();
+        const bRef = b.reference.trim().toUpperCase();
+        const aDirect = directRefSet.has(aRef) ? 1 : 0;
+        const bDirect = directRefSet.has(bRef) ? 1 : 0;
+        if (aDirect !== bDirect) return bDirect - aDirect;
+        return aRef.localeCompare(bRef);
+      });
+      verses = ordered;
+    }
+  }
+
   recordRetrievalMetric(instrumentation, 'fetch_verses_db_ms', fetchVersesStartedAt);
 
 

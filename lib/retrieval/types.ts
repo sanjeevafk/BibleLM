@@ -19,7 +19,7 @@ export const NT_BOOKS = new Set([
 
 export const LOCAL_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB']);
 
-export const CONTEXT_CACHE_VERSION = 'v3';
+export const CONTEXT_CACHE_VERSION = 'v4';
 export const DATASET_VERSION = '2026-03-retrieval-enrichment';
 
 export const RETRIEVAL_CONFIG = {

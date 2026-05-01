@@ -328,6 +328,83 @@ export async function fetchContextWindowsBatch(
   return fetchVersesByIds(Array.from(allRefs), translation);
 }
 
+type PassageCandidate = {
+  passageId: string;
+  anchorVerse: string;
+  verseIds: string[];
+  score: number;
+};
+
+function overlapRatio(a: string[], b: string[]): number {
+  const setA = new Set(a);
+  const setB = new Set(b);
+  let intersection = 0;
+  for (const verseId of setA) {
+    if (setB.has(verseId)) intersection += 1;
+  }
+  return intersection / Math.max(setA.size, setB.size, 1);
+}
+
+export function mergeOverlappingPassages(
+  candidates: PassageCandidate[],
+  overlapThreshold = 0.6
+): PassageCandidate[] {
+  const merged: PassageCandidate[] = [];
+
+  for (const candidate of candidates) {
+    let mergedExisting = false;
+    for (let i = 0; i < merged.length; i += 1) {
+      const existing = merged[i];
+      if (overlapRatio(existing.verseIds, candidate.verseIds) <= overlapThreshold) continue;
+      const keepCandidate = candidate.verseIds.length > existing.verseIds.length;
+      const winner = keepCandidate ? candidate : existing;
+      merged[i] = {
+        ...winner,
+        score: Math.max(existing.score, candidate.score),
+      };
+      mergedExisting = true;
+      break;
+    }
+    if (!mergedExisting) merged.push(candidate);
+  }
+
+  return merged.sort((a, b) => b.score - a.score);
+}
+
+export async function fetchPassageWindowCandidates(
+  query: string,
+  maxCandidates = 10
+): Promise<PassageCandidate[]> {
+  try {
+    await ensureDbReady();
+    const pool = getDbPool();
+    const q = `%${query.toLowerCase().trim()}%`;
+    const result = await pool.query<{
+      passage_id: string;
+      anchor_verse: string;
+      verse_ids: string[];
+      vote_total?: number | null;
+    }>(
+      `SELECT passage_id, anchor_verse, verse_ids, 0::int as vote_total
+       FROM passage_windows
+       WHERE lower(text) LIKE $1
+       ORDER BY passage_id
+       LIMIT $2`,
+      [q, maxCandidates]
+    );
+
+    return result.rows.map((row, index) => ({
+      passageId: row.passage_id,
+      anchorVerse: row.anchor_verse,
+      verseIds: (row.verse_ids ?? []).map((id) => String(id).toUpperCase()),
+      score: Math.max(0.01, 1 - (index / Math.max(result.rows.length, 1))),
+    }));
+  } catch (error) {
+    console.warn('[retrieval] Passage candidate query failed; skipping passage retrieval.', error);
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // fallBackBundledLexicalSearch — search using local bible-index.json
 // ---------------------------------------------------------------------------
