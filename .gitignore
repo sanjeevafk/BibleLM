@@ -52,3 +52,6 @@ project-docs/benchmark/latest-report.md
 verify_regex.js
 .vscode/settings.json
 .codex
+
+# Generated local security monitoring artifacts
+.security/
