@@ -51,14 +51,16 @@ export function expandTheologicalQuery(
   }
 
   // Handle common two-word phrases
+  const effectiveMax = typeof maxSynonymsPerTerm === 'number' ? Math.max(0, maxSynonymsPerTerm) : undefined;
+
   if (!hasNegationHints && query.toLowerCase().includes("holy spirit") && !expanded.includes("comforter")) {
-    expanded.push(...THEOLOGICAL_SYNONYMS["holy spirit"].slice(0, maxSynonymsPerTerm));
+    expanded.push(...THEOLOGICAL_SYNONYMS["holy spirit"].slice(0, effectiveMax));
   }
   if (!hasNegationHints && query.toLowerCase().includes("eternal life") && !expanded.includes("immortality")) {
-    expanded.push(...THEOLOGICAL_SYNONYMS["eternal life"].slice(0, maxSynonymsPerTerm));
+    expanded.push(...THEOLOGICAL_SYNONYMS["eternal life"].slice(0, effectiveMax));
   }
   if (!hasNegationHints && query.toLowerCase().includes("end times") && !expanded.includes("eschaton")) {
-    expanded.push(...THEOLOGICAL_SYNONYMS["end times"].slice(0, maxSynonymsPerTerm));
+    expanded.push(...THEOLOGICAL_SYNONYMS["end times"].slice(0, effectiveMax));
   }
 
   return Array.from(new Set(expanded)).join(' ');

@@ -41,16 +41,22 @@ let verseMetadataByIdPromise: Promise<Map<string, number>> | null = null;
 async function getVerseMetadataConfidenceMap(): Promise<Map<string, number>> {
   if (!verseMetadataByIdPromise) {
     verseMetadataByIdPromise = (async () => {
-      const raw = (await import('../../data/verse-metadata.json')).default as VerseMetadataRecord[] | Record<string, VerseMetadataRecord>;
-      const map = new Map<string, number>();
-      const records = Array.isArray(raw) ? raw : Object.values(raw);
-      for (const value of records) {
-        const verseId = value?.verseId?.trim().toUpperCase();
-        if (!verseId) continue;
-        const confidence = typeof value.confidence === 'number' ? value.confidence : 0.5;
-        map.set(verseId, Math.max(0, Math.min(1, confidence)));
+      try {
+        const raw = (await import('../../data/verse-metadata.json')).default as VerseMetadataRecord[] | Record<string, VerseMetadataRecord>;
+        const map = new Map<string, number>();
+        const records = Array.isArray(raw) ? raw : Object.values(raw);
+        for (const value of records) {
+          const verseId = value?.verseId?.trim().toUpperCase();
+          if (!verseId) continue;
+          const confidence = typeof value.confidence === 'number' ? value.confidence : 0.5;
+          map.set(verseId, Math.max(0, Math.min(1, confidence)));
+        }
+        return map;
+      } catch (error) {
+        verseMetadataByIdPromise = null;
+        console.warn('Failed to load verse metadata confidence map; continuing without metadata signal', error);
+        return new Map<string, number>();
       }
-      return map;
     })();
   }
   return verseMetadataByIdPromise;

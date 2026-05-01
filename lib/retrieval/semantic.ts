@@ -19,9 +19,9 @@ function getEmbeddingModel() {
 const EMBEDDING_MODEL = 'text-embedding-004';
 
 export async function embedQuery(query: string): Promise<number[] | null> {
-  const normalizedQuery = classifyAndExpand(query).normalizedQuery.trim().toLowerCase();
+  const normalized = classifyAndExpand(query).normalizedQuery.trim().toLowerCase().replace(/\s+/g, ' ');
   const cacheKey = {
-    normalizedQuery: normalizedQuery.replace(/\s+/g, ' '),
+    normalizedQuery: normalized,
     embeddingModel: EMBEDDING_MODEL,
   };
 
@@ -37,7 +37,7 @@ export async function embedQuery(query: string): Promise<number[] | null> {
   }
   try {
     const queryResult = await model.embedContent({
-      content: { role: 'user', parts: [{ text: query }] },
+      content: { role: 'user', parts: [{ text: normalized }] },
       taskType: 'RETRIEVAL_QUERY',
     });
     const embedding = queryResult.embedding.values as number[];
@@ -61,8 +61,28 @@ export async function rankSemanticFromQueryEmbedding(
   if (!model) return candidates;
 
   try {
-    const candidateTexts = candidates.map(c => verseTexts.get(c.verseId) || '');
-    const requests = candidateTexts.map(text => ({
+    const presentCandidates: Array<{ candidate: RankedVerse; text: string }> = [];
+    const missingTextCandidates: RankedVerse[] = [];
+    for (const candidate of candidates) {
+      const text = verseTexts.get(candidate.verseId);
+      if (typeof text !== 'string' || text.trim().length === 0) {
+        missingTextCandidates.push(candidate);
+        continue;
+      }
+      presentCandidates.push({ candidate, text });
+    }
+
+    if (presentCandidates.length === 0) {
+      return candidates
+        .map((candidate) => ({
+          ...candidate,
+          score: Number.NEGATIVE_INFINITY,
+          semanticSimilarity: Number.NEGATIVE_INFINITY,
+        }))
+        .sort((a, b) => b.score - a.score);
+    }
+
+    const requests = presentCandidates.map(({ text }) => ({
       content: { role: 'user', parts: [{ text }] },
       taskType: 'RETRIEVAL_DOCUMENT',
     }));
@@ -70,8 +90,7 @@ export async function rankSemanticFromQueryEmbedding(
       requests,
     });
     const docEmbeddings = (docResult.embeddings || []).map((e: any) => e.values);
-    return candidates
-      .map((candidate, i) => {
+    const rankedPresent = presentCandidates.map(({ candidate }, i) => {
         const docEmbedding = docEmbeddings[i];
         const similarity = docEmbedding ? dotProduct(queryEmbedding, docEmbedding) : Number.NEGATIVE_INFINITY;
         return {
@@ -79,7 +98,15 @@ export async function rankSemanticFromQueryEmbedding(
           score: similarity,
           semanticSimilarity: similarity,
         };
-      })
+      });
+
+    const rankedMissing = missingTextCandidates.map((candidate) => ({
+      ...candidate,
+      score: Number.NEGATIVE_INFINITY,
+      semanticSimilarity: Number.NEGATIVE_INFINITY,
+    }));
+
+    return [...rankedPresent, ...rankedMissing]
       .sort((a, b) => b.score - a.score);
   } catch (error) {
     console.warn('[retrieval] Semantic ranking failed, skipping semantic re-ranking:', error);
