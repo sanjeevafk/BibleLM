@@ -33,6 +33,13 @@ type PassageWindowRow = {
   verseIds: string[];
   text: string;
 };
+type TskClusterRow = {
+  clusterId: string;
+  clusterLabel: string;
+  memberVerseIds: string[];
+  voteTotal: number;
+  text: string;
+};
 
 const POSTGRES_URL = process.env.POSTGRES_URL;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -52,6 +59,8 @@ const STRONGS_HEBREW_PATH =
   path.join(process.cwd(), 'strongs-master/hebrew/strongs-hebrew-dictionary.js');
 const PASSAGE_WINDOWS_PATH =
   process.env.PASSAGE_WINDOWS_PATH || path.join(process.cwd(), 'data', 'passage-windows.json');
+const TSK_CLUSTERS_PATH =
+  process.env.TSK_CLUSTERS_PATH || path.join(process.cwd(), 'data', 'tsk-clusters.json');
 
 const BATCH_SIZE = Number.parseInt(process.env.BATCH_SIZE || '200', 10);
 const EMBED_BATCH_SIZE = Number.parseInt(process.env.EMBED_BATCH_SIZE || '64', 10);
@@ -637,6 +646,85 @@ async function seedPassageWindows(pool: Pool) {
   }
 }
 
+async function loadTskClusters(): Promise<TskClusterRow[]> {
+  if (!fs.existsSync(TSK_CLUSTERS_PATH)) return [];
+  const raw = JSON.parse(fs.readFileSync(TSK_CLUSTERS_PATH, 'utf8')) as {
+    items?: Array<{
+      clusterId?: string;
+      clusterLabel?: string;
+      memberVerseIds?: string[];
+      voteTotal?: number;
+    }>;
+  };
+  return (raw.items ?? [])
+    .filter((item) => item.clusterId && item.clusterLabel && Array.isArray(item.memberVerseIds))
+    .map((item) => ({
+      clusterId: String(item.clusterId),
+      clusterLabel: String(item.clusterLabel),
+      memberVerseIds: (item.memberVerseIds ?? []).map((id) => String(id).toUpperCase()),
+      voteTotal: Number(item.voteTotal || 0),
+      text: `${item.clusterLabel}: ${(item.memberVerseIds ?? []).slice(0, 25).join(' | ')}`,
+    }));
+}
+
+async function insertTskClusterBatch(pool: Pool, rows: TskClusterRow[], embeddings?: number[][]) {
+  const values: Array<string | number | string[] | null> = [];
+  const placeholders: string[] = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const base = i * 7;
+    placeholders.push(
+      `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`
+    );
+    values.push(
+      row.clusterId,
+      row.clusterLabel,
+      row.memberVerseIds,
+      row.voteTotal,
+      '2026-03-retrieval-enrichment',
+      'text-embedding-3-small',
+      embeddings ? toVectorString(embeddings[i]) : null
+    );
+  }
+
+  await pool.query(
+    `INSERT INTO tsk_clusters (
+      cluster_id,
+      cluster_label,
+      member_verse_ids,
+      vote_total,
+      dataset_version,
+      embedding_model,
+      embedding
+    ) VALUES ${placeholders.join(', ')}
+     ON CONFLICT (cluster_id) DO UPDATE SET
+      cluster_label = EXCLUDED.cluster_label,
+      member_verse_ids = EXCLUDED.member_verse_ids,
+      vote_total = EXCLUDED.vote_total,
+      dataset_version = EXCLUDED.dataset_version,
+      embedding_model = EXCLUDED.embedding_model,
+      embedding = COALESCE(EXCLUDED.embedding, tsk_clusters.embedding)`,
+    values
+  );
+}
+
+async function seedTskClusters(pool: Pool) {
+  const rows = await loadTskClusters();
+  if (rows.length === 0) {
+    console.log('No TSK clusters found; skipping tsk_clusters seed.');
+    return;
+  }
+
+  const canEmbed = Boolean(GROQ_API_KEY && GROQ_EMBEDDING_MODEL);
+  for (let i = 0; i < rows.length; i += EMBED_BATCH_SIZE) {
+    const batch = rows.slice(i, i + EMBED_BATCH_SIZE);
+    const embeddings = canEmbed ? await embedTexts(batch.map((row) => row.text)) : undefined;
+    await insertTskClusterBatch(pool, batch, embeddings);
+    console.log(`Inserted TSK clusters ${i + 1}-${i + batch.length}`);
+  }
+}
+
 function extractJsonObject(text: string): string {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -805,6 +893,17 @@ async function ensureSchema(pool: Pool) {
       embedding vector(384)
     );`
   );
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS tsk_clusters (
+      cluster_id TEXT PRIMARY KEY,
+      cluster_label TEXT NOT NULL,
+      member_verse_ids TEXT[] NOT NULL,
+      vote_total INT NOT NULL DEFAULT 0,
+      dataset_version TEXT NOT NULL,
+      embedding_model TEXT NOT NULL DEFAULT 'text-embedding-3-small',
+      embedding vector(384)
+    );`
+  );
 }
 
 async function main() {
@@ -824,6 +923,7 @@ async function main() {
     await seedCrossReferences(pool);
     await seedVerses(pool);
     await seedPassageWindows(pool);
+    await seedTskClusters(pool);
   } finally {
     await pool.end();
   }
