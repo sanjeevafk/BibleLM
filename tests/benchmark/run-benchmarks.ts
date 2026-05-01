@@ -9,6 +9,13 @@ type Scenario = {
   translation: string;
   expectedTopRefs: string[];
 };
+type RetrievalScenario = {
+  id: string;
+  query: string;
+  type: 'topical' | 'explanation' | 'direct' | 'passage' | 'cluster';
+  translation: string;
+  expected_refs: string[];
+};
 
 type BenchmarkRun = {
   total_latency_ms: number;
@@ -53,6 +60,7 @@ type Report = {
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SCENARIOS_PATH = path.join(__dirname, 'fixtures', 'scenarios.json');
+const RETRIEVAL_SCENARIOS_PATH = path.join(__dirname, 'fixtures', 'retrieval-scenarios.json');
 const SAMPLE_RESULTS_PATH = path.join(__dirname, 'fixtures', 'sample-results.json');
 const REPORT_DIR = path.join(ROOT, 'project-docs', 'benchmark');
 const REPORT_JSON_PATH = path.join(REPORT_DIR, 'latest-report.json');
@@ -143,8 +151,29 @@ function loadJsonFile<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
 }
 
+function toScenario(input: Scenario | RetrievalScenario): Scenario {
+  if ('expectedTopRefs' in input) return input;
+  return {
+    id: input.id,
+    category: `${input.type}_enrichment_query`,
+    cacheMode: 'miss',
+    query: input.query,
+    translation: input.translation,
+    expectedTopRefs: input.expected_refs,
+  };
+}
+
+function loadScenarios(): Scenario[] {
+  const baseScenarios = loadJsonFile<Scenario[]>(SCENARIOS_PATH);
+  const retrievalScenarios = loadJsonFile<RetrievalScenario[]>(RETRIEVAL_SCENARIOS_PATH);
+  const merged = [...baseScenarios.map(toScenario), ...retrievalScenarios.map(toScenario)];
+  const byId = new Map<string, Scenario>();
+  for (const scenario of merged) byId.set(scenario.id, scenario);
+  return Array.from(byId.values());
+}
+
 function buildSampleReport(): Report {
-  const scenarios = loadJsonFile<Scenario[]>(SCENARIOS_PATH);
+  const scenarios = loadScenarios();
   const fixture = loadJsonFile<SampleFixture>(SAMPLE_RESULTS_PATH);
   const baselineRuns = Object.values(fixture.baseline).flat();
   const optimizedRuns = Object.values(fixture.optimized).flat();

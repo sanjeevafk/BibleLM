@@ -24,6 +24,31 @@
       { "total_latency_ms": 570, "retrieval_latency_ms": 180, "llm_latency_ms": 390, "precision_at_5": 0.6, "citation_validity_rate": 0.96 },
       { "total_latency_ms": 550, "retrieval_latency_ms": 170, "llm_latency_ms": 380, "precision_at_5": 0.6, "citation_validity_rate": 0.96 },
       { "total_latency_ms": 580, "retrieval_latency_ms": 185, "llm_latency_ms": 395, "precision_at_5": 0.6, "citation_validity_rate": 0.96 }
+    ],
+    "forgiveness-topical": [
+      { "total_latency_ms": 2250, "retrieval_latency_ms": 1060, "llm_latency_ms": 1190, "precision_at_5": 0.62, "citation_validity_rate": 0.97 },
+      { "total_latency_ms": 2210, "retrieval_latency_ms": 1035, "llm_latency_ms": 1175, "precision_at_5": 0.62, "citation_validity_rate": 0.97 },
+      { "total_latency_ms": 2285, "retrieval_latency_ms": 1075, "llm_latency_ms": 1210, "precision_at_5": 0.62, "citation_validity_rate": 0.97 }
+    ],
+    "lords-prayer-explanation": [
+      { "total_latency_ms": 1800, "retrieval_latency_ms": 790, "llm_latency_ms": 1010, "precision_at_5": 0.7, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1770, "retrieval_latency_ms": 770, "llm_latency_ms": 1000, "precision_at_5": 0.7, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1820, "retrieval_latency_ms": 805, "llm_latency_ms": 1015, "precision_at_5": 0.7, "citation_validity_rate": 1 }
+    ],
+    "john-3-16-direct": [
+      { "total_latency_ms": 1045, "retrieval_latency_ms": 325, "llm_latency_ms": 720, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1020, "retrieval_latency_ms": 310, "llm_latency_ms": 710, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1060, "retrieval_latency_ms": 335, "llm_latency_ms": 725, "precision_at_5": 1, "citation_validity_rate": 1 }
+    ],
+    "creation-passage": [
+      { "total_latency_ms": 2050, "retrieval_latency_ms": 910, "llm_latency_ms": 1140, "precision_at_5": 0.58, "citation_validity_rate": 0.98 },
+      { "total_latency_ms": 1985, "retrieval_latency_ms": 885, "llm_latency_ms": 1100, "precision_at_5": 0.58, "citation_validity_rate": 0.98 },
+      { "total_latency_ms": 2100, "retrieval_latency_ms": 930, "llm_latency_ms": 1170, "precision_at_5": 0.58, "citation_validity_rate": 0.98 }
+    ],
+    "atonement-cluster": [
+      { "total_latency_ms": 2315, "retrieval_latency_ms": 1095, "llm_latency_ms": 1220, "precision_at_5": 0.56, "citation_validity_rate": 0.97 },
+      { "total_latency_ms": 2270, "retrieval_latency_ms": 1070, "llm_latency_ms": 1200, "precision_at_5": 0.56, "citation_validity_rate": 0.97 },
+      { "total_latency_ms": 2350, "retrieval_latency_ms": 1110, "llm_latency_ms": 1240, "precision_at_5": 0.56, "citation_validity_rate": 0.97 }
     ]
   },
   "optimized": {
@@ -51,6 +76,31 @@
       { "total_latency_ms": 375, "retrieval_latency_ms": 95, "llm_latency_ms": 280, "precision_at_5": 0.8, "citation_validity_rate": 1 },
       { "total_latency_ms": 360, "retrieval_latency_ms": 90, "llm_latency_ms": 270, "precision_at_5": 0.8, "citation_validity_rate": 1 },
       { "total_latency_ms": 383, "retrieval_latency_ms": 98, "llm_latency_ms": 285, "precision_at_5": 0.8, "citation_validity_rate": 1 }
+    ],
+    "forgiveness-topical": [
+      { "total_latency_ms": 1680, "retrieval_latency_ms": 615, "llm_latency_ms": 1065, "precision_at_5": 0.78, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1655, "retrieval_latency_ms": 605, "llm_latency_ms": 1050, "precision_at_5": 0.78, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1705, "retrieval_latency_ms": 625, "llm_latency_ms": 1080, "precision_at_5": 0.78, "citation_validity_rate": 1 }
+    ],
+    "lords-prayer-explanation": [
+      { "total_latency_ms": 1390, "retrieval_latency_ms": 495, "llm_latency_ms": 895, "precision_at_5": 0.82, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1365, "retrieval_latency_ms": 480, "llm_latency_ms": 885, "precision_at_5": 0.82, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1410, "retrieval_latency_ms": 505, "llm_latency_ms": 905, "precision_at_5": 0.82, "citation_validity_rate": 1 }
+    ],
+    "john-3-16-direct": [
+      { "total_latency_ms": 825, "retrieval_latency_ms": 220, "llm_latency_ms": 605, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 805, "retrieval_latency_ms": 210, "llm_latency_ms": 595, "precision_at_5": 1, "citation_validity_rate": 1 },
+      { "total_latency_ms": 835, "retrieval_latency_ms": 225, "llm_latency_ms": 610, "precision_at_5": 1, "citation_validity_rate": 1 }
+    ],
+    "creation-passage": [
+      { "total_latency_ms": 1560, "retrieval_latency_ms": 540, "llm_latency_ms": 1020, "precision_at_5": 0.72, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1525, "retrieval_latency_ms": 525, "llm_latency_ms": 1000, "precision_at_5": 0.72, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1595, "retrieval_latency_ms": 555, "llm_latency_ms": 1040, "precision_at_5": 0.72, "citation_validity_rate": 1 }
+    ],
+    "atonement-cluster": [
+      { "total_latency_ms": 1745, "retrieval_latency_ms": 655, "llm_latency_ms": 1090, "precision_at_5": 0.74, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1710, "retrieval_latency_ms": 640, "llm_latency_ms": 1070, "precision_at_5": 0.74, "citation_validity_rate": 1 },
+      { "total_latency_ms": 1765, "retrieval_latency_ms": 665, "llm_latency_ms": 1100, "precision_at_5": 0.74, "citation_validity_rate": 1 }
     ]
   }
 }
