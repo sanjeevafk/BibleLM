@@ -7,7 +7,7 @@
 import { getCachedRetrievalContext, setCachedRetrievalContext } from '../cache';
 import { classifyAndExpand } from '../query-utils';
 import { getCrossReferences } from '../datasets/tsk';
-import { ENABLE_RETRIEVAL_DEBUG } from '../feature-flags';
+import { ENABLE_DETERMINISTIC_RERANKER, ENABLE_RETRIEVAL_DEBUG } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
 import { CONTEXT_CACHE_VERSION } from './types';
 import type { RetrievalInstrumentation } from './types';
@@ -18,6 +18,7 @@ import {
   clampTopK,
   createRetrievalDebugState,
   addRetrievalStageTrace,
+  addDecisionTrace,
   logRetrievalDiagnostics,
 } from './search';
 import {
@@ -29,6 +30,84 @@ import {
   extractDirectReferences,
 } from './verse-fetch';
 import { enrichOriginalLanguages } from './enrichment';
+
+type VerseMetadataRecord = {
+  verseId?: string;
+  confidence?: number;
+};
+
+let verseMetadataByIdPromise: Promise<Map<string, number>> | null = null;
+
+async function getVerseMetadataConfidenceMap(): Promise<Map<string, number>> {
+  if (!verseMetadataByIdPromise) {
+    verseMetadataByIdPromise = (async () => {
+      const raw = (await import('../../data/verse-metadata.json')).default as VerseMetadataRecord[] | Record<string, VerseMetadataRecord>;
+      const map = new Map<string, number>();
+      const records = Array.isArray(raw) ? raw : Object.values(raw);
+      for (const value of records) {
+        const verseId = value?.verseId?.trim().toUpperCase();
+        if (!verseId) continue;
+        const confidence = typeof value.confidence === 'number' ? value.confidence : 0.5;
+        map.set(verseId, Math.max(0, Math.min(1, confidence)));
+      }
+      return map;
+    })();
+  }
+  return verseMetadataByIdPromise;
+}
+
+async function applyDeterministicReranker(
+  candidates: Array<{ verseId: string; score?: number }>,
+  directRefIds: string[],
+  topK: number,
+  debugState: ReturnType<typeof createRetrievalDebugState> | undefined
+): Promise<string[]> {
+  if (candidates.length === 0) return [];
+
+  const metadataConfidence = await getVerseMetadataConfidenceMap();
+  const directRefs = new Set(directRefIds.map((id) => id.trim().toUpperCase()));
+  const primaryRefs = candidates.slice(0, topK).map((c) => c.verseId.trim().toUpperCase());
+  const primaryRefSet = new Set(primaryRefs);
+  const crossReferenceSet = new Set<string>();
+
+  const crossReferences = await Promise.all(primaryRefs.map((reference) => getCrossReferences(reference)));
+  for (const refs of crossReferences) {
+    for (const ref of refs) {
+      const normalized = ref.reference.trim().toUpperCase();
+      if (!normalized || primaryRefSet.has(normalized)) continue;
+      crossReferenceSet.add(normalized);
+    }
+  }
+
+  const fallbackBaseScore = (idx: number) => (candidates.length - idx) / candidates.length;
+
+  const reranked = candidates
+    .map((candidate, index) => {
+      const verseId = candidate.verseId.trim().toUpperCase();
+      const fusedScore = typeof candidate.score === 'number' ? candidate.score : fallbackBaseScore(index);
+      const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
+      const metadataSignal = metadataConfidence.get(verseId) ?? 0.5;
+      const crossReferenceSignal = crossReferenceSet.has(verseId) ? 1 : 0;
+      const finalScore =
+        fusedScore +
+        (0.15 * directReferenceSignal) +
+        (0.10 * metadataSignal) +
+        (0.05 * crossReferenceSignal);
+
+      if (debugState) {
+        addDecisionTrace(
+          debugState,
+          verseId,
+          `deterministic_reranker:fused=${fusedScore.toFixed(4)},direct=${directReferenceSignal.toFixed(1)},metadata=${metadataSignal.toFixed(4)},cross_ref=${crossReferenceSignal.toFixed(1)},final=${finalScore.toFixed(4)}`
+        );
+      }
+
+      return { verseId, finalScore };
+    })
+    .sort((a, b) => b.finalScore - a.finalScore);
+
+  return reranked.map((entry) => entry.verseId);
+}
 // ---------------------------------------------------------------------------
 // TSK cross-reference expansion logic
 // ---------------------------------------------------------------------------
@@ -139,9 +218,13 @@ export async function retrieveContextForQuery(
     debugState
   );
 
+  const candidateOrder = ENABLE_DETERMINISTIC_RERANKER
+    ? await applyDeterministicReranker(hybridResults, directRefIds, topK, debugState)
+    : hybridResults.map((result) => result.verseId.trim().toUpperCase());
+
   const orderedIds: string[] = [];
   const seenIds = new Set<string>();
-  for (const verseId of [...directRefIds, ...hybridResults.map((r) => r.verseId)]) {
+  for (const verseId of [...directRefIds, ...candidateOrder]) {
     const key = verseId.trim().toUpperCase();
     if (seenIds.has(key)) continue;
     seenIds.add(key);

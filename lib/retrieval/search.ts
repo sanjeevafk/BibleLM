@@ -360,7 +360,7 @@ export async function hybridSearch(
     debugState.hybridTopKRefs = finalHits.map((hit) => hit.verseId);
   }
 
-  return finalHits.map((hit) => ({ verseId: hit.verseId }));
+  return finalHits.map((hit) => ({ verseId: hit.verseId, score: hit.score }));
 }
 
 

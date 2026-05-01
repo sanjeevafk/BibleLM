@@ -12,6 +12,7 @@ export function numberFromEnv(value: string | undefined, fallback: number): numb
 }
 
 export const ENABLE_SEMANTIC_RERANKER = isEnabled(process.env.ENABLE_SEMANTIC_RERANKER);
+export const ENABLE_DETERMINISTIC_RERANKER = process.env.ENABLE_DETERMINISTIC_RERANKER !== '0';
 export const ENABLE_TSK_EXPANSION_GATING = process.env.ENABLE_TSK_EXPANSION_GATING !== '0';
 export const ENABLE_RETRIEVAL_DEBUG =
   isEnabled(process.env.ENABLE_RETRIEVAL_DEBUG) ||

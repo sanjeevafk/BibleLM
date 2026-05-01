@@ -49,7 +49,7 @@ export const TSK_CONFIG = {
 // Core domain types
 // ---------------------------------------------------------------------------
 
-export type VerseResult = { verseId: string };
+export type VerseResult = { verseId: string; score?: number };
 
 export type LexicalDoc = {
   verseId: string;
