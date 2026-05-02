@@ -1,8 +1,5 @@
 import { createGroq } from '@ai-sdk/groq';
-import { generateText, streamText } from 'ai';
-import { GoogleGenAI } from '@google/genai';
-import { InferenceClient } from '@huggingface/inference';
-import { redis } from './redis';
+import { streamText } from 'ai';
 
 type FallbackOptions = {
   maxTokens?: number;
@@ -16,95 +13,13 @@ type FallbackOptions = {
 export type FallbackResult =
   | { type: 'content'; content: string; modelUsed: string; finalFallback?: boolean; chunks?: string[] };
 
-const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const GEMINI_MODEL_CANDIDATES = [
-  GEMINI_PRIMARY_MODEL,
-  'gemini-2.5-flash',
-  'models/gemini-2.5-flash',
-];
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct';
 const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
-const HF_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TEMPERATURE = 0.1;
-const DEFAULT_PROVIDER_COOLDOWN_MS = 10 * 60 * 1000;
-// Keep the default cooldown short for transient 429s. Multi-hour or multi-day cooldowns
-// only make sense when a persistent backend such as Redis/KV is configured.
-const PROVIDER_COOLDOWN_MS = parseProviderCooldownMs(
-  process.env.PROVIDER_COOLDOWN_MS,
-  DEFAULT_PROVIDER_COOLDOWN_MS
-);
-const PROVIDER_COOLDOWN_KEY_PREFIX = 'llm-fallback:provider-disabled-until';
-let geminiDisabledUntil = 0;
-let openRouterDisabledUntil = 0;
-let groqDisabledUntil = 0;
-let hfDisabledUntil = 0;
-
-type ProviderName = 'gemini' | 'openrouter' | 'groq' | 'hf';
-
-function parseProviderCooldownMs(envValue: string | undefined, fallbackMs: number): number {
-  const parsed = Number.parseInt(envValue || '', 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
-}
 
 function roundDurationMs(durationMs: number): number {
   return Number(durationMs.toFixed(2));
-}
-
-function getInMemoryDisabledUntil(provider: ProviderName): number {
-  if (provider === 'gemini') return geminiDisabledUntil;
-  if (provider === 'openrouter') return openRouterDisabledUntil;
-  if (provider === 'groq') return groqDisabledUntil;
-  return hfDisabledUntil;
-}
-
-function setInMemoryDisabledUntil(provider: ProviderName, disabledUntil: number): void {
-  if (provider === 'gemini') {
-    geminiDisabledUntil = disabledUntil;
-  } else if (provider === 'openrouter') {
-    openRouterDisabledUntil = disabledUntil;
-  } else if (provider === 'groq') {
-    groqDisabledUntil = disabledUntil;
-  } else {
-    hfDisabledUntil = disabledUntil;
-  }
-}
-
-function buildProviderCooldownKey(provider: ProviderName): string {
-  return `${PROVIDER_COOLDOWN_KEY_PREFIX}:${provider}`;
-}
-
-async function getProviderDisabledUntil(provider: ProviderName): Promise<number> {
-  const inMemoryValue = getInMemoryDisabledUntil(provider);
-  if (!redis) {
-    // Serverless cold starts reset module state, so this fallback only protects a warm instance.
-    return inMemoryValue;
-  }
-
-  try {
-    const stored = await redis.get<number | string>(buildProviderCooldownKey(provider));
-    if (typeof stored === 'number') {
-      setInMemoryDisabledUntil(provider, stored);
-      return stored;
-    }
-    if (typeof stored === 'string') {
-      const parsed = Number.parseInt(stored, 10);
-      if (Number.isFinite(parsed)) {
-        setInMemoryDisabledUntil(provider, parsed);
-        return parsed;
-      }
-    }
-    return inMemoryValue;
-  } catch (error) {
-    console.warn('[llm-fallback] Cooldown store read failed; using in-memory fallback only.', error);
-    // Serverless cold starts reset module state, so this fallback only protects a warm instance.
-    return inMemoryValue;
-  }
-}
-
-async function isProviderAvailable(provider: ProviderName): Promise<boolean> {
-  return Date.now() > (await getProviderDisabledUntil(provider));
 }
 
 function isQuotaError(error: unknown): boolean {
@@ -118,184 +33,6 @@ function isQuotaError(error: unknown): boolean {
     message.includes('RATE LIMIT') ||
     message.includes('QUOTA')
   );
-}
-
-async function disableProvider(provider: ProviderName): Promise<void> {
-  const disabledUntil = Date.now() + PROVIDER_COOLDOWN_MS;
-  setInMemoryDisabledUntil(provider, disabledUntil);
-
-  if (redis) {
-    const ttlSeconds = Math.max(1, Math.ceil((disabledUntil - Date.now()) / 1000));
-    try {
-      await redis.set(buildProviderCooldownKey(provider), String(disabledUntil), { ex: ttlSeconds });
-    } catch (error) {
-      console.warn('[llm-fallback] Cooldown store write failed; using in-memory fallback only.', error);
-      // Serverless cold starts reset module state, so longer cooldowns require persistent storage.
-    }
-  }
-
-  console.warn(`[llm-fallback] ${provider} temporarily disabled due to quota limit`);
-}
-
-function logModelFailure(model: string, error: unknown) {
-  const message = String((error as { message?: string })?.message || error || '');
-  const label = /429|rate limit/i.test(message)
-    ? 'rate-limit'
-    : /timeout|timed out|etimedout|abort/i.test(message)
-      ? 'timeout'
-      : 'error';
-  console.warn(`[llm-fallback] ${label}: ${model}`, error);
-}
-
-function isModelNotFoundError(error: unknown): boolean {
-  const message = String((error as { message?: string })?.message || error || '').toLowerCase();
-  return message.includes('not_found') || message.includes('listmodels') || message.includes('404');
-}
-
-function extractOpenRouterDelta(payload: unknown): string {
-  const json = payload as {
-    choices?: Array<{
-      delta?: { content?: string | Array<{ text?: string }> };
-      message?: { content?: string | Array<{ text?: string }> };
-    }>;
-  };
-  const choice = json?.choices?.[0];
-  if (!choice) return '';
-
-  const value = choice.delta?.content ?? choice.message?.content;
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    return value
-      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
-      .join('');
-  }
-  return '';
-}
-
-async function streamGeminiContent(
-  modelName: string,
-  prompt: string,
-  apiKey: string,
-  temperature: number,
-  maxTokens: number,
-  onChunk?: (chunk: string) => void | Promise<void>
-): Promise<{ text: string; chunks: string[] }> {
-  const ai = new GoogleGenAI({ apiKey });
-  const stream = await ai.models.generateContentStream({
-    model: modelName,
-    contents: prompt,
-    config: {
-      temperature,
-      maxOutputTokens: maxTokens,
-    },
-  });
-
-  const chunks: string[] = [];
-  let text = '';
-
-  for await (const chunk of stream) {
-    const delta = chunk.text || '';
-    if (!delta) continue;
-    chunks.push(delta);
-    text += delta;
-    if (onChunk) {
-      await onChunk(delta);
-    }
-  }
-
-  return { text: text.trim(), chunks };
-}
-
-async function streamOpenRouterContent(
-  prompt: string,
-  apiKey: string,
-  temperature: number,
-  maxTokens: number,
-  onChunk?: (chunk: string) => void | Promise<void>
-): Promise<{ text: string; chunks: string[] }> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      'X-Title': 'BibleLM',
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      stream: true,
-      temperature,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`OpenRouter returned ${response.status}: ${body.slice(0, 240)}`);
-  }
-
-  if (!response.body) {
-    const fallback = (await response.json().catch(() => ({}))) as {
-      choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
-    };
-    const text = extractOpenRouterDelta(fallback).trim();
-    return { text, chunks: text ? [text] : [] };
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const chunks: string[] = [];
-  let text = '';
-  let buffer = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line.startsWith('data:')) continue;
-      const payload = line.slice('data:'.length).trim();
-      if (!payload || payload === '[DONE]') continue;
-
-      try {
-        const delta = extractOpenRouterDelta(JSON.parse(payload));
-        if (!delta) continue;
-        chunks.push(delta);
-        text += delta;
-        if (onChunk) {
-          await onChunk(delta);
-        }
-      } catch (error) {
-        console.warn('[llm-fallback] OpenRouter stream parse issue', error);
-      }
-    }
-  }
-
-  const tail = buffer.trim();
-  if (tail.startsWith('data:')) {
-    const payload = tail.slice('data:'.length).trim();
-    if (payload && payload !== '[DONE]') {
-      try {
-        const delta = extractOpenRouterDelta(JSON.parse(payload));
-        if (delta) {
-          chunks.push(delta);
-          text += delta;
-          if (onChunk) {
-            await onChunk(delta);
-          }
-        }
-      } catch (error) {
-        console.warn('[llm-fallback] OpenRouter tail parse issue', error);
-      }
-    }
-  }
-
-  return { text: text.trim(), chunks };
 }
 
 function extractTranslation(prompt: string): string | undefined {
@@ -366,7 +103,7 @@ function buildContextOnlyContent(prompt: string): string {
   const verses = parseVersesFromPrompt(prompt);
   const lines: string[] = [];
 
-  lines.push('AI inference temporarily limited – showing Scripture context only.');
+  lines.push('AI inference unavailable – showing Scripture context only.');
   lines.push('');
 
   if (verses.length === 0) {
@@ -405,6 +142,9 @@ function buildContextOnlyContent(prompt: string): string {
   return lines.join('\n');
 }
 
+/**
+ * Generates text using Groq with an optional fail-safe to context-only output.
+ */
 export async function generateWithFallback(
   prompt: string,
   options: FallbackOptions
@@ -416,181 +156,56 @@ export async function generateWithFallback(
     const temperature = options.temperature ?? DEFAULT_TEMPERATURE;
     const groqApiKey = options.apiKey || process.env.GROQ_API_KEY;
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (geminiKey) {
-      if (!(await isProviderAvailable('gemini'))) {
-        console.warn('[llm-fallback] gemini disabled — using fallback');
-      } else {
-        const candidates = Array.from(new Set(GEMINI_MODEL_CANDIDATES.filter(Boolean)));
-        for (const modelName of candidates) {
-          try {
-            if (!(await isProviderAvailable('gemini'))) {
-              throw new Error('GEMINI_TEMP_DISABLED');
-            }
-
-            const result = await streamGeminiContent(
-              modelName,
-              prompt,
-              geminiKey,
-              temperature,
-              maxTokens,
-              options.onChunk
-            );
-            const text = result.text;
-            if (text) {
-              console.log('Primary LLM: Gemini');
-              console.log(`[llm-fallback] Using primary provider: gemini:${modelName}`);
-              return { type: 'content', content: text, modelUsed: `gemini:${modelName}`, chunks: result.chunks };
-            }
-            throw new Error('Gemini returned empty output');
-          } catch (error) {
-            if (isQuotaError(error)) {
-              await disableProvider('gemini');
-              break;
-            }
-
-            logModelFailure(`gemini:${modelName}`, error);
-            if (isModelNotFoundError(error)) {
-              console.warn(`[llm-fallback] Gemini model alias unavailable, trying next candidate: ${modelName}`);
-            }
-          }
-        }
-      }
-    } else {
-      console.warn('[llm-fallback] GEMINI_API_KEY missing; skipping Gemini primary provider.');
+    if (!groqApiKey) {
+      throw new Error('GROQ_API_KEY missing');
     }
 
-    const openRouterKey = process.env.OPENROUTER_API_KEY;
-    if (openRouterKey) {
-      if (!(await isProviderAvailable('openrouter'))) {
-        console.warn('[llm-fallback] openrouter disabled — using fallback');
-      } else {
-        try {
-          console.log('Fallback to OpenRouter');
-          const result = await streamOpenRouterContent(
-            prompt,
-            openRouterKey,
-            temperature,
-            maxTokens,
-            options.onChunk
-          );
-          const text = result.text;
-          if (text) {
-            console.log(`[llm-fallback] Using fallback provider: openrouter:${OPENROUTER_MODEL}`);
-            return { type: 'content', content: text, modelUsed: `openrouter:${OPENROUTER_MODEL}`, chunks: result.chunks };
-          }
-          throw new Error('OpenRouter returned empty output');
-        } catch (error) {
-          if (isQuotaError(error)) {
-            await disableProvider('openrouter');
-          } else {
-            logModelFailure(`openrouter:${OPENROUTER_MODEL}`, error);
-          }
+    const groq = createGroq({ apiKey: groqApiKey });
+    const groqModels = [GROQ_PRIMARY_MODEL, GROQ_SECONDARY_MODEL];
+
+    for (const modelName of groqModels) {
+      try {
+        const groqStream = streamText({
+          model: groq(modelName),
+          prompt,
+          temperature,
+          maxTokens: maxTokens as any,
+        } as any);
+
+        const chunks: string[] = [];
+        for await (const chunk of (await groqStream).textStream) {
+          chunks.push(chunk);
+          options.onChunk?.(chunk);
         }
-      }
-    } else {
-      console.warn('[llm-fallback] OPENROUTER_API_KEY missing; skipping OpenRouter fallback.');
-    }
 
-    if (groqApiKey) {
-      if (!(await isProviderAvailable('groq'))) {
-        console.warn('[llm-fallback] groq disabled — using fallback');
-      } else {
-        const groq = createGroq({ apiKey: groqApiKey });
-        const groqModels = [GROQ_PRIMARY_MODEL, GROQ_SECONDARY_MODEL];
-        for (const modelName of groqModels) {
-          try {
-            if (!(await isProviderAvailable('groq'))) {
-              throw new Error('GROQ_TEMP_DISABLED');
-            }
-            const groqStream = streamText({
-              model: groq(modelName),
-              prompt,
-              temperature,
-              maxTokens: maxTokens as any,
-            } as any);
-            const chunks: string[] = [];
-            for await (const chunk of (await groqStream).textStream) {
-              chunks.push(chunk);
-              options.onChunk?.(chunk);
-            }
-            const text = chunks.join('');
-            if (text) {
-              console.log(`[llm-fallback] Using fallback provider: groq:${modelName}`);
-              return { type: 'content', content: text, modelUsed: `groq:${modelName}`, chunks };
-            }
-            throw new Error('Groq returned empty output');
-          } catch (error) {
-            if (isQuotaError(error)) {
-              await disableProvider('groq');
-              break;
-            }
-            logModelFailure(`groq:${modelName}`, error);
-          }
+        const text = chunks.join('');
+        if (text) {
+          console.log(`[llm] Using Groq: ${modelName}`);
+          return { type: 'content', content: text, modelUsed: `groq:${modelName}`, chunks };
         }
-      }
-    } else {
-      console.warn('[llm-fallback] GROQ_API_KEY missing; skipping Groq fallback.');
-    }
-
-    const hfToken = process.env.HF_TOKEN;
-    if (hfToken) {
-      if (!(await isProviderAvailable('hf'))) {
-        console.warn('[llm-fallback] hf disabled — using fallback');
-      } else {
-        try {
-          const hf = new InferenceClient(hfToken);
-          const hfResult = await hf.textGeneration({
-            model: HF_MODEL,
-            provider: 'hf-inference',
-            inputs: prompt,
-            parameters: {
-              max_new_tokens: maxTokens,
-              temperature,
-              return_full_text: false,
-            },
-            options: { wait_for_model: true },
-          });
-
-          const hfText =
-            typeof hfResult === 'string'
-              ? hfResult
-              : Array.isArray(hfResult)
-                ? hfResult[0]?.generated_text
-                : hfResult.generated_text;
-
-          if (hfText && hfText.trim()) {
-            console.log(`[llm-fallback] Using fallback provider: hf:${HF_MODEL}`);
-            return { type: 'content', content: hfText.trim(), modelUsed: `hf:${HF_MODEL}` };
-          }
-          throw new Error('HF inference returned empty output');
-        } catch (error) {
-          if (isQuotaError(error)) {
-            await disableProvider('hf');
-          } else {
-            logModelFailure(`hf:${HF_MODEL}`, error);
-          }
+      } catch (error) {
+        console.warn(`[llm] Groq error (${modelName}):`, error);
+        if (isQuotaError(error)) {
+          // If the first model hits quota, try the secondary one.
+          continue;
         }
+        // For other errors, break and hit the fail-safe.
+        break;
       }
     }
 
-    const fallbackContent =
-      options.fallbackContent ?? buildContextOnlyContent(prompt);
-
+    // If we reach here, both Groq models failed or were unavailable.
     return {
       type: 'content',
-      content: fallbackContent,
+      content: options.fallbackContent ?? buildContextOnlyContent(prompt),
       modelUsed: 'context-only',
       finalFallback: true,
     };
   } catch (error) {
-    // In case of unexpected error, fallback to context-only content
-    const fallbackContent =
-      options.fallbackContent ?? buildContextOnlyContent(prompt);
-
+    console.error('[llm] Unexpected error:', error);
     return {
       type: 'content',
-      content: fallbackContent,
+      content: options.fallbackContent ?? buildContextOnlyContent(prompt),
       modelUsed: 'context-only',
       finalFallback: true,
     };
@@ -598,3 +213,4 @@ export async function generateWithFallback(
     options.onTiming?.(roundDurationMs(performance.now() - startedAt));
   }
 }
+

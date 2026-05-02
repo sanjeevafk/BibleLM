@@ -1,22 +1,36 @@
-import { GoogleGenAI } from '@google/genai';
 import type { RankedVerse } from './types';
 import { getCachedEmbedding, setCachedEmbedding } from '../cache';
 import { classifyAndExpand } from '../query-utils';
 
-/**
- * Re-ranks the top BM25 candidates using semantic embeddings from Google GenAI.
- * Only practical for small batches (Top 50) due to API latency and token cost.
- */
-function getEmbeddingModel() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+const GROQ_EMBEDDING_MODEL = process.env.GROQ_EMBEDDING_MODEL || 'nomic-embed-text-v1.5';
+
+async function fetchGroqEmbeddings(texts: string[]): Promise<number[][] | null> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: GROQ_EMBEDDING_MODEL,
+        input: texts
+      })
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.data.map((item: any) => item.embedding);
+  } catch (error) {
+    console.warn('[retrieval] Groq embedding failed:', error);
     return null;
   }
-  const genAI = new GoogleGenAI({ apiKey } as any);
-  return (genAI as any).getGenerativeModel({ model: 'text-embedding-004' });
 }
 
-const EMBEDDING_MODEL = 'text-embedding-004';
+const EMBEDDING_MODEL = GROQ_EMBEDDING_MODEL;
 
 export async function embedQuery(query: string): Promise<number[] | null> {
   const normalized = classifyAndExpand(query).normalizedQuery.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -30,25 +44,13 @@ export async function embedQuery(query: string): Promise<number[] | null> {
     return cachedEmbedding;
   }
 
-  const model = getEmbeddingModel();
-  if (!model) {
-    console.warn('[retrieval] Gemini API key missing, skipping semantic re-ranking.');
+  const embeddings = await fetchGroqEmbeddings([normalized]);
+  if (!embeddings || embeddings.length === 0) {
     return null;
   }
-  try {
-    const queryResult = await model.embedContent({
-      content: { role: 'user', parts: [{ text: normalized }] },
-      taskType: 'RETRIEVAL_QUERY',
-    });
-    const embedding = queryResult.embedding.values as number[];
-    if (embedding.length > 0) {
-      await setCachedEmbedding(cacheKey, embedding);
-    }
-    return embedding;
-  } catch (error) {
-    console.warn('[retrieval] Query embedding failed, skipping semantic re-ranking:', error);
-    return null;
-  }
+  const embedding = embeddings[0];
+  await setCachedEmbedding(cacheKey, embedding);
+  return embedding;
 }
 
 export async function rankSemanticFromQueryEmbedding(
@@ -57,8 +59,6 @@ export async function rankSemanticFromQueryEmbedding(
   verseTexts: Map<string, string>
 ): Promise<RankedVerse[]> {
   if (!queryEmbedding || candidates.length === 0) return candidates;
-  const model = getEmbeddingModel();
-  if (!model) return candidates;
 
   try {
     const presentCandidates: Array<{ candidate: RankedVerse; text: string }> = [];
@@ -82,14 +82,9 @@ export async function rankSemanticFromQueryEmbedding(
         .sort((a, b) => b.score - a.score);
     }
 
-    const requests = presentCandidates.map(({ text }) => ({
-      content: { role: 'user', parts: [{ text }] },
-      taskType: 'RETRIEVAL_DOCUMENT',
-    }));
-    const docResult: any = await model.batchEmbedContents({
-      requests,
-    });
-    const docEmbeddings = (docResult.embeddings || []).map((e: any) => e.values);
+    const textsToEmbed = presentCandidates.map(({ text }) => text);
+    const docEmbeddings = await fetchGroqEmbeddings(textsToEmbed);
+    if (!docEmbeddings) return candidates;
     const rankedPresent = presentCandidates.map(({ candidate }, i) => {
         const docEmbedding = docEmbeddings[i];
         const similarity = docEmbedding ? dotProduct(queryEmbedding, docEmbedding) : Number.NEGATIVE_INFINITY;

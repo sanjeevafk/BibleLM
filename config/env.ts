@@ -17,20 +17,19 @@ import { z } from 'zod';
 // ---------------------------------------------------------------------------
 
 const envSchema = z.object({
-  // ── LLM Providers ─────────────────────────────────────────────────────────
-  /** Primary Gemini LLM key. Required for best-experience path. */
-  GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY must not be empty').optional(),
+  /** Groq key — Primary LLM provider. */
+  GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY must not be empty').optional(),
 
-  /** OpenRouter key — used as secondary LLM fallback. */
+  /** Optional Gemini LLM key (used for embeddings). */
+  GEMINI_API_KEY: z.string().min(1).optional(),
+
+  /** OpenRouter key — optional fallback. */
   OPENROUTER_API_KEY: z.string().min(1).optional(),
 
-  /** Optional OpenRouter model override. Defaults to llama-3.1-8b-instruct. */
+  /** Optional OpenRouter model override. */
   OPENROUTER_MODEL: z.string().optional(),
 
-  /** Groq key — used as tertiary LLM fallback. */
-  GROQ_API_KEY: z.string().min(1).optional(),
-
-  /** Hugging Face token — embeddings + HF inference fallback. */
+  /** Hugging Face token — optional. */
   HF_TOKEN: z.string().min(1).optional(),
 
   // ── Cache / Rate Limiting ─────────────────────────────────────────────────
@@ -80,17 +79,11 @@ const refinedSchema = envSchema.superRefine((data, ctx) => {
     });
   }
 
-  // Warn (not throw) if no LLM provider is configured.
-  const hasAnyLlm =
-    data.GEMINI_API_KEY ||
-    data.OPENROUTER_API_KEY ||
-    data.GROQ_API_KEY ||
-    data.HF_TOKEN;
-
-  if (!hasAnyLlm) {
+  // Warn (not throw) if no Groq provider is configured.
+  if (!data.GROQ_API_KEY) {
     // Non-fatal: the context-only fallback path can still respond.
     console.warn(
-      '[env] WARNING: No LLM provider API key is configured. ' +
+      '[env] WARNING: GROQ_API_KEY is not configured. ' +
       'Responses will fall back to context-only mode (no generative answer).'
     );
   }

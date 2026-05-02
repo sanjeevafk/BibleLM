@@ -40,18 +40,11 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const PRIMARY_MODEL = 'gemini-2.5-flash';
-const PRIMARY_MODEL_USED = `gemini:${PRIMARY_MODEL}`;
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct';
-const GROQ_FALLBACK_MODEL = 'llama-3.1-8b-instant';
+const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
-const HF_FALLBACK_MODEL = 'meta-llama/Meta-Llama-3.1-8B-Instruct';
 const CACHE_MODEL_CANDIDATES = [
-  PRIMARY_MODEL_USED,
-  `openrouter:${OPENROUTER_MODEL}`,
-  `groq:${GROQ_FALLBACK_MODEL}`,
+  `groq:${GROQ_PRIMARY_MODEL}`,
   `groq:${GROQ_SECONDARY_MODEL}`,
-  `hf:${HF_FALLBACK_MODEL}`,
   'context-only',
 ];
 
@@ -177,12 +170,9 @@ function buildInflightRequestKeyWithHistory(
 // ---------------------------------------------------------------------------
 
 function normalizeModelId(modelUsed: string | undefined): string {
-  if (!modelUsed) return PRIMARY_MODEL_USED;
+  if (!modelUsed) return `groq:${GROQ_PRIMARY_MODEL}`;
   if (modelUsed.includes(':') || modelUsed === 'context-only') return modelUsed;
-  if (modelUsed === PRIMARY_MODEL) return `gemini:${modelUsed}`;
-  if (modelUsed === GROQ_FALLBACK_MODEL || modelUsed === GROQ_SECONDARY_MODEL) return `groq:${modelUsed}`;
-  if (modelUsed === OPENROUTER_MODEL) return `openrouter:${modelUsed}`;
-  if (modelUsed === HF_FALLBACK_MODEL) return `hf:${modelUsed}`;
+  if (modelUsed === GROQ_PRIMARY_MODEL || modelUsed === GROQ_SECONDARY_MODEL) return `groq:${modelUsed}`;
   return modelUsed;
 }
 
@@ -295,7 +285,7 @@ async function executeUncachedPipeline(options: {
 
   const postNormalizeStartedAt = performance.now();
   const normalizedModelUsed = normalizeModelId(generation.modelUsed);
-  const fallbackUsed = normalizedModelUsed !== PRIMARY_MODEL_USED;
+  const fallbackUsed = normalizedModelUsed === 'context-only';
   const finalFallback = generation.finalFallback === true || normalizedModelUsed === 'context-only';
   const normalizedContent = scrubInvalidCitations(
     normalizeResponseContent(generation.content, verses),
@@ -388,11 +378,8 @@ export async function POST(req: Request) {
       );
 
     const groqApiKey = process.env.GROQ_API_KEY;
-    debugLog('Provider keys:', {
-      hasGemini: Boolean(process.env.GEMINI_API_KEY),
-      hasOpenRouter: Boolean(process.env.OPENROUTER_API_KEY),
+    debugLog('Provider key:', {
       hasGroq: Boolean(groqApiKey),
-      hasHf: Boolean(process.env.HF_TOKEN),
     });
 
     let lastUserIndex = -1;
@@ -491,7 +478,7 @@ export async function POST(req: Request) {
       cacheHit = true;
       debugLog('Cache HIT – returning stored response', cachedKey);
       const cachedModelUsed = normalizeModelId(cached.modelUsed);
-      const fallbackUsed = cachedModelUsed !== PRIMARY_MODEL_USED;
+      const fallbackUsed = cachedModelUsed === 'context-only';
       const finalFallback = cachedModelUsed === 'context-only';
       const postNormalizeStartedAt = performance.now();
       const normalizedCachedContent = scrubInvalidCitations(
@@ -543,10 +530,10 @@ export async function POST(req: Request) {
       return response;
     }
 
-    const missKey = buildCacheKey({ query, translation: requestedTranslation, model: PRIMARY_MODEL_USED });
+    const missKey = buildCacheKey({ query, translation: requestedTranslation, model: `groq:${GROQ_PRIMARY_MODEL}` });
     debugLog('Cache MISS – proceeding to LLM', missKey);
 
-    const inflightKey = buildInflightRequestKeyWithHistory(query, requestedTranslation, PRIMARY_MODEL_USED, modelHistory);
+    const inflightKey = buildInflightRequestKeyWithHistory(query, requestedTranslation, `groq:${GROQ_PRIMARY_MODEL}`, modelHistory);
     let pipelinePromise = inflightRequests.get(inflightKey);
     if (pipelinePromise) {
       debugLog('In-flight dedup HIT – awaiting active pipeline', inflightKey);
