@@ -128,6 +128,62 @@ Happy coding! May your pull requests be merged speedily! ✝️
 ```
    Push to your fork and submit a Pull Request to the main branch of the upstream repository.
 
+## 🤖 Agent & Runtime Optimization Setup
+
+BibleLM integrates **code-review-graph** for token-efficient agent navigation. This tool builds a persistent codebase knowledge graph, reducing token spend on code exploration by 60-70%.
+
+### Initial Setup (One-Time)
+
+```bash
+# 1. Install code-review-graph (via uv)
+uv pip install code-review-graph
+
+# 2. Build the codebase graph
+npm run build:graph
+
+# 3. Verify setup
+uv run code-review-graph status
+```
+
+### During Development (Optional)
+
+Keep the graph in sync with file changes:
+
+```bash
+npm run watch:graph
+# Runs in background; press Ctrl+C to stop
+```
+
+### IDE Configuration
+
+The graph is automatically configured for:
+- **Claude Code** — `.mcp.json` (auto-loaded)
+- **Cursor** — `.cursor/mcp.json` (auto-loaded)
+- **Codex, OpenCode, Antigravity** — Platform-specific configs installed
+
+After building, restart your IDE to enable MCP tools.
+
+### Available Agent Skills
+
+Four skills are generated automatically (in `.claude/skills/`):
+
+1. **debug-issue.md** — Root-cause analysis using codebase graph
+2. **explore-codebase.md** — Navigate code relationships efficiently
+3. **refactor-safely.md** — Trace impact before making changes
+4. **review-changes.md** — Risk-scored code review
+
+### What You Don't Need to Commit
+
+The codebase graph database (`.code-review-graph/`) is **not committed** to git—it's auto-generated locally and excluded via `.gitignore`. This keeps the repository small and Vercel deployment bloat-free.
+
+### Troubleshooting
+
+For detailed setup help, environment issues, or MCP configuration problems, see [`.agent/agent-setup/troubleshooting.md`](./.agent/agent-setup/troubleshooting.md).
+
+For complete documentation, see [`.agent/agent-setup/README.md`](./.agent/agent-setup/).
+
+---
+
 ## 🐛 Reporting Bugs
 
 If you find a bug (especially instances where the LLM breaks neutrality or hallucinates verses), please open an Issue with the following information:

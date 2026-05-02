@@ -15,6 +15,8 @@
     "benchmark:regression": "ts-node --project tsconfig.scripts.json tests/benchmark/check-regressions.ts project-docs/benchmark/latest-report.json",
     "benchmark:flags": "ts-node --project tsconfig.scripts.json tests/benchmark/check-feature-flags.ts",
     "start": "next start",
+    "build:graph": "uv run code-review-graph build",
+    "watch:graph": "uv run code-review-graph watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
