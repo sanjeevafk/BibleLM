@@ -6,7 +6,7 @@
 # files output by Next.js "standalone" mode — no node_modules, no source.
 #
 # Build:
-#   docker build --build-arg GEMINI_API_KEY=<key> -t biblelm .
+#   docker build --build-arg GROQ_API_KEY=<key> -t biblelm .
 #
 # Run:
 #   docker run -p 3000:3000 --env-file .env.local biblelm

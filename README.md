@@ -18,13 +18,13 @@ Built to eliminate LLM "hallucination" and theological drift, BibleLM functions 
 ```text
 ┌──────────────┐      ┌──────────────────────────┐      ┌────────────────────┐
 │  Client App  │      │    Next.js Edge Route    │      │    Primary LLM     │
-│ (React / TS) ├─────►│ (Validation & Rate Limit) ├─────►│ (Gemini 2.5 Flash) │
+│ (React / TS) ├─────►│ (Validation & Rate Limit) ├─────►│ (Groq: Llama 3.1)  │
 └──────────────┘      └────────────┬─────────────┘      └──────────┬─────────┘
                                    │                               │
                                    ▼                               ▼
 ┌──────────────┐      ┌──────────────────────────┐      ┌────────────────────┐
-│ Response     │      │   Hybrid Retrieval V3    │      │  Secondary LLMs    │
-│ Cache (Redis)│◄────►│  (BM25 + Semantic Gate)  │      │  (Fallback Logic)  │
+│ Response     │      │   Hybrid Retrieval V3    │      │    Context-Only    │
+│ Cache (Redis)│◄────►│  (BM25 + Semantic Gate)  │      │     Fail-safe      │
 └──────────────┘      └────────────┬─────────────┘      └────────────────────┘
                                    │
                                    ▼
@@ -44,7 +44,7 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 ### 2. The 4-Stage Retrieval Pipeline
 1.  **Theological Expansion**: Expands keywords (e.g., "Messiah" -> "Christ, Anointed") using a domain-specific synonym map to maximize recall.
 2.  **Lexical Search (BM25)**: Custom TypeScript implementation of BM25 tuned for verse-length documents ($k1=1.2, b=0.65$).
-3.  **Conditional Semantic Gating**: Only triggers expensive vector embeddings (Google `text-embedding-004`) if BM25 confidence is low or results are ambiguous.
+3.  **Conditional Semantic Gating**: Only triggers high-performance vector embeddings (Groq `nomic-embed-text-v1.5`) if BM25 confidence is low or results are ambiguous.
 4.  **Context Windowing**: Automatically expands hits into narrative blocks (neighboring verses ±1) to preserve literary context.
 
 ---
@@ -87,7 +87,7 @@ Primary retrieval quality metrics:
 ## Tech Stack
 
 *   **Frontend/API**: Next.js 16 (App Router), React 19, Tailwind CSS v4.
-*   **AI/LLM**: Vercel AI SDK, Gemini 2.5 Flash (Primary), Llama 3.3 70B (Fallback).
+*   **AI/LLM**: Vercel AI SDK, Groq (Llama 3.1 / 3.3), Context-Only Fail-safe.
 *   **Infrastructure**: Vercel Edge Runtime, Upstash Redis (Distributed Caching).
 *   **Database-less**: Static JSON Edge Data Store (Bible Index, TSK, Morphology).
 
@@ -101,7 +101,7 @@ BibleLM supports two primary deployment paths: **Edge-Native** (Vercel) and **Co
 ```bash
 # 1. Install & Config
 npm install
-cp .env.example .env.local  # Add your GEMINI_API_KEY
+cp .env.example .env.local  # Add your GROQ_API_KEY
 
 # 2. Pre-compute Retrieval Index (Mandatory)
 # This generates the search state map for <10ms hydration

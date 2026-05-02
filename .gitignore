@@ -42,8 +42,7 @@ next-env.d.ts
 
 #local-files
 datasets/
-bibleLM-analysis.md
-Dataset&RetrievalEnrichment.md
+scratch/
 local-docs/
 
 # generated benchmark outputs

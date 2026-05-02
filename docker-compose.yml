@@ -28,9 +28,7 @@ services:
       - "3000:3000"
     environment:
       # ── LLM Providers ──────────────────────────────────────────────────────
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY}
       HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
 
       # ── Rate Limiting / Caching ─────────────────────────────────────────────
