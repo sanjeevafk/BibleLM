@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+.venv/
 /.pnp
 .pnp.*
 .yarn/*
@@ -50,7 +51,6 @@ project-docs/benchmark/latest-report.json
 project-docs/benchmark/latest-report.md
 .vscode/settings.json
 verify_regex.js
-.vscode/settings.json
 .codex
 
 # Generated local security monitoring artifacts
