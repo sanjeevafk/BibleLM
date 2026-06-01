@@ -46,8 +46,8 @@ scratch/
 local-docs/
 
 # generated benchmark outputs
-project-docs/benchmark/latest-report.json
-project-docs/benchmark/latest-report.md
+docs/benchmark/latest-report.json
+docs/benchmark/latest-report.md
 .vscode/settings.json
 verify_regex.js
 .codex
