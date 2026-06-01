@@ -15,7 +15,6 @@ import type { VerseContext } from '@/lib/bible-fetch';
 import { redis } from '@/lib/redis';
 import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
 import { inMemoryRateLimit } from '@/lib/rate-limit-memory';
-import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
 import { retrieveContextForQuery } from '@/lib/retrieval';
 import {
   buildStructuredVerseResponse,
@@ -33,6 +32,8 @@ import {
   logContextUtilizationDiagnostics,
   streamTextFromContent,
 } from './lib/response-normalizer';
+import { parseChatRequest, normalizeTranslation } from './lib/validation';
+import { buildRetrievalPrompt, appendConversationHistory } from './lib/prompt-builder';
 
 // export const runtime = 'edge';
 
@@ -176,23 +177,7 @@ function normalizeModelId(modelUsed: string | undefined): string {
   return modelUsed;
 }
 
-function normalizeTranslation(_input: string | null | undefined): string {
-  if (!_input) return 'BSB';
-  const upper = String(_input).trim().toUpperCase();
-  const validTranslations = ['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'];
-  return validTranslations.includes(upper) ? upper : 'BSB';
-}
-
-function buildPrompt(
-  finalPrompt: string,
-  history: Array<{ role: 'system' | 'assistant' | 'user'; content: string }>
-): string {
-  const historyLines = history
-    .filter((m) => m.role !== 'system')
-    .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`)
-    .join('\n');
-  return historyLines.trim() ? `${finalPrompt}\n\nCONVERSATION HISTORY\n${historyLines}` : finalPrompt;
-}
+// normalizeTranslation is now in ./lib/validation, buildRetrievalPrompt + appendConversationHistory in ./lib/prompt-builder.
 
 // ---------------------------------------------------------------------------
 // Cache lookup
@@ -270,11 +255,8 @@ async function executeUncachedPipeline(options: {
   pipelineMetrics.retrieve_total_ms = roundLatencyMs(performance.now() - retrieveStartedAt);
 
   const promptBuildStartedAt = performance.now();
-  const finalPrompt = buildContextPrompt(options.query, verses, options.requestedTranslation);
-  const context = finalPrompt.startsWith(SYSTEM_PROMPT)
-    ? finalPrompt.slice(SYSTEM_PROMPT.length).trim()
-    : finalPrompt;
-  const prompt = buildPrompt(finalPrompt, options.modelHistory);
+  const { finalPrompt, context } = buildRetrievalPrompt(options.query, verses, options.requestedTranslation);
+  const prompt = appendConversationHistory(finalPrompt, options.modelHistory);
   pipelineMetrics.prompt_build_ms = roundLatencyMs(performance.now() - promptBuildStartedAt);
 
   const generation = await generateWithFallback(prompt, {
@@ -340,77 +322,25 @@ export async function POST(req: Request) {
 
   try {
     await dataValidationPromise;
-    const { messages, translation } = await req.json();
-    const baseUrl =
-      req.headers.get('origin') ||
-      (() => {
-        const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
-        if (host) {
-          const proto = req.headers.get('x-forwarded-proto') || 'http';
-          return `${proto}://${host}`;
-        }
-        return 'http://localhost';
-      })();
-    const url = new URL(req.url, baseUrl);
-    const queryTranslation = url.searchParams.get('translation') || url.searchParams.get('trans');
-    const headerTranslation = req.headers.get('x-translation') || req.headers.get('x-bible-translation');
-
-    const rawMessages = Array.isArray(messages) ? messages : [];
-    const normalizedMessages = rawMessages
-      .map((message: { role?: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }) => {
-        const role = message?.role;
-        if (role !== 'system' && role !== 'assistant' && role !== 'user') return null;
-        if (typeof message.content === 'string') return { role, content: message.content };
-        if (Array.isArray(message.content)) {
-          const text = message.content
-            .map((part: { type?: string; text?: string }) => (part?.type === 'text' ? part.text || '' : ''))
-            .join('');
-          return text ? { role, content: text } : null;
-        }
-        if (Array.isArray(message.parts)) {
-          const text = message.parts.map((part) => (part?.type === 'text' ? part.text || '' : '')).join('');
-          return text ? { role, content: text } : null;
-        }
-        return null;
-      })
-      .filter((message): message is { role: 'system' | 'assistant' | 'user'; content: string } =>
-        Boolean(message && message.content && message.content.trim())
-      );
-
-    const groqApiKey = process.env.GROQ_API_KEY;
-    debugLog('Provider key:', {
-      hasGroq: Boolean(groqApiKey),
-    });
-
-    let lastUserIndex = -1;
-    let lastUserMessage: { role?: string; content?: unknown } | undefined;
-    for (let i = normalizedMessages.length - 1; i >= 0; i -= 1) {
-      if (normalizedMessages[i].role === 'user') {
-        lastUserIndex = i;
-        lastUserMessage = normalizedMessages[i];
-        break;
-      }
-    }
-
-    if (!lastUserMessage) {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
       statusCode = 400;
-      return new Response('Missing user query', { status: statusCode });
+      return new Response('Invalid JSON body', { status: statusCode });
     }
-
-    const query = typeof lastUserMessage.content === 'string' ? lastUserMessage.content.trim() : '';
-    if (!query) {
+    const parsed = parseChatRequest(body, req);
+    if (!parsed.ok) {
       statusCode = 400;
-      return new Response('Missing user query', { status: statusCode });
+      const message =
+        parsed.error.type === 'bad_body' ? 'Invalid request body' : 'Missing user query';
+      return new Response(message, { status: statusCode });
     }
-
-    const rawTranslation =
-      typeof translation === 'string' && translation.trim()
-        ? translation
-        : queryTranslation || headerTranslation;
-    const requestedTranslation = normalizeTranslation(rawTranslation);
+    const { query, requestedTranslation, modelHistory } = parsed.value;
     translationForLog = requestedTranslation;
     console.log(`Translation switched to ${requestedTranslation}`);
     debugLog('Using translation:', requestedTranslation);
+    debugLog('Provider key:', { hasGroq: Boolean(process.env.GROQ_API_KEY) });
 
     let rateLimitWarning: string | null = null;
 
@@ -455,8 +385,6 @@ export async function POST(req: Request) {
       }
     }
 
-    const history = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
-    const modelHistory = history.map((m) => ({ role: m.role, content: m.content }));
     const historyHash = modelHistory.length > 0 ? hashModelHistory(modelHistory) : undefined;
 
     let cached = null as Awaited<ReturnType<typeof getCachedResponse>>;
