@@ -43,8 +43,8 @@ import {
   extractDirectReferences,
 } from './verse-fetch';
 import { enrichOriginalLanguages } from './enrichment';
-import { embedQuery } from './semantic';
 import { TSK_CONFIG } from './types';
+import { detectMatchedTopics, isLowRetrievalConfidence } from './semantic-gate';
 
 type VerseMetadataRecord = {
   verseId?: string;
@@ -61,9 +61,7 @@ type VerseTopicRecord = { verseId: string; topics: VerseTopicAssignment[] };
 let verseMetadataByIdPromise: Promise<Map<string, number>> | null = null;
 let topicDatasetPromise: Promise<TopicDatasetItem[] | null> | null = null;
 let verseTopicDatasetPromise: Promise<Map<string, Map<string, number>> | null> | null = null;
-let topicEmbeddingCachePromise: Promise<Map<string, number[]> | null> | null = null;
 
-const TOPIC_EMBED_THRESHOLD = 0.35;
 const MAX_CLUSTER_CANDIDATES = 8;
 const MAX_CLUSTER_MEMBERS_CONSIDERED = 12;
 const MAX_CLUSTER_BOOST_APPLIED = 5;
@@ -144,15 +142,7 @@ async function getVerseTopicDataset(): Promise<Map<string, Map<string, number>> 
   return verseTopicDatasetPromise;
 }
 
-function tokenOverlapScore(queryTokens: Set<string>, candidateTokens: Set<string>): number {
-  if (queryTokens.size === 0 || candidateTokens.size === 0) return 0;
-  let hits = 0;
-  for (const token of candidateTokens) {
-    if (queryTokens.has(token)) hits += 1;
-  }
-  return hits / candidateTokens.size;
-}
-
+// tokenize is also used in getClusterBoostScores below.
 function tokenize(text: string): string[] {
   return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
 }
@@ -235,61 +225,12 @@ function buildPassageSignalScores(
   return passageScores;
 }
 
-async function detectMatchedTopics(normalizedQuery: string): Promise<Set<string>> {
+// detectMatchedTopics is now in ./semantic-gate.ts.
+// Delegating to it via a thin wrapper that fetches the topic dataset first.
+async function detectMatchedTopicsWithDataset(normalizedQuery: string): Promise<Set<string>> {
   const topics = await getTopicDataset();
-  if (!topics || topics.length === 0) return new Set();
-
-  const queryTokens = new Set(tokenize(normalizedQuery));
-  const lexicalMatches: Array<{ id: string; score: number }> = [];
-  for (const topic of topics) {
-    const candidateTokens = new Set(tokenize(`${topic.label} ${topic.synonyms.join(' ')}`));
-    const score = tokenOverlapScore(queryTokens, candidateTokens);
-    if (score > 0) lexicalMatches.push({ id: topic.id, score });
-  }
-
-  lexicalMatches.sort((a, b) => b.score - a.score);
-  const strongLexical = lexicalMatches.filter((m) => m.score >= 0.4).slice(0, 3);
-  if (strongLexical.length > 0) return new Set(strongLexical.map((m) => m.id));
-
-  const weakLexical = lexicalMatches.slice(0, 3);
-  if (weakLexical.length > 0 && weakLexical[0].score >= 0.2) {
-    return new Set(weakLexical.map((m) => m.id));
-  }
-
-  // Lexical is weak — fall back to embedding similarity.
-  const queryEmbedding = await embedQuery(normalizedQuery);
-  if (!queryEmbedding) return new Set();
-
-  if (!topicEmbeddingCachePromise) {
-    topicEmbeddingCachePromise = (async () => {
-      const cache = new Map<string, number[]>();
-      for (const topic of topics) {
-        const embedding = await embedQuery(`${topic.label}. ${topic.synonyms.slice(0, 4).join(', ')}`);
-        if (embedding && embedding.length > 0) cache.set(topic.id, embedding);
-      }
-      return cache;
-    })();
-  }
-
-  const topicEmbeddings = await topicEmbeddingCachePromise;
-  if (!topicEmbeddings || topicEmbeddings.size === 0) return new Set();
-
-  const scored: Array<{ id: string; score: number }> = [];
-  for (const topic of topics) {
-    const embedding = topicEmbeddings.get(topic.id);
-    if (!embedding || embedding.length !== queryEmbedding.length) continue;
-    let dot = 0;
-    for (let i = 0; i < embedding.length; i += 1) dot += queryEmbedding[i] * embedding[i];
-    scored.push({ id: topic.id, score: dot });
-  }
-
-  return new Set(
-    scored
-      .filter((entry) => entry.score >= TOPIC_EMBED_THRESHOLD)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
-      .map((entry) => entry.id)
-  );
+  if (!topics) return new Set();
+  return detectMatchedTopics(normalizedQuery, topics);
 }
 
 async function applyDeterministicReranker(
@@ -418,13 +359,7 @@ function recordRetrievalMetric(
   instrumentation?.onMetric?.(metric, performance.now() - startedAt);
 }
 
-function isLowRetrievalConfidence(hybridResults: Array<{ score?: number }>, topK: number): boolean {
-  if (hybridResults.length === 0) return true;
-  const top = hybridResults.slice(0, Math.min(topK, 5));
-  if (top.length === 0) return true;
-  const avg = top.reduce((sum, row) => sum + (typeof row.score === 'number' ? row.score : 0), 0) / top.length;
-  return avg < TSK_CONFIG.MIN_RETRIEVAL_CONFIDENCE;
-}
+// isLowRetrievalConfidence is now in ./semantic-gate.ts.
 
 export async function retrieveContextForQuery(
   query: string,
@@ -444,7 +379,7 @@ export async function retrieveContextForQuery(
   const { domain, intent, expandedQuery, normalizedQuery, negationHints } = classifyAndExpand(query);
   const matchedTopics =
     ENABLE_TOPIC_RETRIEVAL_BOOST
-      ? await detectMatchedTopics(normalizedQuery)
+      ? await detectMatchedTopicsWithDataset(normalizedQuery)
       : new Set<string>();
   const directRefs = extractDirectReferences(normalizedQuery);
   const hasRangedDirectRefs = directRefs.some(
@@ -542,7 +477,9 @@ export async function retrieveContextForQuery(
   const expandedVerses: VerseContext[] = [...batchExpanded, ...remainingVerses];
   let verses = expandedVerses;
 
-  const passageRetrievalEnabled = intent === 'VERSE_EXPLANATION' || isLowRetrievalConfidence(hybridResults, topK);
+  const passageRetrievalEnabled =
+    intent === 'VERSE_EXPLANATION' ||
+    isLowRetrievalConfidence(hybridResults, topK, TSK_CONFIG.MIN_RETRIEVAL_CONFIDENCE);
   if (ENABLE_PASSAGE_RETRIEVAL && passageRetrievalEnabled) {
     const mergedPassages = passageCandidates;
     const passageVerseIds = Array.from(
