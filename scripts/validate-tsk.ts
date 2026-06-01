@@ -8,7 +8,8 @@ if (!process.env.KV_REST_API_URL || !process.env.POSTGRES_URL) {
 }
 
 // Now import after env is guaranteed
-import { retrieveContextForQuery } from './lib/retrieval';
+import { retrieveContextForQuery } from '../lib/retrieval';
+import type { VerseContext } from '../lib/bible-fetch';
 
 async function testTsk() {
   console.log('--- TSK Retrieval Validation ---');
@@ -18,14 +19,14 @@ async function testTsk() {
   try {
     const verses = await retrieveContextForQuery('John 1:1', 'BSB');
     
-    const primary = verses.filter(v => !v.isCrossReference);
-    const supporting = verses.filter(v => v.isCrossReference);
+    const primary = verses.filter((v: VerseContext) => !v.isCrossReference);
+    const supporting = verses.filter((v: VerseContext) => v.isCrossReference);
     
     console.log(`\nPrimary Verses Found: ${primary.length}`);
-    primary.forEach(v => console.log(` - ${v.reference}`));
+    primary.forEach((v: VerseContext) => console.log(` - ${v.reference}`));
     
     console.log(`\nSupporting Cross-References (TSK) Found: ${supporting.length}`);
-    supporting.forEach(v => {
+    supporting.forEach((v: VerseContext) => {
         console.log(` - ${v.reference} (Text beginning: ${v.text.substring(0, 50)}...)`);
     });
     
