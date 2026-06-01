@@ -62,11 +62,8 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 
 ## Benchmark Snapshot
 
-- Latest report: [project-docs/benchmark/latest-report.md](project-docs/benchmark/latest-report.md)
-- JSON report: [project-docs/benchmark/latest-report.json](project-docs/benchmark/latest-report.json)
-- Methodology: [project-docs/benchmark/EVAL-METHOD.md](project-docs/benchmark/EVAL-METHOD.md)
-- Change log: [project-docs/benchmark/CHANGELOG.md](project-docs/benchmark/CHANGELOG.md)
-- Rollout guardrails: [project-docs/benchmark-rollout.md](project-docs/benchmark-rollout.md)
+- JSON report: [docs/benchmark/latest-report.json](docs/benchmark/latest-report.json)
+- Methodology & Guardrails: [docs/benchmark/README.md](docs/benchmark/README.md)
 
 Run:
 
