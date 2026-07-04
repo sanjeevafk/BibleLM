@@ -56,3 +56,6 @@ verify_regex.js
 .security/
 # Added by code-review-graph
 .code-review-graph/
+response.txt
+output.txt
+test_*.py
