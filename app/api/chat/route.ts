@@ -34,6 +34,7 @@ import {
 } from './lib/response-normalizer';
 import { parseChatRequest, normalizeTranslation } from './lib/validation';
 import { buildRetrievalPrompt, appendConversationHistory } from './lib/prompt-builder';
+import { classifyAndRewriteQuery } from './lib/query-classifier';
 
 // export const runtime = 'edge';
 
@@ -246,7 +247,21 @@ async function executeUncachedPipeline(options: {
   const pipelineMetrics: Partial<LatencyMetrics> = {};
 
   const retrieveStartedAt = performance.now();
-  const verses = await retrieveContextForQuery(options.query, options.requestedTranslation, undefined, {
+
+  let queryForRetrieval = options.query;
+  if (options.modelHistory.length > 0) {
+    try {
+      const classification = await classifyAndRewriteQuery(options.query, options.modelHistory);
+      if (classification.category === 'BIBLICAL' && classification.searchQuery) {
+        queryForRetrieval = classification.searchQuery;
+        debugLog('Query rewritten for retrieval:', queryForRetrieval);
+      }
+    } catch (err) {
+      console.warn('Failed to classify query, falling back to original query.', err);
+    }
+  }
+
+  const verses = await retrieveContextForQuery(queryForRetrieval, options.requestedTranslation, undefined, {
     requestId: options.requestId,
     onMetric: (metric, durationMs) => {
       pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
