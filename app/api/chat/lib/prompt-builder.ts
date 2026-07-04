@@ -47,6 +47,6 @@ export function appendConversationHistory(
     .join('\n');
 
   return historyLines.trim()
-    ? `${finalPrompt}\n\nCONVERSATION HISTORY\n${historyLines}`
+    ? `${finalPrompt}\n\nCONVERSATION HISTORY\n<conversation_history>\n${historyLines}\n</conversation_history>`
     : finalPrompt;
 }
