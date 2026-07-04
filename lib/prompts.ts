@@ -197,8 +197,10 @@ export function buildContextPrompt(
   verses: VerseContext[],
   translation: string
 ): string {
+  const sanitizedQuery = query.replace(/<\/?\s*(user_query|conversation_history)\s*>/gi, '');
+
   const isCosmologyQuery = /\b(cosmolog|cosmo|astronom|science|scientific|universe|cosmic|celestial|planet|earth\b|sun\b|moon\b|stars\b|star\s*light|heaven\b|heavens\b|sky\b|firmament|expanse|vault|dome|horizon|constellation|zodiac|eclipse|solar|lunar|sunrise|sunset|day\s*night|geocentr|heliocentr|flat\s*earth|round\s*earth|globe|sphere|orbit|rotation|revolv|axis|tilt|equinox|solstice|pillar\s*of\s*the\s*earth|foundations\s*of\s*the\s*earth|corners\s*of\s*the\s*earth|ends\s*of\s*the\s*earth)\b/i.test(
-    query
+    sanitizedQuery
   );
 
   if (!verses || verses.length === 0) {
@@ -207,7 +209,7 @@ ${SYSTEM_PROMPT}
 
 QUERY
 <user_query>
-${query}
+${sanitizedQuery}
 </user_query>
 
 RETRIEVED SCRIPTURE CONTEXT
@@ -270,7 +272,7 @@ ${SYSTEM_PROMPT}
 
 QUERY
 <user_query>
-${query}
+${sanitizedQuery}
 </user_query>
 
 RETRIEVED SCRIPTURE CONTEXT
