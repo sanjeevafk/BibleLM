@@ -20,9 +20,13 @@ export async function classifyAndRewriteQuery(
 
   const groq = createGroq({ apiKey: groqApiKey });
 
+  const stripPromptTags = (text: string): string => {
+    return text.replace(/<\/?\s*(user_query|conversation_history)\s*>/gi, '');
+  };
+
   const historyText = history
     .filter((m) => m.role !== 'system')
-    .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`)
+    .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${stripPromptTags(m.content)}`)
     .join('\n');
 
   const systemInstruction = `You are an AI assistant for a biblically-grounded chatbot.
@@ -51,9 +55,9 @@ Respond in this exact JSON format:
     const result = await generateText({
       model: groq('llama-3.1-8b-instant'),
       system: systemInstruction,
-      prompt: `CONVERSATION HISTORY:\n<conversation_history>\n${historyText}\n</conversation_history>\n\nLATEST USER QUERY:\n<user_query>\n${query}\n</user_query>\n\nJSON Response:`,
-
+      prompt: `CONVERSATION HISTORY:\n<conversation_history>\n${historyText}\n</conversation_history>\n\nLATEST USER QUERY:\n<user_query>\n${stripPromptTags(query)}\n</user_query>\n\nJSON Response:`,
       temperature: 0.1,
+      abortSignal: AbortSignal.timeout(8000),
     });
     text = result.text;
 
