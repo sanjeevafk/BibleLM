@@ -249,24 +249,29 @@ async function executeUncachedPipeline(options: {
   const retrieveStartedAt = performance.now();
 
   let queryForRetrieval = options.query;
-  if (options.modelHistory.length > 0) {
-    try {
-      const classification = await classifyAndRewriteQuery(options.query, options.modelHistory);
-      if (classification.category === 'BIBLICAL' && classification.searchQuery) {
-        queryForRetrieval = classification.searchQuery;
-        debugLog('Query rewritten for retrieval:', queryForRetrieval);
-      }
-    } catch (err) {
-      console.warn('Failed to classify query, falling back to original query.', err);
+  let skipRetrieval = false;
+
+  try {
+    const classification = await classifyAndRewriteQuery(options.query, options.modelHistory);
+    if (classification.category === 'CONVERSATIONAL' || classification.category === 'OFF_TOPIC') {
+      skipRetrieval = true;
+      debugLog('Skipping retrieval for category:', classification.category);
+    } else if (classification.category === 'BIBLICAL' && classification.searchQuery) {
+      queryForRetrieval = classification.searchQuery;
+      debugLog('Query rewritten for retrieval. Length:', queryForRetrieval.length);
     }
+  } catch (err) {
+    console.warn('Failed to classify query, falling back to original query.', err);
   }
 
-  const verses = await retrieveContextForQuery(queryForRetrieval, options.requestedTranslation, undefined, {
-    requestId: options.requestId,
-    onMetric: (metric, durationMs) => {
-      pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
-    },
-  });
+  const verses = skipRetrieval
+    ? []
+    : await retrieveContextForQuery(queryForRetrieval, options.requestedTranslation, undefined, {
+        requestId: options.requestId,
+        onMetric: (metric, durationMs) => {
+          pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
+        },
+      });
   pipelineMetrics.retrieve_total_ms = roundLatencyMs(performance.now() - retrieveStartedAt);
 
   const promptBuildStartedAt = performance.now();
