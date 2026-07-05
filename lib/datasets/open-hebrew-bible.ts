@@ -104,7 +104,7 @@ export async function loadOpenHebrewBibleLayer<T>(
   const datasetKey = `open-hebrew-bible:${book}:${layer}`;
   const index = await loadOpenHebrewBibleIndex();
   const file = index?.[book]?.[layer];
-  if (!file) {
+  if (!file || file.includes('..') || path.isAbsolute(file) || file.includes('/') || file.includes('\\')) {
     markDatasetMissing(datasetKey);
     return null;
   }

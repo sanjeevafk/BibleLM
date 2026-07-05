@@ -79,12 +79,12 @@ async function loadDatasetInternal<T>(
       return parsed;
     } catch (error) {
       if (isFileNotFoundError(error)) {
-        console.warn(`Dataset file not found for ${datasetKey}`, error);
+        console.warn('Dataset file not found for %s', datasetKey, error);
         missingDatasets.add(datasetKey);
         return null;
       }
 
-      console.error(`Dataset parse/load failed for ${datasetKey}`, error);
+      console.error('Dataset parse/load failed for %s', datasetKey, error);
       return null;
     } finally {
       datasetInflight.delete(datasetKey);

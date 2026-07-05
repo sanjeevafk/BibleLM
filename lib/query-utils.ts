@@ -127,9 +127,15 @@ function matchesKeyword(query: string, keyword: string): boolean {
   if (lowerKeyword.includes(' ')) {
     return normalized.includes(lowerKeyword);
   }
-  const escaped = lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-  return regex.test(normalized);
+  const index = normalized.indexOf(lowerKeyword);
+  if (index === -1) return false;
+
+  // Check word boundaries (equivalent to \b)
+  const beforeChar = index > 0 ? normalized[index - 1] : ' ';
+  const afterChar = index + lowerKeyword.length < normalized.length ? normalized[index + lowerKeyword.length] : ' ';
+
+  const isWordChar = (char: string) => /[a-z0-9_]/.test(char);
+  return !isWordChar(beforeChar) && !isWordChar(afterChar);
 }
 
 function normalizeReferenceSpacing(query: string): string {
@@ -174,15 +180,31 @@ function detectNegationHints(query: string): NegationHint[] {
   return NEGATION_HINTS.filter((hint) => matchesKeyword(normalized, hint));
 }
 
+function safeReplaceAllCaseInsensitive(str: string, search: string, replacement: string): string {
+  if (!search) return str;
+  let result = '';
+  const searchLower = search.toLowerCase();
+  let i = 0;
+  while (true) {
+    const nextIdx = str.toLowerCase().indexOf(searchLower, i);
+    if (nextIdx === -1) {
+      result += str.slice(i);
+      break;
+    }
+    result += str.slice(i, nextIdx) + replacement;
+    i = nextIdx + search.length;
+  }
+  return result;
+}
+
 function cleanupLowValueTokens(query: string, preservedPhrases: string[]): string[] {
   const placeholderMap = new Map<string, string>();
   let protectedQuery = query;
 
   preservedPhrases.forEach((phrase, index) => {
     const placeholder = `phrasetag${index}`;
-    const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     placeholderMap.set(placeholder, phrase);
-    protectedQuery = protectedQuery.replace(new RegExp(escapedPhrase, 'ig'), placeholder);
+    protectedQuery = safeReplaceAllCaseInsensitive(protectedQuery, phrase, placeholder);
   });
 
   return protectedQuery

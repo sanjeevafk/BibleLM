@@ -75,7 +75,7 @@ export async function loadMorphHB(bookRaw: string): Promise<MorphBookData | null
   const datasetKey = `morphhb:${book}`;
   const index = await loadMorphHBIndex();
   const file = index?.[book];
-  if (!file) {
+  if (!file || file.includes('..') || path.isAbsolute(file) || file.includes('/') || file.includes('\\')) {
     markDatasetMissing(datasetKey);
     return null;
   }
