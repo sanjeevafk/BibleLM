@@ -326,8 +326,8 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
   if (pending) return pending;
 
   const file = indexCache[translation]?.[book];
-  if (!file) {
-    console.warn(`[translations] Missing index mapping for ${translation} ${book}`);
+  if (!file || file.includes('..') || path.isAbsolute(file) || file.includes('/') || file.includes('\\')) {
+    console.warn('[translations] Missing or invalid index mapping for %s %s', translation, book);
     bookCache.set(key, null);
     return null;
   }
@@ -348,7 +348,7 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
       bookCache.set(key, data);
       return data;
     } catch (error) {
-      console.warn(`[translations] Translation book load failed for ${translation} ${book}`, error);
+      console.warn('[translations] Translation book load failed for %s %s', translation, book, error);
       bookCache.set(key, null);
       return null;
     } finally {
@@ -420,19 +420,19 @@ export async function getTranslationVerse(
 
   const data = await loadBook(translation, parsed.book);
   if (!data) {
-    warnTranslation(`[translations] No translation data for ${normalizedTranslation} ${parsed.book}`);
+    warnTranslation('[translations] No translation data for %s %s', normalizedTranslation, parsed.book);
     return null;
   }
   const chapterData = data[String(parsed.chapter)];
   if (!chapterData) {
-    warnTranslation(`[translations] Missing chapter ${parsed.chapter} for ${normalizedTranslation} ${parsed.book}`);
+    warnTranslation('[translations] Missing chapter %d for %s %s', parsed.chapter, normalizedTranslation, parsed.book);
     return null;
   }
 
   if (!parsed.endVerse || parsed.endVerse === parsed.verse) {
     const verseText = chapterData[String(parsed.verse)] || null;
     if (!verseText) {
-      warnTranslation(`[translations] Missing verse ${parsed.book} ${parsed.chapter}:${parsed.verse} in ${normalizedTranslation}`);
+      warnTranslation('[translations] Missing verse %s %d:%d in %s', parsed.book, parsed.chapter, parsed.verse, normalizedTranslation);
     }
     return verseText;
   }
@@ -443,7 +443,7 @@ export async function getTranslationVerse(
     if (text) parts.push(text);
   }
   if (parts.length === 0) {
-    warnTranslation(`[translations] Missing verse range ${reference} in ${normalizedTranslation}`);
+    warnTranslation('[translations] Missing verse range %s in %s', reference, normalizedTranslation);
     return null;
   }
   return parts.join(' ');

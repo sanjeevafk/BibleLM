@@ -106,7 +106,7 @@ export class LocalBM25Adapter implements IVectorStore {
 
         console.log(`[${this.name}] Full in-memory BM25 index built as fallback.`);
       } catch (fallbackError) {
-        console.error(`[${this.name}] Failed to load fallback index:`, fallbackError);
+        console.error('[%s] Failed to load fallback index:', this.name, fallbackError);
         throw new Error(`${this.name} initialization failed: no valid BM25 index available`);
       }
     }

@@ -74,6 +74,9 @@ function normalizeBook(input: string): string {
 }
 
 function resolvePaths(file: string) {
+  if (file.includes('..') || path.isAbsolute(file) || file.includes('/') || file.includes('\\')) {
+    throw new Error('Invalid file path in openhebrewbible route');
+  }
   const basePath = path.join(DATA_DIR, file);
   if (file.endsWith('.br')) {
     return {

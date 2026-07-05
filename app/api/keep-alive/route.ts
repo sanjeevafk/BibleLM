@@ -23,7 +23,7 @@ async function handleKeepAlive(req: Request) {
       redisStatus = 'connected';
     } catch (error) {
       // Log error but return 200 OK to avoid false positives in UptimeRobot
-      console.error(`[keep-alive] Redis ${req.method} ping failed:`, error);
+      console.error('[keep-alive] Redis %s ping failed:', req.method, error);
       redisStatus = 'error';
     }
   }

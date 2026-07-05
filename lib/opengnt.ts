@@ -146,7 +146,7 @@ async function loadLayer<T>(bookRaw: string, layer: keyof IndexEntry): Promise<T
   if (pending) return pending as Promise<T | null>;
 
   const file = indexCache[book]?.[layer];
-  if (!file) {
+  if (!file || file.includes('..') || path.isAbsolute(file) || file.includes('/') || file.includes('\\')) {
     const cached = bookCache.get(book) || {};
     (cached as Record<keyof IndexEntry, MorphBook | InterlinearBook | OpenGntClauseBook | null>)[layer] = null;
     bookCache.set(book, cached);
@@ -172,7 +172,7 @@ async function loadLayer<T>(bookRaw: string, layer: keyof IndexEntry): Promise<T
       bookCache.set(book, cached);
       return data;
     } catch (error) {
-      console.warn(`OpenGNT layer load failed for ${book} ${layer}`, error);
+      console.warn('OpenGNT layer load failed for %s %s', book, layer, error);
       const cached = bookCache.get(book) || {};
       (cached as Record<keyof IndexEntry, MorphBook | InterlinearBook | OpenGntClauseBook | null>)[layer] = null;
       bookCache.set(book, cached);

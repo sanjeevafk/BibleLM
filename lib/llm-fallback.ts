@@ -184,7 +184,7 @@ export async function generateWithFallback(
           return { type: 'content', content: text, modelUsed: `groq:${modelName}`, chunks };
         }
       } catch (error) {
-        console.warn(`[llm] Groq error (${modelName}):`, error);
+        console.warn('[llm] Groq error (%s):', modelName, error);
         if (isQuotaError(error)) {
           // If the first model hits quota, try the secondary one.
           continue;
