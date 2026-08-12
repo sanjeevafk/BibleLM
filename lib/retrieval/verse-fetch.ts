@@ -56,7 +56,7 @@ export function extractDirectReferences(
 ): Array<{ book: string; chapter: number; verse: number; endVerse?: number }> {
   const results: Array<{ book: string; chapter: number; verse: number; endVerse?: number }> = [];
 
-  const regex = /\b(?:([1-3])\s*)?(Gen|Exo|Lev|Num|Deu|Jos|Jdg|Rut|Sa|Ki|Ch|Ezr|Neh|Est|Job|Ps|Pro|Ecc|Song|Isa|Jer|Lam|Eze|Ezk|Dan|Hos|Joe|Amo|Oba|Jon|Mic|Nah|Hab|Zep|Hag|Zec|Mal|Mat|Mrk|Luk|Jhn|Act|Rom|Cor|Gal|Eph|Phil|Phm|Col|The|Tim|Tit|Heb|Jas|Pet|Jude|Rev)[a-z]*\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?\b/gi;
+  const regex = /\b(?:([1-3])\s*)?(Gen|Exo|Lev|Num|Deu|Jos|Jdg|Rut|Sa|Ki|Ch|Ezr|Neh|Est|Job|Ps|Pro|Ecc|Song|Isa|Jer|Lam|Eze|Ezk|Dan|Hos|Joe|Amo|Oba|Jon|Mic|Nah|Hab|Zep|Hag|Zec|Mal|Mat|Mrk|Luk|Joh|Jhn|Jn|Act|Rom|Cor|Gal|Eph|Phil|Phm|Col|The|Tim|Tit|Heb|Jas|Pet|Jude|Rev)[a-z]*\s+(\d+)(?::(\d+)(?:\s*-\s*(\d+))?)?\b/gi;
 
   const bookMap: Record<string, string> = {
     // Law
@@ -110,7 +110,7 @@ export function extractDirectReferences(
     results.push({
       book: bookCode,
       chapter: parseInt(match[3], 10),
-      verse: parseInt(match[4], 10),
+      verse: match[4] ? parseInt(match[4], 10) : 1,
       endVerse: match[5] ? parseInt(match[5], 10) : undefined,
     });
   }

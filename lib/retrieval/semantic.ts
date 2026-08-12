@@ -1,6 +1,8 @@
 import type { RankedVerse } from './types';
 import { getCachedEmbedding, setCachedEmbedding } from '../cache';
 import { classifyAndExpand } from '../query-utils';
+import { createGroq } from '@ai-sdk/groq';
+import { generateText } from 'ai';
 
 const GROQ_EMBEDDING_MODEL = process.env.GROQ_EMBEDDING_MODEL || 'nomic-embed-text-v1.5';
 
@@ -119,6 +121,57 @@ export async function reRankSemantic(
   return rankSemanticFromQueryEmbedding(queryEmbedding, candidates, verseTexts);
 }
 
+export async function rankWithLLMReranker(
+  query: string,
+  candidates: RankedVerse[],
+  verseTexts: Map<string, string>
+): Promise<RankedVerse[]> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || candidates.length <= 1) return candidates;
+
+  try {
+    const present = candidates
+      .map((c) => ({ candidate: c, text: verseTexts.get(c.verseId) || '' }))
+      .filter((c) => c.text.trim().length > 0)
+      .slice(0, 15);
+
+    if (present.length === 0) return candidates;
+
+    const groq = createGroq({ apiKey });
+    const prompt = `Rank candidate Bible verses from MOST relevant to LEAST relevant for the user query.
+Output ONLY a JSON array of verse IDs in ranked order, e.g. ["EXO 20:3", "EXO 20:2"].
+
+Query: "${query}"
+
+Candidates:
+${present.map((p, i) => `${i + 1}. [${p.candidate.verseId}] "${p.text}"`).join('\n')}
+
+Ranked IDs JSON:`;
+
+    const result = await generateText({
+      model: groq('llama-3.1-8b-instant'),
+      prompt,
+      temperature: 0.0,
+    });
+
+    const match = result.text.match(/\[[\s\S]*?\]/);
+    if (!match) return candidates;
+
+    const rankedIds: string[] = JSON.parse(match[0]);
+    const rankMap = new Map<string, number>();
+    rankedIds.forEach((id, idx) => rankMap.set(id.trim().toUpperCase(), idx + 1));
+
+    return [...candidates].sort((a, b) => {
+      const rankA = rankMap.get(a.verseId.toUpperCase()) ?? 999;
+      const rankB = rankMap.get(b.verseId.toUpperCase()) ?? 999;
+      return rankA - rankB;
+    });
+  } catch (error) {
+    console.warn('[retrieval] LLM reranker failed, falling back to lexical ranking:', error);
+    return candidates;
+  }
+}
+
 /**
  * Simple dot product for normalized embeddings (effectively cosine similarity).
  */
@@ -130,3 +183,4 @@ function dotProduct(a: number[], b: number[]): number {
   }
   return sum;
 }
+

@@ -1,0 +1,1367 @@
+{
+  "generated_at": "2026-08-12T08:18:09.634Z",
+  "mode": "live",
+  "notes": [
+    "Live report executes real retrieval pipeline calls and computes metrics from expectedTopRefs.",
+    "llm_latency_ms is set to 0 in live mode because this benchmark currently targets retrieval quality and retrieval latency only."
+  ],
+  "scenarios": [
+    {
+      "id": "direct-verse-cache-miss",
+      "category": "direct_verse_query",
+      "cacheMode": "miss",
+      "query": "John 3:16",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JHN 3:16"
+      ]
+    },
+    {
+      "id": "direct-verse-cache-hit",
+      "category": "direct_verse_query",
+      "cacheMode": "hit",
+      "query": "John 3:16",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JHN 3:16"
+      ]
+    },
+    {
+      "id": "verse-explanation",
+      "category": "verse_explanation_query",
+      "cacheMode": "miss",
+      "query": "Explain Romans 8:28",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "ROM 8:28",
+        "GEN 50:20",
+        "JAS 1:2-4"
+      ]
+    },
+    {
+      "id": "topical-cache-miss",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "query": "What does the Bible say about forgiveness?",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 6:12",
+        "COL 3:13",
+        "ACT 10:43",
+        "2CO 2:10",
+        "JHN 20:23"
+      ]
+    },
+    {
+      "id": "topical-cache-hit",
+      "category": "topical_query",
+      "cacheMode": "hit",
+      "query": "What does the Bible say about forgiveness?",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 6:12",
+        "COL 3:13",
+        "ACT 10:43",
+        "2CO 2:10",
+        "JHN 20:23"
+      ]
+    },
+    {
+      "id": "faith-vs-works",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "query": "faith and works",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JAS 2:24",
+        "EPH 2:8-9",
+        "ROM 3:28"
+      ]
+    },
+    {
+      "id": "love-your-enemies",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "query": "love your enemies",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 5:44",
+        "LUK 6:27"
+      ]
+    },
+    {
+      "id": "ten-commandments",
+      "category": "law_query",
+      "cacheMode": "miss",
+      "query": "the ten commandments",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "EXO 20:1",
+        "DEU 5:6"
+      ]
+    },
+    {
+      "id": "jesus-wept",
+      "category": "direct_verse_query",
+      "cacheMode": "miss",
+      "query": "Jesus wept",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JHN 11:35"
+      ]
+    },
+    {
+      "id": "damascus-conversion",
+      "category": "narrative_query",
+      "cacheMode": "miss",
+      "query": "Paul conversion on road to Damascus",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "ACT 9:3",
+        "ACT 22:6",
+        "ACT 26:12"
+      ]
+    },
+    {
+      "id": "creation-account",
+      "category": "passage_query",
+      "cacheMode": "miss",
+      "query": "Genesis creation account",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "GEN 1:1",
+        "GEN 1:2",
+        "GEN 1:3"
+      ]
+    },
+    {
+      "id": "great-commission",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "query": "great commission",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 28:19",
+        "MAT 28:20",
+        "MRK 16:15"
+      ]
+    },
+    {
+      "id": "fruit-of-spirit",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "query": "fruit of the spirit",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "GAL 5:22",
+        "GAL 5:23"
+      ]
+    },
+    {
+      "id": "armor-of-god",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "query": "armor of God",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "EPH 6:11",
+        "EPH 6:12",
+        "EPH 6:13"
+      ]
+    },
+    {
+      "id": "lord-is-shepherd",
+      "category": "psalm_query",
+      "cacheMode": "miss",
+      "query": "the Lord is my shepherd",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "PSA 23:1"
+      ]
+    },
+    {
+      "id": "new-covenant",
+      "category": "theology_query",
+      "cacheMode": "miss",
+      "query": "new covenant",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JER 31:31",
+        "HEB 8:8",
+        "LUK 22:20"
+      ]
+    },
+    {
+      "id": "resurrection-hope",
+      "category": "theology_query",
+      "cacheMode": "miss",
+      "query": "resurrection of the dead",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "1CO 15:52",
+        "JHN 11:25",
+        "ACT 24:15"
+      ]
+    },
+    {
+      "id": "beatitudes",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "query": "blessed are the poor in spirit",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 5:3",
+        "MAT 5:4",
+        "MAT 5:5"
+      ]
+    },
+    {
+      "id": "greatest-commandment",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "query": "greatest commandment",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "MAT 22:37",
+        "MAT 22:39",
+        "MRK 12:30"
+      ]
+    },
+    {
+      "id": "just-shall-live-by-faith",
+      "category": "theology_query",
+      "cacheMode": "miss",
+      "query": "the righteous shall live by faith",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "HAB 2:4",
+        "ROM 1:17",
+        "GAL 3:11"
+      ]
+    }
+  ],
+  "baseline_metrics": {
+    "total_latency_ms": 135.07,
+    "retrieval_latency_ms": 135.07,
+    "llm_latency_ms": 0,
+    "p50_latency": 28,
+    "p95_latency": 424,
+    "precision_at_5": 0.08,
+    "citation_validity_rate": 1,
+    "hit_at_1": 0.15,
+    "hit_at_5": 0.2,
+    "mrr": 0.16
+  },
+  "post_optimization_metrics": {
+    "total_latency_ms": 16.45,
+    "retrieval_latency_ms": 16.45,
+    "llm_latency_ms": 0,
+    "p50_latency": 5,
+    "p95_latency": 42,
+    "precision_at_5": 0.08,
+    "citation_validity_rate": 1,
+    "hit_at_1": 0.15,
+    "hit_at_5": 0.2,
+    "mrr": 0.16
+  },
+  "performance_deltas": {
+    "total_latency_ms": -118.62,
+    "retrieval_latency_ms": -118.62,
+    "llm_latency_ms": 0,
+    "p50_latency": -23,
+    "p95_latency": -382,
+    "precision_at_5": 0,
+    "citation_validity_rate": 0,
+    "hit_at_1": 0,
+    "hit_at_5": 0,
+    "mrr": 0
+  },
+  "per_scenario": [
+    {
+      "id": "direct-verse-cache-miss",
+      "category": "direct_verse_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 1157.5,
+        "retrieval_latency_ms": 1157.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 4,
+        "p95_latency": 2311,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 2,
+        "retrieval_latency_ms": 2,
+        "llm_latency_ms": 0,
+        "p50_latency": 2,
+        "p95_latency": 2,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -1155.5,
+        "retrieval_latency_ms": -1155.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -2,
+        "p95_latency": -2309,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "NUM 31:45-47",
+        "NUM 31:39-41",
+        "EZR 2:34-36",
+        "NEH 7:38",
+        "NUM 4:44"
+      ],
+      "optimized_top_refs": [
+        "NUM 31:45-47",
+        "NUM 31:39-41",
+        "EZR 2:34-36",
+        "NEH 7:38",
+        "NUM 4:44"
+      ]
+    },
+    {
+      "id": "direct-verse-cache-hit",
+      "category": "direct_verse_query",
+      "cacheMode": "hit",
+      "baseline": {
+        "total_latency_ms": 2,
+        "retrieval_latency_ms": 2,
+        "llm_latency_ms": 0,
+        "p50_latency": 2,
+        "p95_latency": 2,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 8.5,
+        "retrieval_latency_ms": 8.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 3,
+        "p95_latency": 14,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 6.5,
+        "retrieval_latency_ms": 6.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 12,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "NUM 31:45-47",
+        "NUM 31:39-41",
+        "EZR 2:34-36",
+        "NEH 7:38",
+        "NUM 4:44"
+      ],
+      "optimized_top_refs": [
+        "NUM 31:45-47",
+        "NUM 31:39-41",
+        "EZR 2:34-36",
+        "NEH 7:38",
+        "NUM 4:44"
+      ]
+    },
+    {
+      "id": "verse-explanation",
+      "category": "verse_explanation_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 20,
+        "retrieval_latency_ms": 20,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 40,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "optimized": {
+        "total_latency_ms": 0.5,
+        "retrieval_latency_ms": 0.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 1,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "delta": {
+        "total_latency_ms": -19.5,
+        "retrieval_latency_ms": -19.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": -39,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "ROM 8:28"
+      ],
+      "optimized_top_refs": [
+        "ROM 8:28"
+      ]
+    },
+    {
+      "id": "topical-cache-miss",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 212.5,
+        "retrieval_latency_ms": 212.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 424,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -211.5,
+        "retrieval_latency_ms": -211.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": -423,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "COL 1:13-15",
+        "PSA 130:3-5",
+        "LUK 1:76-78",
+        "DAN 9:9",
+        "MRK 1:4"
+      ],
+      "optimized_top_refs": [
+        "COL 1:13-15",
+        "PSA 130:3-5",
+        "LUK 1:76-78",
+        "DAN 9:9",
+        "MRK 1:4"
+      ]
+    },
+    {
+      "id": "topical-cache-hit",
+      "category": "topical_query",
+      "cacheMode": "hit",
+      "baseline": {
+        "total_latency_ms": 0.5,
+        "retrieval_latency_ms": 0.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 0.5,
+        "retrieval_latency_ms": 0.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "COL 1:13-15",
+        "PSA 130:3-5",
+        "LUK 1:76-78",
+        "DAN 9:9",
+        "MRK 1:4"
+      ],
+      "optimized_top_refs": [
+        "COL 1:13-15",
+        "PSA 130:3-5",
+        "LUK 1:76-78",
+        "DAN 9:9",
+        "MRK 1:4"
+      ]
+    },
+    {
+      "id": "faith-vs-works",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 190.5,
+        "retrieval_latency_ms": 190.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 76,
+        "p95_latency": 305,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 48.5,
+        "retrieval_latency_ms": 48.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 41,
+        "p95_latency": 56,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -142,
+        "retrieval_latency_ms": -142,
+        "llm_latency_ms": 0,
+        "p50_latency": -35,
+        "p95_latency": -249,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "GAL 2:15-17",
+        "JER 48:6-8",
+        "ROM 3:27-29",
+        "ROM 9:32"
+      ],
+      "optimized_top_refs": [
+        "GAL 2:15-17",
+        "JER 48:6-8",
+        "ROM 3:27-29",
+        "ROM 9:32"
+      ]
+    },
+    {
+      "id": "love-your-enemies",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 125,
+        "retrieval_latency_ms": 125,
+        "llm_latency_ms": 0,
+        "p50_latency": 23,
+        "p95_latency": 227,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 22.5,
+        "retrieval_latency_ms": 22.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 21,
+        "p95_latency": 24,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -102.5,
+        "retrieval_latency_ms": -102.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -2,
+        "p95_latency": -203,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "MAT 5:43-45",
+        "LUK 6:26-28",
+        "JDG 5:30-31",
+        "PSA 92:9",
+        "LUK 6:35"
+      ],
+      "optimized_top_refs": [
+        "MAT 5:43-45",
+        "LUK 6:26-28",
+        "JDG 5:30-31",
+        "PSA 92:9",
+        "LUK 6:35"
+      ]
+    },
+    {
+      "id": "ten-commandments",
+      "category": "law_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 288,
+        "retrieval_latency_ms": 288,
+        "llm_latency_ms": 0,
+        "p50_latency": 2,
+        "p95_latency": 574,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 2,
+        "retrieval_latency_ms": 2,
+        "llm_latency_ms": 0,
+        "p50_latency": 2,
+        "p95_latency": 2,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -286,
+        "retrieval_latency_ms": -286,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": -572,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "GEN 26:4-6",
+        "NEH 9:13-15",
+        "2KI 17:36-38",
+        "PSA 105:45"
+      ],
+      "optimized_top_refs": [
+        "GEN 26:4-6",
+        "NEH 9:13-15",
+        "2KI 17:36-38",
+        "PSA 105:45"
+      ]
+    },
+    {
+      "id": "jesus-wept",
+      "category": "direct_verse_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 89.5,
+        "retrieval_latency_ms": 89.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 7,
+        "p95_latency": 172,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 4.5,
+        "retrieval_latency_ms": 4.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 4,
+        "p95_latency": 5,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -85,
+        "retrieval_latency_ms": -85,
+        "llm_latency_ms": 0,
+        "p50_latency": -3,
+        "p95_latency": -167,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "JHN 11:34-36",
+        "LUK 19:40-42",
+        "GEN 45:13-15",
+        "2SA 3:32",
+        "MAT 26:75"
+      ],
+      "optimized_top_refs": [
+        "JHN 11:34-36",
+        "LUK 19:40-42",
+        "GEN 45:13-15",
+        "2SA 3:32",
+        "MAT 26:75"
+      ]
+    },
+    {
+      "id": "damascus-conversion",
+      "category": "narrative_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 151,
+        "retrieval_latency_ms": 151,
+        "llm_latency_ms": 0,
+        "p50_latency": 39,
+        "p95_latency": 263,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 33.5,
+        "retrieval_latency_ms": 33.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 33,
+        "p95_latency": 34,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -117.5,
+        "retrieval_latency_ms": -117.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -6,
+        "p95_latency": -229,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "ACT 9:26-28",
+        "ACT 15:2-4",
+        "EZK 48:1-2",
+        "MAT 21:8",
+        "2KI 16:10"
+      ],
+      "optimized_top_refs": [
+        "ACT 9:26-28",
+        "ACT 15:2-4",
+        "EZK 48:1-2",
+        "MAT 21:8",
+        "2KI 16:10"
+      ]
+    },
+    {
+      "id": "creation-account",
+      "category": "passage_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 11,
+        "retrieval_latency_ms": 11,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 21,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 0.5,
+        "retrieval_latency_ms": 0.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -10.5,
+        "retrieval_latency_ms": -10.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -1,
+        "p95_latency": -20,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "HEB 4:12-14",
+        "MRK 10:5-7",
+        "GAL 6:14-16",
+        "COL 1:15",
+        "ROM 8:19"
+      ],
+      "optimized_top_refs": [
+        "HEB 4:12-14",
+        "MRK 10:5-7",
+        "GAL 6:14-16",
+        "COL 1:15",
+        "ROM 8:19"
+      ]
+    },
+    {
+      "id": "great-commission",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 56.5,
+        "retrieval_latency_ms": 56.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 3,
+        "p95_latency": 110,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 7,
+        "retrieval_latency_ms": 7,
+        "llm_latency_ms": 0,
+        "p50_latency": 2,
+        "p95_latency": 12,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -49.5,
+        "retrieval_latency_ms": -49.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -1,
+        "p95_latency": -98,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "NUM 27:18-20",
+        "ACT 26:11-13",
+        "COL 1:24-26",
+        "DEU 3:28",
+        "DEU 31:14"
+      ],
+      "optimized_top_refs": [
+        "NUM 27:18-20",
+        "ACT 26:11-13",
+        "COL 1:24-26",
+        "DEU 3:28",
+        "DEU 31:14"
+      ]
+    },
+    {
+      "id": "fruit-of-spirit",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 106.5,
+        "retrieval_latency_ms": 106.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 42,
+        "p95_latency": 171,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 36.5,
+        "retrieval_latency_ms": 36.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 36,
+        "p95_latency": 37,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -70,
+        "retrieval_latency_ms": -70,
+        "llm_latency_ms": 0,
+        "p50_latency": -6,
+        "p95_latency": -134,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "GAL 5:21-23",
+        "EZK 47:11-13",
+        "LUK 6:42-44",
+        "MAT 7:17",
+        "ISA 11:2"
+      ],
+      "optimized_top_refs": [
+        "GAL 5:21-23",
+        "EZK 47:11-13",
+        "LUK 6:42-44",
+        "MAT 7:17",
+        "ISA 11:2"
+      ]
+    },
+    {
+      "id": "armor-of-god",
+      "category": "topical_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 91.5,
+        "retrieval_latency_ms": 91.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 61,
+        "p95_latency": 122,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.25
+      },
+      "optimized": {
+        "total_latency_ms": 41,
+        "retrieval_latency_ms": 41,
+        "llm_latency_ms": 0,
+        "p50_latency": 40,
+        "p95_latency": 42,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.25
+      },
+      "delta": {
+        "total_latency_ms": -50.5,
+        "retrieval_latency_ms": -50.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -21,
+        "p95_latency": -80,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "EPH 6:10-12",
+        "1CH 11:38-40",
+        "2SA 23:36-38",
+        "EPH 6:13",
+        "JDG 9:54"
+      ],
+      "optimized_top_refs": [
+        "EPH 6:10-12",
+        "1CH 11:38-40",
+        "2SA 23:36-38",
+        "EPH 6:13",
+        "JDG 9:54"
+      ]
+    },
+    {
+      "id": "lord-is-shepherd",
+      "category": "psalm_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 65.5,
+        "retrieval_latency_ms": 65.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 50,
+        "p95_latency": 81,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "optimized": {
+        "total_latency_ms": 41,
+        "retrieval_latency_ms": 41,
+        "llm_latency_ms": 0,
+        "p50_latency": 32,
+        "p95_latency": 50,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "delta": {
+        "total_latency_ms": -24.5,
+        "retrieval_latency_ms": -24.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -18,
+        "p95_latency": -31,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "PSA 23:1-2",
+        "ZEC 13:6-8",
+        "EZK 34:22-24",
+        "JHN 10:14",
+        "HOS 4:16"
+      ],
+      "optimized_top_refs": [
+        "PSA 23:1-2",
+        "ZEC 13:6-8",
+        "EZK 34:22-24",
+        "JHN 10:14",
+        "HOS 4:16"
+      ]
+    },
+    {
+      "id": "new-covenant",
+      "category": "theology_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 10,
+        "retrieval_latency_ms": 10,
+        "llm_latency_ms": 0,
+        "p50_latency": 3,
+        "p95_latency": 17,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 2,
+        "retrieval_latency_ms": 2,
+        "llm_latency_ms": 0,
+        "p50_latency": 2,
+        "p95_latency": 2,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -8,
+        "retrieval_latency_ms": -8,
+        "llm_latency_ms": 0,
+        "p50_latency": -1,
+        "p95_latency": -15,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "2PE 3:12-14",
+        "GAL 3:16-18",
+        "HEB 8:12-13",
+        "HEB 9:15",
+        "HEB 12:24"
+      ],
+      "optimized_top_refs": [
+        "2PE 3:12-14",
+        "GAL 3:16-18",
+        "HEB 8:12-13",
+        "HEB 9:15",
+        "HEB 12:24"
+      ]
+    },
+    {
+      "id": "resurrection-hope",
+      "category": "theology_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 46.5,
+        "retrieval_latency_ms": 46.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 33,
+        "p95_latency": 60,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 35,
+        "retrieval_latency_ms": 35,
+        "llm_latency_ms": 0,
+        "p50_latency": 31,
+        "p95_latency": 39,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -11.5,
+        "retrieval_latency_ms": -11.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -2,
+        "p95_latency": -21,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "PHP 3:10-12",
+        "HEB 6:1-3",
+        "1CO 15:12-14",
+        "MAT 22:31"
+      ],
+      "optimized_top_refs": [
+        "PHP 3:10-12",
+        "HEB 6:1-3",
+        "1CO 15:12-14",
+        "MAT 22:31"
+      ]
+    },
+    {
+      "id": "beatitudes",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 54.5,
+        "retrieval_latency_ms": 54.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 28,
+        "p95_latency": 81,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 31.5,
+        "retrieval_latency_ms": 31.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 25,
+        "p95_latency": 38,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -23,
+        "retrieval_latency_ms": -23,
+        "llm_latency_ms": 0,
+        "p50_latency": -3,
+        "p95_latency": -43,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "MAT 5:2-4",
+        "LUK 6:19-21",
+        "PSA 41:1-2",
+        "1PE 4:14",
+        "PRO 22:9"
+      ],
+      "optimized_top_refs": [
+        "MAT 5:2-4",
+        "LUK 6:19-21",
+        "PSA 41:1-2",
+        "1PE 4:14",
+        "PRO 22:9"
+      ]
+    },
+    {
+      "id": "greatest-commandment",
+      "category": "teaching_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 7.5,
+        "retrieval_latency_ms": 7.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 14,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "optimized": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "delta": {
+        "total_latency_ms": -6.5,
+        "retrieval_latency_ms": -6.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": -13,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "MAT 22:37-39",
+        "MAT 22:35-36",
+        "ROM 7:10-12",
+        "MAT 23:11",
+        "1JN 2:7"
+      ],
+      "optimized_top_refs": [
+        "MAT 22:37-39",
+        "MAT 22:35-36",
+        "ROM 7:10-12",
+        "MAT 23:11",
+        "1JN 2:7"
+      ]
+    },
+    {
+      "id": "just-shall-live-by-faith",
+      "category": "theology_query",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 15.5,
+        "retrieval_latency_ms": 15.5,
+        "llm_latency_ms": 0,
+        "p50_latency": 12,
+        "p95_latency": 19,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 10,
+        "retrieval_latency_ms": 10,
+        "llm_latency_ms": 0,
+        "p50_latency": 7,
+        "p95_latency": 13,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -5.5,
+        "retrieval_latency_ms": -5.5,
+        "llm_latency_ms": 0,
+        "p50_latency": -5,
+        "p95_latency": -6,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "ROM 1:16-18",
+        "HAB 2:3-5",
+        "GAL 3:10-12",
+        "HEB 10:38",
+        "HEB 11:4"
+      ],
+      "optimized_top_refs": [
+        "ROM 1:16-18",
+        "HAB 2:3-5",
+        "GAL 3:10-12",
+        "HEB 10:38",
+        "HEB 11:4"
+      ]
+    }
+  ]
+}
