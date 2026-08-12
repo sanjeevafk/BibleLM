@@ -234,6 +234,23 @@ const CURATED_TOPICAL_LISTS: Record<string, CuratedTopicalList> = {
       { reference: 'MAT 26:52', text: '\u201cPut your sword back in its place,\u201d Jesus said to him. \u201cFor all who draw the sword will die by the sword.\u201d', translation: 'BSB', original: [] },
     ],
   },
+  ten_commandments: {
+    keywords: [
+      'ten commandments', 'the ten commandments', '10 commandments', 'decalogue',
+      'commandments in exodus', 'commandments of exodus', 'commandments given on sinai',
+      'tablets of stone', 'two tablets of stone', 'list the ten commandments'
+    ],
+    verses: [
+      { reference: 'EXO 20:1-3', text: 'And God spoke all these words: “I am the LORD your God, who brought you out of the land of Egypt, out of the house of slavery. You shall have no other gods before Me.', translation: 'BSB', original: [] },
+      { reference: 'EXO 20:4-6', text: 'You shall not make for yourself an idol in the form of anything in the heavens above, on the earth below, or in the waters beneath. You shall not bow down to them or worship them; for I, the LORD your God, am a jealous God, visiting the iniquity of the fathers on their children to the third and fourth generations of those who hate Me, but showing loving devotion to a thousand generations of those who love Me and keep My commandments.', translation: 'BSB', original: [] },
+      { reference: 'EXO 20:7', text: 'You shall not take the name of the LORD your God in vain, for the LORD will not hold anyone guiltless who misuses His name.', translation: 'BSB', original: [] },
+      { reference: 'EXO 20:8-11', text: 'Remember the Sabbath day by keeping it holy. Six days you shall labor and do all your work, but the seventh day is a Sabbath to the LORD your God...', translation: 'BSB', original: [] },
+      { reference: 'EXO 20:12', text: 'Honor your father and your mother, so that your days may be long in the land that the LORD your God is giving you.', translation: 'BSB', original: [] },
+      { reference: 'EXO 20:13-17', text: 'You shall not murder. You shall not commit adultery. You shall not steal. You shall not bear false witness against your neighbor. You shall not covet your neighbor’s house. You shall not covet your neighbor’s wife, or his manservant or maidservant, his ox or donkey, or anything that belongs to your neighbor.', translation: 'BSB', original: [] },
+      { reference: 'DEU 5:6-21', text: 'I am the LORD your God, who brought you out of the land of Egypt, out of the house of slavery. You shall have no other gods before Me...', translation: 'BSB', original: [] },
+      { reference: 'EXO 34:28', text: 'So Moses was there with the LORD forty days and forty nights without eating bread or drinking water. And He wrote on the tablets the words of the covenant—the Ten Commandments.', translation: 'BSB', original: [] },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
