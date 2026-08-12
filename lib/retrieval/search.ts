@@ -19,8 +19,9 @@ import {
   TSK_CONFIG,
 } from './types';
 import { expandTheologicalQuery } from './synonyms';
-import { embedQuery, rankSemanticFromQueryEmbedding } from './semantic';
+import { embedQuery, rankSemanticFromQueryEmbedding, rankWithLLMReranker } from './semantic';
 import { tokenizeFallbackQuery } from './verse-utils';
+import { getTranslationVerse } from '../translations';
 
 let bm25Engine: BM25Engine | null = null;
 let bm25EnginePromise: Promise<BM25Engine> | null = null;
@@ -315,10 +316,29 @@ export async function hybridSearch(
   let finalRanked = scored;
   let semanticTriggered = false;
 
-  if (semanticEligible && queryEmbedding && relativeGap < RELATIVE_GAP_THRESHOLD) {
+  if (semanticEligible && relativeGap < RELATIVE_GAP_THRESHOLD) {
     semanticTriggered = true;
-    const verseTexts = new Map(bm25Hits.map(h => [h.doc.id, h.doc.text]));
-    const semanticRanked = await rankSemanticFromQueryEmbedding(queryEmbedding, scored, verseTexts);
+    const verseTexts = new Map<string, string>();
+    await Promise.all(
+      bm25Hits.slice(0, 20).map(async (h) => {
+        if (h.doc.text && h.doc.text.trim().length > 0) {
+          verseTexts.set(h.doc.id, h.doc.text);
+        } else {
+          const text = await getTranslationVerse(h.doc.id, translation);
+          if (text) {
+            verseTexts.set(h.doc.id, text);
+          }
+        }
+      })
+    );
+
+    let semanticRanked: RankedVerse[] = [];
+    if (queryEmbedding) {
+      semanticRanked = await rankSemanticFromQueryEmbedding(queryEmbedding, scored, verseTexts);
+    }
+    if (!semanticRanked || semanticRanked.length === 0 || semanticRanked === scored) {
+      semanticRanked = await rankWithLLMReranker(query, scored, verseTexts);
+    }
     finalRanked = fuseWithRrf(scored, semanticRanked, RETRIEVAL_CONFIG.rrf.k);
   }
 
