@@ -248,30 +248,75 @@ async function executeUncachedPipeline(options: {
 
   const retrieveStartedAt = performance.now();
 
-  let queryForRetrieval = options.query;
-  let skipRetrieval = false;
+  let verses: VerseContext[] = [];
+  const hasHistory = options.modelHistory && options.modelHistory.length > 0;
 
-  try {
-    const classification = await classifyAndRewriteQuery(options.query, options.modelHistory);
-    if (classification.category === 'CONVERSATIONAL' || classification.category === 'OFF_TOPIC') {
-      skipRetrieval = true;
-      debugLog('Skipping retrieval for category:', classification.category);
-    } else if (classification.category === 'BIBLICAL' && classification.searchQuery) {
-      queryForRetrieval = classification.searchQuery;
-      debugLog('Query rewritten for retrieval. Length:', queryForRetrieval.length);
-    }
-  } catch (err) {
-    console.warn('Failed to classify query, falling back to original query.', err);
-  }
-
-  const verses = skipRetrieval
-    ? []
-    : await retrieveContextForQuery(queryForRetrieval, options.requestedTranslation, undefined, {
+  if (!hasHistory) {
+    // Turn 1 fast-path: Zero history means no pronoun resolution needed.
+    // Execute retrieval immediately without waiting for Groq classifier.
+    verses = await retrieveContextForQuery(options.query, options.requestedTranslation, undefined, {
+      requestId: options.requestId,
+      onMetric: (metric, durationMs) => {
+        pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
+      },
+    });
+  } else {
+    // Turn 2+ speculative parallel execution:
+    // Launch raw query retrieval and history classification concurrently.
+    const speculativeRetrievalPromise = retrieveContextForQuery(
+      options.query,
+      options.requestedTranslation,
+      undefined,
+      {
         requestId: options.requestId,
         onMetric: (metric, durationMs) => {
           pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
         },
-      });
+      }
+    ).catch((err) => {
+      console.warn('[speculative-retrieval] Raw query retrieval failed:', err);
+      return [] as VerseContext[];
+    });
+
+    const classificationPromise = classifyAndRewriteQuery(options.query, options.modelHistory).catch(
+      (err) => {
+        console.warn('Failed to classify query, falling back to original query.', err);
+        return { category: 'BIBLICAL' as const, searchQuery: options.query };
+      }
+    );
+
+    const [speculativeVerses, classification] = await Promise.all([
+      speculativeRetrievalPromise,
+      classificationPromise,
+    ]);
+
+    if (classification.category === 'CONVERSATIONAL' || classification.category === 'OFF_TOPIC') {
+      debugLog('Skipping retrieval for category:', classification.category);
+      verses = [];
+    } else if (
+      classification.category === 'BIBLICAL' &&
+      classification.searchQuery &&
+      classification.searchQuery.trim().toLowerCase() !== options.query.trim().toLowerCase()
+    ) {
+      // Query required contextual rewrite: fetch using rewritten search terms
+      debugLog('Query rewritten for retrieval. Rewritten query:', classification.searchQuery);
+      verses = await retrieveContextForQuery(
+        classification.searchQuery,
+        options.requestedTranslation,
+        undefined,
+        {
+          requestId: options.requestId,
+          onMetric: (metric, durationMs) => {
+            pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
+          },
+        }
+      );
+    } else {
+      // Query did not need rewrite: use speculative parallel result immediately (0 ms added latency!)
+      verses = speculativeVerses;
+    }
+  }
+
   pipelineMetrics.retrieve_total_ms = roundLatencyMs(performance.now() - retrieveStartedAt);
 
   const promptBuildStartedAt = performance.now();
