@@ -15,7 +15,7 @@ export type FallbackResult =
 
 const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
 const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
-const DEFAULT_MAX_TOKENS = 600;
+const DEFAULT_MAX_TOKENS = 900;
 const DEFAULT_TEMPERATURE = 0.1;
 
 function roundDurationMs(durationMs: number): number {
