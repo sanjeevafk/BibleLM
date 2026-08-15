@@ -325,7 +325,7 @@ async function executeUncachedPipeline(options: {
   pipelineMetrics.prompt_build_ms = roundLatencyMs(performance.now() - promptBuildStartedAt);
 
   const generation = await generateWithFallback(prompt, {
-    maxTokens: 2048,
+    maxTokens: 600,
     temperature: 0.1,
     onTiming: (durationMs) => { pipelineMetrics.llm_ms = roundLatencyMs(durationMs); },
   });
