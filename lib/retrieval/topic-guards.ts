@@ -251,6 +251,47 @@ const CURATED_TOPICAL_LISTS: Record<string, CuratedTopicalList> = {
       { reference: 'EXO 34:28', text: 'So Moses was there with the LORD forty days and forty nights without eating bread or drinking water. And He wrote on the tablets the words of the covenant—the Ten Commandments.', translation: 'BSB', original: [] },
     ],
   },
+  anxiety_peace: {
+    keywords: [
+      'anxiety', 'anxious', 'peace of mind', 'worry', 'worries', 'worrying', 'inner peace', 'fear and anxiety', 'troubled heart',
+      'be anxious for nothing', 'do not worry'
+    ],
+    verses: [
+      { reference: 'PHP 4:6-7', text: 'Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God. And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus.', translation: 'BSB', original: [] },
+      { reference: 'MAT 6:25-34', text: 'Therefore I tell you, do not worry about your life, what you will eat or drink; or about your body, what you will wear. Is not life more than food, and the body more than clothes?... But seek first His kingdom and His righteousness, and all these things will be given to you as well. Therefore do not worry about tomorrow, for tomorrow will worry about itself.', translation: 'BSB', original: [] },
+      { reference: '1PE 5:7', text: 'Cast all your anxiety on Him, because He cares for you.', translation: 'BSB', original: [] },
+      { reference: 'JHN 14:27', text: 'Peace I leave with you; My peace I give to you. I do not give to you as the world gives. Do not let your hearts be troubled; do not be afraid.', translation: 'BSB', original: [] },
+      { reference: 'ISA 26:3', text: 'You will keep in perfect peace the steadfast of mind, because he trusts in You.', translation: 'BSB', original: [] },
+      { reference: 'PSA 94:19', text: 'When anxiety overwhelms me, Your consolation delights my soul.', translation: 'BSB', original: [] },
+      { reference: 'PSA 23:1-4', text: 'The LORD is my shepherd; I shall not want. He makes me lie down in green pastures; He leads me beside quiet waters. He restores my soul; He guides me in the paths of righteousness for the sake of His name.', translation: 'BSB', original: [] },
+    ],
+  },
+  love_enemies: {
+    keywords: [
+      'treat their enemies', 'treat your enemies', 'treat enemies', 'love your enemies', 'love our enemies', 'love enemies',
+      'enemy according to jesus', 'enemies according to jesus', 'how to treat enemies', 'how should a christian treat their enemies'
+    ],
+    verses: [
+      { reference: 'MAT 5:43-48', text: 'You have heard that it was said, ‘Love your neighbor and hate your enemy.’ But I tell you, love your enemies and pray for those who persecute you, that you may be sons of your Father in heaven... Be perfect, therefore, as your heavenly Father is perfect.', translation: 'BSB', original: [] },
+      { reference: 'LUK 6:27-36', text: 'But to those of you who will listen, I say: Love your enemies, do good to those who hate you, bless those who curse you, pray for those who mistreat you... Be merciful, just as your Father is merciful.', translation: 'BSB', original: [] },
+      { reference: 'ROM 12:19-21', text: 'Do not avenge yourselves, beloved, but leave room for God’s wrath. For it is written: “Vengeance is Mine; I will repay, says the Lord.” On the contrary: “If your enemy is hungry, feed him; if he is thirsty, give him a drink... Do not be overcome by evil, but overcome evil with good.', translation: 'BSB', original: [] },
+      { reference: 'PRO 25:21-22', text: 'If your enemy is hungry, give him food to eat; if he is thirsty, give him water to drink. For in doing so, you will heap burning coals on his head, and the LORD will reward you.', translation: 'BSB', original: [] },
+    ],
+  },
+  salvation_faith_works: {
+    keywords: [
+      'salvation by faith', 'faith alone', 'faith and works', 'faith or works', 'saved by faith', 'justified by faith', 'do works matter',
+      'faith without works', 'faith vs works'
+    ],
+    verses: [
+      { reference: 'EPH 2:8-10', text: 'For by grace you have been saved through faith, and this is not from yourselves; it is the gift of God, not by works, so that no one can boast. For we are God’s workmanship, created in Christ Jesus to do good works, which God prepared in advance as our way of life.', translation: 'BSB', original: [] },
+      { reference: 'JAS 2:14-26', text: 'What good is it, my brothers, if someone claims to have faith but has no deeds? Can such faith save him?... As you can see, a man is justified by his deeds and not by faith alone... For as the body without the spirit is dead, so faith without works is dead.', translation: 'BSB', original: [] },
+      { reference: 'ROM 3:28', text: 'For we maintain that a man is justified by faith apart from works of the law.', translation: 'BSB', original: [] },
+      { reference: 'GAL 2:16', text: 'know that a man is not justified by works of the law, but by faith in Jesus Christ. So we, too, have believed in Christ Jesus, that we may be justified by faith in Christ and not by works of the law, because by works of the law no one will be justified.', translation: 'BSB', original: [] },
+      { reference: 'ROM 4:4-5', text: 'Now to the one who works, wages are not credited as a gift but as an obligation. However, to the one who does not work but trusts God who justifies the ungodly, their faith is credited as righteousness.', translation: 'BSB', original: [] },
+      { reference: 'TIT 3:5', text: 'He saved us, not by the righteous deeds we had done, but according to His mercy, through the washing of new birth and renewal by the Holy Spirit.', translation: 'BSB', original: [] },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
