@@ -241,10 +241,11 @@ async function runMultiTurnEval() {
       let assistantText = "";
 
       try {
-        const result = await generateText({
+        const result = await (generateText as any)({
           model: groq('llama-3.1-8b-instant'),
           prompt: prompt,
           temperature: 0.1,
+          maxTokens: 400,
         });
         assistantText = result.text;
       } catch (err: any) {
