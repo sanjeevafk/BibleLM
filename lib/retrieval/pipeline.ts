@@ -382,6 +382,8 @@ export async function retrieveContextForQuery(
     ENABLE_TOPIC_RETRIEVAL_BOOST
       ? await detectMatchedTopicsWithDataset(normalizedQuery)
       : new Set<string>();
+  const matchedPericopes = matchPericopes(query);
+  const hasMatchedPericopes = matchedPericopes.length > 0;
   const directRefs = extractDirectReferences(normalizedQuery);
   const hasRangedDirectRefs = directRefs.some(
     (ref) => typeof ref.endVerse === 'number' && ref.endVerse > ref.verse
@@ -390,9 +392,10 @@ export async function retrieveContextForQuery(
     .filter((ref) => !(typeof ref.endVerse === 'number' && ref.endVerse > ref.verse))
     .map((ref) => `${ref.book} ${ref.chapter}:${ref.verse}`);
 
-  // Fast path: direct reference or verse explanation
+  // Fast path: direct reference or verse explanation (only if NO named pericope matched)
   if (
     !hasRangedDirectRefs &&
+    !hasMatchedPericopes &&
     (intent === 'DIRECT_REFERENCE' || intent === 'VERSE_EXPLANATION') &&
     directRefIds.length > 0
   ) {
@@ -483,11 +486,14 @@ export async function retrieveContextForQuery(
     )
     : hybridResults.map((result) => result.verseId.trim().toUpperCase());
 
-  const matchedPericopes = matchPericopes(query);
   const pericopeRefIds: string[] = [];
   if (matchedPericopes.length > 0) {
     for (const p of matchedPericopes.slice(0, 2)) {
-      pericopeRefIds.push(...expandPericopeVerseIds(p, topK));
+      // Expand the FULL pericope (e.g. all 17 verses of Ten Commandments), not just topK.
+      // Cap at 20 verses per pericope to avoid bloating context for very long passages.
+      const fullPericopeSize = p.endVerse - p.startVerse + 1;
+      const maxVerses = Math.min(fullPericopeSize, 20);
+      pericopeRefIds.push(...expandPericopeVerseIds(p, maxVerses));
     }
   }
 
@@ -499,7 +505,13 @@ export async function retrieveContextForQuery(
     seenIds.add(key);
     orderedIds.push(key);
   }
-  const limitedIds = orderedIds.slice(0, topK);
+  // When a named pericope matched, allow up to pericope_size + topK results (capped at 20)
+  // so the full passage is returned alongside supporting context verses.
+  // Without a pericope match, topK (5–8) is unchanged.
+  const effectiveLimit = matchedPericopes.length > 0
+    ? Math.min(pericopeRefIds.length + topK, 20)
+    : topK;
+  const limitedIds = orderedIds.slice(0, effectiveLimit);
 
   const fetchVersesStartedAt = performance.now();
   
@@ -592,7 +604,8 @@ export async function retrieveContextForQuery(
   recordRetrievalMetric(instrumentation, 'enrich_ms', enrichStartedAt);
   const translated = await applyTranslationOverride(enriched, translation);
   const deduped = dedupeByVerseId(translated);
-  const normalized = normalizeVerses(deduped).slice(0, topK);
+  const finalLimit = matchedPericopes.length > 0 ? effectiveLimit : topK;
+  const normalized = normalizeVerses(deduped).slice(0, finalLimit);
 
   if (debugState) {
     logRetrievalDiagnostics(debugState, { translation, domain, topK, finalVerses: normalized });
