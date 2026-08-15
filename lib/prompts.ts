@@ -1,7 +1,25 @@
-// prompts.ts
-
 import { VerseContext } from './bible-fetch';   // adjust path if needed
 import { decodeMorph } from './morph-utils';
+import { matchPericopes } from './retrieval/pericopes';
+
+export function lostInTheMiddleOrder<T>(items: T[]): T[] {
+  if (items.length <= 2) return items;
+  const result: T[] = new Array(items.length);
+  let left = 0;
+  let right = items.length - 1;
+  let fromLeft = true;
+  for (let i = 0; i < items.length; i++) {
+    if (fromLeft) {
+      result[left] = items[i];
+      left++;
+    } else {
+      result[right] = items[i];
+      right--;
+    }
+    fromLeft = !fromLeft;
+  }
+  return result;
+}
 
 const DEFAULT_CONTEXT_TOKEN_BUDGET = 1500;
 const PROMPT_CONTEXT_TOKEN_BUDGET = Math.max(
@@ -131,7 +149,16 @@ function renderVerseContext(
   verse: VerseContext,
   translation: string
 ): string {
-  let output = `Reference: ${verse.reference}\n`;
+  let header = `Reference: ${verse.reference}`;
+  try {
+    const matched = matchPericopes(verse.reference);
+    if (matched.length > 0) {
+      header += ` [Section: ${matched[0].title}]`;
+    }
+  } catch {
+    // Ignore pericope lookup errors
+  }
+  let output = `${header}\n`;
   output += `Text (${verse.translation || translation}): ${verse.text}\n`;
 
   if (verse.original && verse.original.length > 0) {
@@ -239,7 +266,8 @@ You may respond conversationally based on general biblical knowledge. You do not
 
   let contextStr = '';
 
-  budgetedPrimary.forEach((v) => {
+  const orderedPrimary = lostInTheMiddleOrder(budgetedPrimary);
+  orderedPrimary.forEach((v) => {
     contextStr += renderVerseContext(v, translation);
   });
 
