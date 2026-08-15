@@ -60,9 +60,23 @@ const testQueries: QueryBenchmarkItem[] = [
 
 function checkRefMatch(actualRef: string, expectedRefs: string[]): boolean {
   const normActual = actualRef.trim().toUpperCase();
+  const actualMatch = normActual.match(/^([1-3]?\s?[A-Z]{3})\s+(\d+):(\d+)(?:-(\d+))?$/);
+  if (!actualMatch) {
+    return expectedRefs.some(exp => normActual.includes(exp.toUpperCase()));
+  }
+  const [, aBook, aChap, aStartStr, aEndStr] = actualMatch;
+  const aStart = parseInt(aStartStr, 10);
+  const aEnd = aEndStr ? parseInt(aEndStr, 10) : aStart;
+
   return expectedRefs.some(exp => {
     const normExp = exp.trim().toUpperCase();
-    return normActual === normExp || normActual.startsWith(normExp + "-") || normExp.startsWith(normActual);
+    const expMatch = normExp.match(/^([1-3]?\s?[A-Z]{3})\s+(\d+):(\d+)(?:-(\d+))?$/);
+    if (!expMatch) return normActual === normExp || normActual.includes(normExp);
+    const [, eBook, eChap, eStartStr, eEndStr] = expMatch;
+    if (aBook !== eBook || aChap !== eChap) return false;
+    const eStart = parseInt(eStartStr, 10);
+    const eEnd = eEndStr ? parseInt(eEndStr, 10) : eStart;
+    return Math.max(aStart, eStart) <= Math.min(aEnd, eEnd);
   });
 }
 
@@ -121,6 +135,7 @@ async function runBenchmark() {
     const prompt = buildContextPrompt(item.query, verses, item.translation);
     console.log(`\n--- 2. Generation Execution (Groq Llama 3.1 8B Instant) ---`);
     
+    await new Promise((r) => setTimeout(r, 1500));
     let llmStart = Date.now();
     let responseText = "";
     let llmLatency = 0;
