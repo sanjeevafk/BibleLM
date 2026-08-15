@@ -5,7 +5,7 @@
  */
 
 import { getCachedRetrievalContext, setCachedRetrievalContext } from '../cache';
-import { classifyAndExpand } from '../query-utils';
+import { classifyAndExpand, decomposeQuery } from '../query-utils';
 import { getCrossReferences } from '../datasets/tsk';
 import {
   ENABLE_DETERMINISTIC_RERANKER,
@@ -421,12 +421,46 @@ export async function retrieveContextForQuery(
     return cloneVerses(normalized);
   }
 
-  // Hybrid search path
-  const hybridResults = await hybridSearch(
-    expandedQuery,
-    { topK, translation, negationHints, topicalExpansionMode: intent === 'TOPICAL_QUERY' },
-    debugState
-  );
+  // Hybrid search path (with query decomposition for compound/comparison queries)
+  const subQueries = decomposeQuery(query);
+  let hybridResults: Awaited<ReturnType<typeof hybridSearch>> = [];
+
+  if (subQueries.length > 1) {
+    const subResults = await Promise.all(
+      subQueries.map((subQ) => {
+        const { expandedQuery: subExpanded, negationHints: subNeg } = classifyAndExpand(subQ);
+        return hybridSearch(
+          subExpanded,
+          { topK, translation, negationHints: subNeg, topicalExpansionMode: true },
+          debugState
+        );
+      })
+    );
+
+    const scoreMap = new Map<string, { result: (typeof subResults)[0][0]; rrf: number }>();
+    for (const resList of subResults) {
+      resList.forEach((r, rank) => {
+        const key = r.verseId.trim().toUpperCase();
+        const prev = scoreMap.get(key);
+        const rrfInc = 1 / (60 + rank + 1);
+        if (prev) {
+          prev.rrf += rrfInc;
+        } else {
+          scoreMap.set(key, { result: r, rrf: rrfInc });
+        }
+      });
+    }
+    hybridResults = Array.from(scoreMap.values())
+      .sort((a, b) => b.rrf - a.rrf)
+      .slice(0, topK * 2)
+      .map((entry) => entry.result);
+  } else {
+    hybridResults = await hybridSearch(
+      expandedQuery,
+      { topK, translation, negationHints, topicalExpansionMode: intent === 'TOPICAL_QUERY' },
+      debugState
+    );
+  }
   const clusterScores = await getClusterBoostScores(normalizedQuery);
   const passageCandidates =
     ENABLE_PASSAGE_RETRIEVAL
