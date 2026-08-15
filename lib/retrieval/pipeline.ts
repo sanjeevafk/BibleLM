@@ -43,6 +43,7 @@ import {
   extractDirectReferences,
 } from './verse-fetch';
 import { enrichOriginalLanguages } from './enrichment';
+import { matchPericopes, expandPericopeVerseIds } from './pericopes';
 import { TSK_CONFIG } from './types';
 import { detectMatchedTopics, isLowRetrievalConfidence } from './semantic-gate';
 
@@ -448,9 +449,17 @@ export async function retrieveContextForQuery(
     )
     : hybridResults.map((result) => result.verseId.trim().toUpperCase());
 
+  const matchedPericopes = matchPericopes(query);
+  const pericopeRefIds: string[] = [];
+  if (matchedPericopes.length > 0) {
+    for (const p of matchedPericopes.slice(0, 2)) {
+      pericopeRefIds.push(...expandPericopeVerseIds(p, topK));
+    }
+  }
+
   const orderedIds: string[] = [];
   const seenIds = new Set<string>();
-  for (const verseId of [...directRefIds, ...candidateOrder]) {
+  for (const verseId of [...pericopeRefIds, ...directRefIds, ...candidateOrder]) {
     const key = verseId.trim().toUpperCase();
     if (seenIds.has(key)) continue;
     seenIds.add(key);
