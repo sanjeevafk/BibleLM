@@ -16,9 +16,17 @@ const inFlight = new Map<string, Promise<TranslationBook | null>>();
 let bibleIndexCache: Record<string, IndexedVerse> | null = null;
 const SILENT_TRANSLATION_WARNINGS = process.env.BIBLELM_SILENT_TRANSLATION_WARNINGS === '1';
 
+function sanitizeLogArg(arg: unknown): unknown {
+  if (typeof arg === 'string') {
+    return arg.replace(/[\r\n]/g, '_');
+  }
+  return arg;
+}
+
 function warnTranslation(message: string, ...args: unknown[]): void {
   if (SILENT_TRANSLATION_WARNINGS) return;
-  console.warn(message, ...args);
+  const safeArgs = args.map(sanitizeLogArg);
+  console.warn(message, ...safeArgs);
 }
 
 const brotliDecompress = promisify(zlib.brotliDecompress);
@@ -327,7 +335,7 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
 
   const file = indexCache[translation]?.[book];
   if (!file || file.includes('..') || path.isAbsolute(file) || file.includes('/') || file.includes('\\')) {
-    console.warn('[translations] Missing or invalid index mapping for %s %s', translation, book);
+    warnTranslation('[translations] Missing or invalid index mapping for %s %s', translation, book);
     bookCache.set(key, null);
     return null;
   }
@@ -348,7 +356,7 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
       bookCache.set(key, data);
       return data;
     } catch (error) {
-      console.warn('[translations] Translation book load failed for %s %s', translation, book, error);
+      warnTranslation('[translations] Translation book load failed for %s %s', translation, book, error);
       bookCache.set(key, null);
       return null;
     } finally {

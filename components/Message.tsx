@@ -9,7 +9,6 @@ import {
   hasStructuredOriginalLanguage,
   normalizeOriginalLanguageEntries,
   type StructuredChatResponse,
-  type StructuredVerseResponse,
 } from '@/lib/verse-response';
 import { MessageContent, buildMarkdownComponents } from './MessageContent';
 import { MessageCitations, type VerseBlock } from './MessageCitations';
@@ -84,7 +83,7 @@ export function isVerseStartLine(value: string): boolean {
   //   (a) open with a quotation mark  — e.g. - "In the beginning…"
   //   (b) begin with a recognisable verse reference — e.g. - JHN 3:16 or - 1 Cor 13:4
   const rest = trimmed.slice(2); // drop '- '
-  const startsWithQuote = /^["""''\u2018\u2019\u201C\u201D]/.test(rest);
+  const startsWithQuote = /^["'\u2018\u2019\u201C\u201D]/.test(rest);
   // Optional leading digit (e.g. "1 ") for numbered books, then 2+ letter book name,
   // optional period, space, chapter digits, colon, verse digits.
   const startsWithReference = /^(?:\d\s+)?[A-Za-z]{2,}\.?\s+\d+:\d+/.test(rest);
