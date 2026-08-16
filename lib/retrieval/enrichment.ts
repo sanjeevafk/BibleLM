@@ -167,6 +167,19 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
           await hydrateOriginals(verse);
           hasOriginals = true;
         }
+      } else if (bookRaw && NT_BOOKS.has(bookRaw)) {
+        const gntLayers = await getOpenGNTLayers(verse.reference);
+        if (gntLayers?.morphology && gntLayers.morphology.length > 0) {
+          verse.original = gntLayers.morphology.map((w) => ({
+            word: w.w,
+            strongs: w.s ? (w.s.startsWith('G') ? w.s : `G${w.s}`) : '',
+            morph: w.r,
+            gloss: w.d || w.l,
+            transliteration: w.l,
+          }));
+          await hydrateOriginals(verse);
+          hasOriginals = true;
+        }
       }
 
       if (!hasOriginals && allowExternalFallback) {
