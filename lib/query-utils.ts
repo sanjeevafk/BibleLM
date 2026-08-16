@@ -385,29 +385,46 @@ export function classifyAndExpand(query: string): {
  * Detects whether a query is a comparative or compound question,
  * and decomposes it into distinct parallel sub-queries.
  */
+function trimQuestionMarks(str: string): string {
+  let end = str.length;
+  while (end > 0 && str[end - 1] === '?') {
+    end--;
+  }
+  return str.slice(0, end);
+}
+
+function trimLeadingThe(str: string): string {
+  const trimmed = str.trim();
+  if (trimmed.toLowerCase().startsWith('the ')) {
+    return trimmed.slice(4).trim();
+  }
+  return trimmed;
+}
+
 export function decomposeQuery(query: string): string[] {
   const normalized = query.trim();
+  const lower = normalized.toLowerCase();
 
-  // Match "compare A and/with B", "difference between A and B", "A vs/versus B"
-  const compareMatch = normalized.match(
-    /^(?:compare|what is the difference between|difference between)\s+(.+?)\s+(?:and|with|to|\bvs\b|\bversus\b)\s+(.+)$/i
-  );
-  if (compareMatch) {
-    const [, part1, part2] = compareMatch;
-    const sub1 = part1.trim().replace(/^the\s+/i, '');
-    const sub2 = part2.trim().replace(/^the\s+/i, '').replace(/\?+$/, '');
-    if (sub1.length > 2 && sub2.length > 2) {
-      return [sub1, sub2];
-    }
+  let target = normalized;
+  if (lower.startsWith('compare ')) {
+    target = normalized.slice(8).trim();
+  } else if (lower.startsWith('what is the difference between ')) {
+    target = normalized.slice(31).trim();
+  } else if (lower.startsWith('difference between ')) {
+    target = normalized.slice(19).trim();
   }
 
-  const vsMatch = normalized.match(/^(.+?)\s+(?:\bvs\b|\bversus\b)\s+(.+)$/i);
-  if (vsMatch) {
-    const [, part1, part2] = vsMatch;
-    const sub1 = part1.trim();
-    const sub2 = part2.trim().replace(/\?+$/, '');
-    if (sub1.length > 2 && sub2.length > 2) {
-      return [sub1, sub2];
+  const targetLower = target.toLowerCase();
+  const delimiters = [' versus ', ' vs ', ' and ', ' with ', ' to '];
+
+  for (const delim of delimiters) {
+    const idx = targetLower.indexOf(delim);
+    if (idx !== -1) {
+      const part1 = trimLeadingThe(target.slice(0, idx));
+      const part2 = trimQuestionMarks(trimLeadingThe(target.slice(idx + delim.length)));
+      if (part1.length > 2 && part2.length > 2) {
+        return [part1, part2];
+      }
     }
   }
 

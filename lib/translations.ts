@@ -16,9 +16,17 @@ const inFlight = new Map<string, Promise<TranslationBook | null>>();
 let bibleIndexCache: Record<string, IndexedVerse> | null = null;
 const SILENT_TRANSLATION_WARNINGS = process.env.BIBLELM_SILENT_TRANSLATION_WARNINGS === '1';
 
-function warnTranslation(message: string, ...args: unknown[]): void {
+function sanitizeLogToken(val: unknown): string {
+  const str = String(val ?? '').trim();
+  return /^[a-zA-Z0-9_-]{1,16}$/.test(str) ? str : '[sanitized]';
+}
+
+function warnTranslation(message: string, translation?: string, book?: string): void {
   if (SILENT_TRANSLATION_WARNINGS) return;
-  console.warn(message, ...args);
+  const safeMsg = String(message ?? '').replace(/[\r\n\t]/g, ' ');
+  const safeTrans = sanitizeLogToken(translation);
+  const safeBook = sanitizeLogToken(book);
+  console.warn(`${safeMsg} (translation=${safeTrans}, book=${safeBook})`);
 }
 
 const brotliDecompress = promisify(zlib.brotliDecompress);
@@ -327,7 +335,7 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
 
   const file = indexCache[translation]?.[book];
   if (!file || file.includes('..') || path.isAbsolute(file) || file.includes('/') || file.includes('\\')) {
-    console.warn('[translations] Missing or invalid index mapping for %s %s', translation, book);
+    warnTranslation('[translations] Missing or invalid index mapping', translation, book);
     bookCache.set(key, null);
     return null;
   }
@@ -348,7 +356,7 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
       bookCache.set(key, data);
       return data;
     } catch (error) {
-      console.warn('[translations] Translation book load failed for %s %s', translation, book, error);
+      warnTranslation('[translations] Translation book load failed', translation, book);
       bookCache.set(key, null);
       return null;
     } finally {
@@ -420,19 +428,19 @@ export async function getTranslationVerse(
 
   const data = await loadBook(translation, parsed.book);
   if (!data) {
-    warnTranslation('[translations] No translation data for %s %s', normalizedTranslation, parsed.book);
+    warnTranslation('[translations] No translation data', normalizedTranslation, parsed.book);
     return null;
   }
   const chapterData = data[String(parsed.chapter)];
   if (!chapterData) {
-    warnTranslation('[translations] Missing chapter %d for %s %s', parsed.chapter, normalizedTranslation, parsed.book);
+    warnTranslation('[translations] Missing chapter', normalizedTranslation, parsed.book);
     return null;
   }
 
   if (!parsed.endVerse || parsed.endVerse === parsed.verse) {
     const verseText = chapterData[String(parsed.verse)] || null;
     if (!verseText) {
-      warnTranslation('[translations] Missing verse %s %d:%d in %s', parsed.book, parsed.chapter, parsed.verse, normalizedTranslation);
+      warnTranslation('[translations] Missing verse', normalizedTranslation, parsed.book);
     }
     return verseText;
   }
@@ -443,7 +451,7 @@ export async function getTranslationVerse(
     if (text) parts.push(text);
   }
   if (parts.length === 0) {
-    warnTranslation('[translations] Missing verse range %s in %s', reference, normalizedTranslation);
+    warnTranslation('[translations] Missing verse range', normalizedTranslation, parsed.book);
     return null;
   }
   return parts.join(' ');
