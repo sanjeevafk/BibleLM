@@ -32,7 +32,7 @@ function shouldUseExternalFallback(): boolean {
 }
 
 function getBibleIndexPath(): string {
-  return path.join(process.cwd(), 'data', 'bible-full-index.json');
+  return path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'bible-full-index.json');
 }
 
 function getBibleIndex(): Record<string, VerseContext> {

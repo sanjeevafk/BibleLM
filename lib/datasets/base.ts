@@ -11,7 +11,7 @@ const brotliDecompress = promisify(zlib.brotliDecompress);
 const gunzip = promisify(zlib.gunzip);
 
 export function resolveDatasetPath(...segments: string[]): string {
-  return path.join(process.cwd(), ...segments);
+  return path.join(/* turbopackIgnore: true */ process.cwd(), 'data', ...segments);
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

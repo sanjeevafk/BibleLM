@@ -6,9 +6,9 @@ import zlib from 'zlib';
 type TranslationBook = Record<string, Record<string, string>>;
 type IndexedVerse = { text?: string };
 
-const DATA_DIR = path.join(process.cwd(), 'data', 'translations');
-const INDEX_PATH = path.join(process.cwd(), 'data', 'translations-index.json');
-const BIBLE_INDEX_PATH = path.join(process.cwd(), 'data', 'bible-full-index.json');
+const DATA_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'translations');
+const INDEX_PATH = path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'translations-index.json');
+const BIBLE_INDEX_PATH = path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'bible-full-index.json');
 
 const indexCache: Record<string, Record<string, string>> = {};
 const bookCache = new Map<string, TranslationBook | null>();
