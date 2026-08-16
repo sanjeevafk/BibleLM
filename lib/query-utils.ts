@@ -387,27 +387,28 @@ export function classifyAndExpand(query: string): {
  */
 export function decomposeQuery(query: string): string[] {
   const normalized = query.trim();
+  const lower = normalized.toLowerCase();
 
-  // Match "compare A and/with B", "difference between A and B", "A vs/versus B"
-  const compareMatch = normalized.match(
-    /^(?:compare|what is the difference between|difference between)\s+([^\n\r]+?)\s+(?:and|with|to|\bvs\b|\bversus\b)\s+([^\n\r]+)$/i
-  );
-  if (compareMatch) {
-    const [, part1, part2] = compareMatch;
-    const sub1 = part1.trim().replace(/^the\s+/i, '');
-    const sub2 = part2.trim().replace(/^the\s+/i, '').replace(/\?+$/, '');
-    if (sub1.length > 2 && sub2.length > 2) {
-      return [sub1, sub2];
-    }
+  let target = normalized;
+  if (lower.startsWith('compare ')) {
+    target = normalized.slice(8).trim();
+  } else if (lower.startsWith('what is the difference between ')) {
+    target = normalized.slice(31).trim();
+  } else if (lower.startsWith('difference between ')) {
+    target = normalized.slice(19).trim();
   }
 
-  const vsMatch = normalized.match(/^([^\n\r]+?)\s+(?:\bvs\b|\bversus\b)\s+([^\n\r]+)$/i);
-  if (vsMatch) {
-    const [, part1, part2] = vsMatch;
-    const sub1 = part1.trim();
-    const sub2 = part2.trim().replace(/\?+$/, '');
-    if (sub1.length > 2 && sub2.length > 2) {
-      return [sub1, sub2];
+  const targetLower = target.toLowerCase();
+  const delimiters = [' versus ', ' vs ', ' and ', ' with ', ' to '];
+
+  for (const delim of delimiters) {
+    const idx = targetLower.indexOf(delim);
+    if (idx !== -1) {
+      const part1 = target.slice(0, idx).trim().replace(/^the\s+/i, '');
+      const part2 = target.slice(idx + delim.length).trim().replace(/^the\s+/i, '').replace(/\?+$/, '');
+      if (part1.length > 2 && part2.length > 2) {
+        return [part1, part2];
+      }
     }
   }
 

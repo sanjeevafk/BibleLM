@@ -16,17 +16,15 @@ const inFlight = new Map<string, Promise<TranslationBook | null>>();
 let bibleIndexCache: Record<string, IndexedVerse> | null = null;
 const SILENT_TRANSLATION_WARNINGS = process.env.BIBLELM_SILENT_TRANSLATION_WARNINGS === '1';
 
-function sanitizeLogArg(arg: unknown): unknown {
-  if (typeof arg === 'string') {
-    return arg.replace(/[\r\n]/g, '_');
-  }
-  return arg;
+function sanitizeLogStr(input: unknown): string {
+  return String(input ?? '').replace(/[\r\n\t]/g, '_');
 }
 
 function warnTranslation(message: string, ...args: unknown[]): void {
   if (SILENT_TRANSLATION_WARNINGS) return;
-  const safeArgs = args.map(sanitizeLogArg);
-  console.warn(message, ...safeArgs);
+  const safeMsg = sanitizeLogStr(message);
+  const safeArgs = args.map((a) => sanitizeLogStr(a));
+  console.warn(safeMsg, ...safeArgs);
 }
 
 const brotliDecompress = promisify(zlib.brotliDecompress);
