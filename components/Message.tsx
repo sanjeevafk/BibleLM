@@ -9,6 +9,7 @@ import {
   hasStructuredOriginalLanguage,
   normalizeOriginalLanguageEntries,
   type StructuredChatResponse,
+  type StructuredVerseResponse,
 } from '@/lib/verse-response';
 import { MessageContent, buildMarkdownComponents } from './MessageContent';
 import { MessageCitations, type VerseBlock } from './MessageCitations';
