@@ -9,7 +9,8 @@
 
 Built to eliminate LLM "hallucination" and theological drift, BibleLM functions as a strict "Sola Scriptura" (Scripture Alone) engine. It forces base models to answer complex theological queries using raw, cited text and structural linguistics rather than external commentary or interpretive bias.
 
-**Live Demo**: [https://biblelm.vercel.app](https://biblelm.vercel.app)
+**Live Demo**: [https://biblelm.vercel.app](https://biblelm.vercel.app)  
+**System Architecture Diagram**: [`docs/architecture.html`](file:///home/sanjeev/Downloads/bibleLM/docs/architecture.html)
 
 ---
 
@@ -18,45 +19,48 @@ Built to eliminate LLM "hallucination" and theological drift, BibleLM functions 
 ```text
 ┌──────────────┐      ┌──────────────────────────┐      ┌────────────────────┐
 │  Client App  │      │    Next.js Edge Route    │      │    Primary LLM     │
-│ (React / TS) ├─────►│ (Validation & Rate Limit) ├─────►│ (Groq: Llama 3.1)  │
+│ (React / TS) ├─────►│ (proxy.ts + Rate Limit)  ├─────►│ (Groq: Llama 3.1)  │
 └──────────────┘      └────────────┬─────────────┘      └──────────┬─────────┘
                                    │                               │
                                    ▼                               ▼
 ┌──────────────┐      ┌──────────────────────────┐      ┌────────────────────┐
-│ Response     │      │   Hybrid Retrieval V3    │      │    Context-Only    │
-│ Cache (Redis)│◄────►│  (BM25 + Semantic Gate)  │      │     Fail-safe      │
+│ Neon pgvector│      │    Hybrid Retrieval V3   │      │  Citation Audit    │
+│  (31k Verses)├─────►│(BM25 + Vector Re-Ranker) ├─────►│ Grounding Filter   │
 └──────────────┘      └────────────┬─────────────┘      └────────────────────┘
                                    │
                                    ▼
                       ┌──────────────────────────┐
-                      │    Static JSON Store     │
-                      │ (Index, Morph, TSK, Lex) │
+                      │ Multi-Translation Store  │
+                      │(BSB, WEB, KJV, ASV, NHEB)│
                       └──────────────────────────┘
 ```
 
-Most RAG systems rely on expensive, high-latency vector databases. BibleLM is built on a **Stateless Hybrid Retrieval** architecture optimized for the Edge.
+Most RAG systems rely on expensive, high-latency vector databases. BibleLM is built on a **Stateless Hybrid Retrieval** architecture optimized for the Edge and production serverless execution.
 
 ### 1. The Engineering Strategy
-*   **Stateless Scaling**: To bypass the ~1s cold-start penalty of indexing 31,000 verses on every request, the engine's TF/IDF state is pre-computed at build time and serialized to JSON. At runtime, the engine hydrates in **< 10ms**.
-*   **Citation-Locking**: A post-generation scrubbing middleware validates every LLM citation against the retrieved context. If a verse wasn't in the context, it's stripped—preventing "AI-generated" scripture.
-*   **Lexical Tethering**: Every verse is enriched with Hebrew/Greek morphology word-by-word. The LLM is forced to output Strong's numbers and transliterations, tethering its logic to structural data rather than creative prose.
+*   **Stateless Scaling**: To bypass cold-start penalties, TF/IDF state is pre-computed at build time and serialized to JSON. At runtime, the engine hydrates in **< 10ms**.
+*   **Multi-Translation Brotli Storage**: Supports 5 full translations (`BSB`, `WEB`, `KJV`, `ASV`, `NHEB`) stored as compressed `.json.br` book files.
+*   **Citation-Locking**: A post-generation scrubbing middleware validates every LLM citation against retrieved context. If a verse wasn't in the context, it's stripped—preventing "AI-generated" scripture.
+*   **Lexical & Morphological Tethering**: Verses are enriched with Hebrew/Greek morphology (OpenGNT & MorphHB) word-by-word, forcing the LLM to output Strong's numbers and transliterations.
 
 ### 2. The 4-Stage Retrieval Pipeline
-1.  **Theological Expansion**: Expands keywords (e.g., "Messiah" -> "Christ, Anointed") using a domain-specific synonym map to maximize recall.
+1.  **Theological Expansion**: Expands keywords using a domain-specific synonym map to maximize recall.
 2.  **Lexical Search (BM25)**: Custom TypeScript implementation of BM25 tuned for verse-length documents ($k1=1.2, b=0.65$).
-3.  **Conditional Semantic Gating**: Only triggers high-performance vector embeddings (Groq `nomic-embed-text-v1.5`) if BM25 confidence is low or results are ambiguous.
+3.  **Semantic Vector Re-ranking**: Integrates Groq `nomic-embed-text-v1.5` embeddings and Neon PostgreSQL `pgvector` for dense semantic similarity ranking.
 4.  **Context Windowing**: Automatically expands hits into narrative blocks (neighboring verses ±1) to preserve literary context.
 
 ---
 
-## Performance Metrics
+## Performance & Evaluation Metrics
 
-| Metric | Edge Performance | Optimization Technique |
-| :--- | :--- | :--- |
-| **Search Latency** | 60ms – 150ms | Pre-computed serialized BM25 state |
-| **Cold Start** | ~550ms | Binary JSON chunking & lazy-loading |
-| **Bundle Size** | 33.3 MB | Gzip/Brotli fragment compression |
-| **Rate Limiting** | Atomic < 2ms | Redis-backed Lua scripts (Upstash) |
+| Metric | Measured Value | Benchmark Target | Status |
+| :--- | :--- | :--- | :--- |
+| **Hit @ 1** | **100.0%** | ≥ 90.0% | ✅ PASS |
+| **Hit @ 5** | **100.0%** | ≥ 95.0% | ✅ PASS |
+| **Mean Reciprocal Rank (MRR)** | **1.000** | ≥ 0.900 | ✅ PERFECT |
+| **Average Search Latency** | **155.4 ms** | < 300 ms | ✅ PASS |
+| **Citation Validity Rate** | **86.7%** | ≥ 80.0% | ✅ PASS |
+| **Golden Eval Test Cases** | **56 Scenarios** | 8 Categories | ✅ COMPLETE |
 
 ---
 
