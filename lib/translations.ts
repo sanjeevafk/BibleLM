@@ -421,13 +421,12 @@ export async function getTranslationVerse(
   if (!parsed) return null;
 
   const normalizedTranslation = normalizeTranslation(translation);
-  if (normalizedTranslation === 'WEB') {
-    const indexed = getWebIndexedVerse(`${parsed.book} ${parsed.chapter}:${parsed.verse}${parsed.endVerse ? `-${parsed.endVerse}` : ''}`);
-    if (indexed) return indexed;
-  }
-
   const data = await loadBook(translation, parsed.book);
   if (!data) {
+    if (normalizedTranslation === 'WEB') {
+      const indexed = getWebIndexedVerse(`${parsed.book} ${parsed.chapter}:${parsed.verse}${parsed.endVerse ? `-${parsed.endVerse}` : ''}`);
+      if (indexed) return indexed;
+    }
     warnTranslation('[translations] No translation data', normalizedTranslation, parsed.book);
     return null;
   }
