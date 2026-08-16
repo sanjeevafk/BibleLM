@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-16T11:31:52.698Z",
+  "generated_at": "2026-08-16T14:29:59.886Z",
   "mode": "live",
   "notes": [
     "Golden eval dataset benchmark report covering 50 evaluation items.",
@@ -1545,38 +1545,101 @@
         "1 JHN 99:99",
         "invented verse"
       ]
+    },
+    {
+      "id": "GRG-01",
+      "category": "graphrag",
+      "intent": "TOPICAL_QUERY",
+      "cacheMode": "miss",
+      "query": "What does the Bible say about faith and works together?",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "JAS 2:17",
+        "JAS 2:26",
+        "JAS 2:14",
+        "GAL 5:6",
+        "HEB 11:6"
+      ],
+      "expectedKeywords": [
+        "faith",
+        "works",
+        "dead"
+      ],
+      "citationGroundingThreshold": 0.8
+    },
+    {
+      "id": "GRG-02",
+      "category": "graphrag",
+      "intent": "TOPICAL_QUERY",
+      "cacheMode": "miss",
+      "query": "Old Testament prophecies fulfilled in Jesus",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "ISA 7:14",
+        "ISA 53:5",
+        "MIC 5:2",
+        "MATT 1:22",
+        "MATT 2:6"
+      ],
+      "expectedKeywords": [
+        "prophecy",
+        "fulfilled",
+        "virgin"
+      ],
+      "citationGroundingThreshold": 0.8
+    },
+    {
+      "id": "GRG-03",
+      "category": "graphrag",
+      "intent": "TOPICAL_QUERY",
+      "cacheMode": "miss",
+      "query": "What does Paul say about the law and grace?",
+      "translation": "BSB",
+      "expectedTopRefs": [
+        "ROM 6:14",
+        "GAL 2:21",
+        "ROM 3:20",
+        "GAL 5:4",
+        "EPH 2:8"
+      ],
+      "expectedKeywords": [
+        "law",
+        "grace",
+        "justified"
+      ],
+      "citationGroundingThreshold": 0.8
     }
   ],
   "baseline_metrics": {
-    "total_latency_ms": 151.42,
-    "retrieval_latency_ms": 151.42,
+    "total_latency_ms": 32.49,
+    "retrieval_latency_ms": 32.49,
     "llm_latency_ms": 0,
-    "p50_latency": 41,
-    "p95_latency": 428,
-    "precision_at_5": 0.19,
+    "p50_latency": 13,
+    "p95_latency": 93,
+    "precision_at_5": 0.17,
     "citation_validity_rate": 1,
-    "hit_at_1": 0.32,
-    "hit_at_5": 0.46,
-    "mrr": 0.37
+    "hit_at_1": 0.25,
+    "hit_at_5": 0.4,
+    "mrr": 0.31
   },
   "post_optimization_metrics": {
-    "total_latency_ms": 29.12,
-    "retrieval_latency_ms": 29.12,
+    "total_latency_ms": 11.96,
+    "retrieval_latency_ms": 11.96,
     "llm_latency_ms": 0,
-    "p50_latency": 20,
-    "p95_latency": 97,
-    "precision_at_5": 0.19,
+    "p50_latency": 9,
+    "p95_latency": 32,
+    "precision_at_5": 0.17,
     "citation_validity_rate": 1,
-    "hit_at_1": 0.32,
-    "hit_at_5": 0.46,
-    "mrr": 0.37
+    "hit_at_1": 0.25,
+    "hit_at_5": 0.4,
+    "mrr": 0.31
   },
   "performance_deltas": {
-    "total_latency_ms": -122.3,
-    "retrieval_latency_ms": -122.3,
+    "total_latency_ms": -20.53,
+    "retrieval_latency_ms": -20.53,
     "llm_latency_ms": 0,
-    "p50_latency": -21,
-    "p95_latency": -331,
+    "p50_latency": -4,
+    "p95_latency": -61,
     "precision_at_5": 0,
     "citation_validity_rate": 0,
     "hit_at_1": 0,
@@ -1589,11 +1652,11 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 2991,
-        "retrieval_latency_ms": 2991,
+        "total_latency_ms": 610,
+        "retrieval_latency_ms": 610,
         "llm_latency_ms": 0,
-        "p50_latency": 2991,
-        "p95_latency": 2991,
+        "p50_latency": 610,
+        "p95_latency": 610,
         "precision_at_5": 0.8,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -1601,11 +1664,11 @@
         "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 21,
-        "retrieval_latency_ms": 21,
+        "total_latency_ms": 7,
+        "retrieval_latency_ms": 7,
         "llm_latency_ms": 0,
-        "p50_latency": 21,
-        "p95_latency": 21,
+        "p50_latency": 7,
+        "p95_latency": 7,
         "precision_at_5": 0.8,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -1613,11 +1676,11 @@
         "mrr": 1
       },
       "delta": {
-        "total_latency_ms": -2970,
-        "retrieval_latency_ms": -2970,
+        "total_latency_ms": -603,
+        "retrieval_latency_ms": -603,
         "llm_latency_ms": 0,
-        "p50_latency": -2970,
-        "p95_latency": -2970,
+        "p50_latency": -603,
+        "p95_latency": -603,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -1644,11 +1707,11 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 428,
-        "retrieval_latency_ms": 428,
+        "total_latency_ms": 92,
+        "retrieval_latency_ms": 92,
         "llm_latency_ms": 0,
-        "p50_latency": 428,
-        "p95_latency": 428,
+        "p50_latency": 92,
+        "p95_latency": 92,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -1656,11 +1719,11 @@
         "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 102,
-        "retrieval_latency_ms": 102,
+        "total_latency_ms": 34,
+        "retrieval_latency_ms": 34,
         "llm_latency_ms": 0,
-        "p50_latency": 102,
-        "p95_latency": 102,
+        "p50_latency": 34,
+        "p95_latency": 34,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -1668,11 +1731,11 @@
         "mrr": 1
       },
       "delta": {
-        "total_latency_ms": -326,
-        "retrieval_latency_ms": -326,
+        "total_latency_ms": -58,
+        "retrieval_latency_ms": -58,
         "llm_latency_ms": 0,
-        "p50_latency": -326,
-        "p95_latency": -326,
+        "p50_latency": -58,
+        "p95_latency": -58,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -1681,17 +1744,17 @@
       },
       "baseline_top_refs": [
         "PSA 23:1-6",
+        "GEN 13:17",
         "LUK 20:42",
         "HOS 4:16",
-        "ROM 6:4",
-        "COL 2:6"
+        "HEB 13:20"
       ],
       "optimized_top_refs": [
         "PSA 23:1-6",
+        "GEN 13:17",
         "LUK 20:42",
         "HOS 4:16",
-        "ROM 6:4",
-        "COL 2:6"
+        "HEB 13:20"
       ]
     },
     {
@@ -1699,11 +1762,11 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 27,
-        "retrieval_latency_ms": 27,
+        "total_latency_ms": 41,
+        "retrieval_latency_ms": 41,
         "llm_latency_ms": 0,
-        "p50_latency": 27,
-        "p95_latency": 27,
+        "p50_latency": 41,
+        "p95_latency": 41,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1723,11 +1786,11 @@
         "mrr": 0.5
       },
       "delta": {
-        "total_latency_ms": -14,
-        "retrieval_latency_ms": -14,
+        "total_latency_ms": -28,
+        "retrieval_latency_ms": -28,
         "llm_latency_ms": 0,
-        "p50_latency": -14,
-        "p95_latency": -14,
+        "p50_latency": -28,
+        "p95_latency": -28,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -1754,18 +1817,6 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 406,
-        "retrieval_latency_ms": 406,
-        "llm_latency_ms": 0,
-        "p50_latency": 406,
-        "p95_latency": 406,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
         "total_latency_ms": 17,
         "retrieval_latency_ms": 17,
         "llm_latency_ms": 0,
@@ -1777,12 +1828,24 @@
         "hit_at_5": 0,
         "mrr": 0
       },
-      "delta": {
-        "total_latency_ms": -389,
-        "retrieval_latency_ms": -389,
+      "optimized": {
+        "total_latency_ms": 11,
+        "retrieval_latency_ms": 11,
         "llm_latency_ms": 0,
-        "p50_latency": -389,
-        "p95_latency": -389,
+        "p50_latency": 11,
+        "p95_latency": 11,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -6,
+        "retrieval_latency_ms": -6,
+        "llm_latency_ms": 0,
+        "p50_latency": -6,
+        "p95_latency": -6,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -1791,17 +1854,17 @@
       },
       "baseline_top_refs": [
         "JER 14:7-9",
+        "ECC 12:12-14",
         "2SA 12:3-5",
-        "NUM 7:1-2",
-        "LUK 23:49",
-        "JAS 1:4"
+        "NUM 7:1",
+        "LUK 23:49"
       ],
       "optimized_top_refs": [
         "JER 14:7-9",
+        "ECC 12:12-14",
         "2SA 12:3-5",
-        "NUM 7:1-2",
-        "LUK 23:49",
-        "JAS 1:4"
+        "NUM 7:1",
+        "LUK 23:49"
       ]
     },
     {
@@ -1809,11 +1872,11 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 97,
-        "retrieval_latency_ms": 97,
+        "total_latency_ms": 27,
+        "retrieval_latency_ms": 27,
         "llm_latency_ms": 0,
-        "p50_latency": 97,
-        "p95_latency": 97,
+        "p50_latency": 27,
+        "p95_latency": 27,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1833,11 +1896,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -92,
-        "retrieval_latency_ms": -92,
+        "total_latency_ms": -22,
+        "retrieval_latency_ms": -22,
         "llm_latency_ms": 0,
-        "p50_latency": -92,
-        "p95_latency": -92,
+        "p50_latency": -22,
+        "p95_latency": -22,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -1864,11 +1927,11 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 117,
-        "retrieval_latency_ms": 117,
+        "total_latency_ms": 93,
+        "retrieval_latency_ms": 93,
         "llm_latency_ms": 0,
-        "p50_latency": 117,
-        "p95_latency": 117,
+        "p50_latency": 93,
+        "p95_latency": 93,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1876,11 +1939,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 8,
-        "retrieval_latency_ms": 8,
+        "total_latency_ms": 22,
+        "retrieval_latency_ms": 22,
         "llm_latency_ms": 0,
-        "p50_latency": 8,
-        "p95_latency": 8,
+        "p50_latency": 22,
+        "p95_latency": 22,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1888,11 +1951,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -109,
-        "retrieval_latency_ms": -109,
+        "total_latency_ms": -71,
+        "retrieval_latency_ms": -71,
         "llm_latency_ms": 0,
-        "p50_latency": -109,
-        "p95_latency": -109,
+        "p50_latency": -71,
+        "p95_latency": -71,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -1919,11 +1982,11 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 323,
-        "retrieval_latency_ms": 323,
+        "total_latency_ms": 68,
+        "retrieval_latency_ms": 68,
         "llm_latency_ms": 0,
-        "p50_latency": 323,
-        "p95_latency": 323,
+        "p50_latency": 68,
+        "p95_latency": 68,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1931,11 +1994,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 38,
-        "retrieval_latency_ms": 38,
+        "total_latency_ms": 20,
+        "retrieval_latency_ms": 20,
         "llm_latency_ms": 0,
-        "p50_latency": 38,
-        "p95_latency": 38,
+        "p50_latency": 20,
+        "p95_latency": 20,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1943,11 +2006,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -285,
-        "retrieval_latency_ms": -285,
+        "total_latency_ms": -48,
+        "retrieval_latency_ms": -48,
         "llm_latency_ms": 0,
-        "p50_latency": -285,
-        "p95_latency": -285,
+        "p50_latency": -48,
+        "p95_latency": -48,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -1956,17 +2019,17 @@
       },
       "baseline_top_refs": [
         "2KI 4:10-12",
+        "PSA 106:11-13",
         "LUK 9:30-32",
-        "ACT 20:7-9",
-        "LUK 22:12",
-        "JHN 20:30"
+        "ACT 20:8",
+        "LUK 22:12"
       ],
       "optimized_top_refs": [
         "2KI 4:10-12",
+        "PSA 106:11-13",
         "LUK 9:30-32",
-        "ACT 20:7-9",
-        "LUK 22:12",
-        "JHN 20:30"
+        "ACT 20:8",
+        "LUK 22:12"
       ]
     },
     {
@@ -1974,11 +2037,11 @@
       "category": "passage",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 362,
-        "retrieval_latency_ms": 362,
+        "total_latency_ms": 43,
+        "retrieval_latency_ms": 43,
         "llm_latency_ms": 0,
-        "p50_latency": 362,
-        "p95_latency": 362,
+        "p50_latency": 43,
+        "p95_latency": 43,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1986,11 +2049,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 49,
-        "retrieval_latency_ms": 49,
+        "total_latency_ms": 16,
+        "retrieval_latency_ms": 16,
         "llm_latency_ms": 0,
-        "p50_latency": 49,
-        "p95_latency": 49,
+        "p50_latency": 16,
+        "p95_latency": 16,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -1998,11 +2061,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -313,
-        "retrieval_latency_ms": -313,
+        "total_latency_ms": -27,
+        "retrieval_latency_ms": -27,
         "llm_latency_ms": 0,
-        "p50_latency": -313,
-        "p95_latency": -313,
+        "p50_latency": -27,
+        "p95_latency": -27,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2011,17 +2074,17 @@
       },
       "baseline_top_refs": [
         "2TI 2:1-3",
-        "ISA 1:25-27",
-        "ISA 1:20-22",
-        "JOS 24:22",
-        "1TI 6:12"
+        "ROM 14:21-23",
+        "EZK 25:8-10",
+        "ISA 1:21",
+        "2TH 2:13"
       ],
       "optimized_top_refs": [
         "2TI 2:1-3",
-        "ISA 1:25-27",
-        "ISA 1:20-22",
-        "JOS 24:22",
-        "1TI 6:12"
+        "ROM 14:21-23",
+        "EZK 25:8-10",
+        "ISA 1:21",
+        "2TH 2:13"
       ]
     },
     {
@@ -2029,11 +2092,11 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 68,
-        "retrieval_latency_ms": 68,
+        "total_latency_ms": 112,
+        "retrieval_latency_ms": 112,
         "llm_latency_ms": 0,
-        "p50_latency": 68,
-        "p95_latency": 68,
+        "p50_latency": 112,
+        "p95_latency": 112,
         "precision_at_5": 0.6,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -2041,11 +2104,11 @@
         "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 27,
-        "retrieval_latency_ms": 27,
+        "total_latency_ms": 26,
+        "retrieval_latency_ms": 26,
         "llm_latency_ms": 0,
-        "p50_latency": 27,
-        "p95_latency": 27,
+        "p50_latency": 26,
+        "p95_latency": 26,
         "precision_at_5": 0.6,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -2053,11 +2116,11 @@
         "mrr": 1
       },
       "delta": {
-        "total_latency_ms": -41,
-        "retrieval_latency_ms": -41,
+        "total_latency_ms": -86,
+        "retrieval_latency_ms": -86,
         "llm_latency_ms": 0,
-        "p50_latency": -41,
-        "p95_latency": -41,
+        "p50_latency": -86,
+        "p95_latency": -86,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2084,35 +2147,35 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 76,
-        "retrieval_latency_ms": 76,
+        "total_latency_ms": 48,
+        "retrieval_latency_ms": 48,
         "llm_latency_ms": 0,
-        "p50_latency": 76,
-        "p95_latency": 76,
+        "p50_latency": 48,
+        "p95_latency": 48,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
         "hit_at_5": 1,
-        "mrr": 0.2
+        "mrr": 0.5
       },
       "optimized": {
-        "total_latency_ms": 10,
-        "retrieval_latency_ms": 10,
+        "total_latency_ms": 7,
+        "retrieval_latency_ms": 7,
         "llm_latency_ms": 0,
-        "p50_latency": 10,
-        "p95_latency": 10,
+        "p50_latency": 7,
+        "p95_latency": 7,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
         "hit_at_5": 1,
-        "mrr": 0.2
+        "mrr": 0.5
       },
       "delta": {
-        "total_latency_ms": -66,
-        "retrieval_latency_ms": -66,
+        "total_latency_ms": -41,
+        "retrieval_latency_ms": -41,
         "llm_latency_ms": 0,
-        "p50_latency": -66,
-        "p95_latency": -66,
+        "p50_latency": -41,
+        "p95_latency": -41,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2121,17 +2184,17 @@
       },
       "baseline_top_refs": [
         "MRK 1:3-5",
+        "EPH 4:31-32",
         "LUK 24:46-48",
-        "LUK 3:2-4",
-        "ACT 5:31",
-        "EPH 4:32"
+        "LUK 3:3",
+        "ACT 5:31"
       ],
       "optimized_top_refs": [
         "MRK 1:3-5",
+        "EPH 4:31-32",
         "LUK 24:46-48",
-        "LUK 3:2-4",
-        "ACT 5:31",
-        "EPH 4:32"
+        "LUK 3:3",
+        "ACT 5:31"
       ]
     },
     {
@@ -2139,11 +2202,11 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 33,
-        "retrieval_latency_ms": 33,
+        "total_latency_ms": 11,
+        "retrieval_latency_ms": 11,
         "llm_latency_ms": 0,
-        "p50_latency": 33,
-        "p95_latency": 33,
+        "p50_latency": 11,
+        "p95_latency": 11,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2151,11 +2214,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 6,
-        "retrieval_latency_ms": 6,
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
         "llm_latency_ms": 0,
-        "p50_latency": 6,
-        "p95_latency": 6,
+        "p50_latency": 5,
+        "p95_latency": 5,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2163,11 +2226,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -27,
-        "retrieval_latency_ms": -27,
+        "total_latency_ms": -6,
+        "retrieval_latency_ms": -6,
         "llm_latency_ms": 0,
-        "p50_latency": -27,
-        "p95_latency": -27,
+        "p50_latency": -6,
+        "p95_latency": -6,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2177,16 +2240,16 @@
       "baseline_top_refs": [
         "PSA 119:51-53",
         "JOB 17:14-16",
-        "JOB 6:18-20",
-        "2TH 2:16",
-        "2CO 1:7"
+        "ROM 8:23-25",
+        "PRO 11:7",
+        "JOL 1:8"
       ],
       "optimized_top_refs": [
         "PSA 119:51-53",
         "JOB 17:14-16",
-        "JOB 6:18-20",
-        "2TH 2:16",
-        "2CO 1:7"
+        "ROM 8:23-25",
+        "PRO 11:7",
+        "JOL 1:8"
       ]
     },
     {
@@ -2194,28 +2257,28 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 36,
-        "retrieval_latency_ms": 36,
+        "total_latency_ms": 34,
+        "retrieval_latency_ms": 34,
         "llm_latency_ms": 0,
-        "p50_latency": 36,
-        "p95_latency": 36,
+        "p50_latency": 34,
+        "p95_latency": 34,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
         "hit_at_5": 1,
-        "mrr": 0.33
+        "mrr": 0.5
       },
       "optimized": {
-        "total_latency_ms": 8,
-        "retrieval_latency_ms": 8,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 8,
-        "p95_latency": 8,
+        "p50_latency": 6,
+        "p95_latency": 6,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
         "hit_at_5": 1,
-        "mrr": 0.33
+        "mrr": 0.5
       },
       "delta": {
         "total_latency_ms": -28,
@@ -2231,15 +2294,15 @@
       },
       "baseline_top_refs": [
         "JOB 15:28-30",
-        "JOB 6:21-23",
         "1TI 6:5-7",
+        "JOB 6:21-23",
         "2CO 8:2",
         "SNG 8:7"
       ],
       "optimized_top_refs": [
         "JOB 15:28-30",
-        "JOB 6:21-23",
         "1TI 6:5-7",
+        "JOB 6:21-23",
         "2CO 8:2",
         "SNG 8:7"
       ]
@@ -2249,11 +2312,11 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 257,
-        "retrieval_latency_ms": 257,
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
         "llm_latency_ms": 0,
-        "p50_latency": 257,
-        "p95_latency": 257,
+        "p50_latency": 5,
+        "p95_latency": 5,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2261,11 +2324,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 7,
-        "retrieval_latency_ms": 7,
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
         "llm_latency_ms": 0,
-        "p50_latency": 7,
-        "p95_latency": 7,
+        "p50_latency": 4,
+        "p95_latency": 4,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2273,11 +2336,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -250,
-        "retrieval_latency_ms": -250,
+        "total_latency_ms": -1,
+        "retrieval_latency_ms": -1,
         "llm_latency_ms": 0,
-        "p50_latency": -250,
-        "p95_latency": -250,
+        "p50_latency": -1,
+        "p95_latency": -1,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2304,11 +2367,11 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 209,
-        "retrieval_latency_ms": 209,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 209,
-        "p95_latency": 209,
+        "p50_latency": 6,
+        "p95_latency": 6,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2316,11 +2379,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 4,
-        "retrieval_latency_ms": 4,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 4,
-        "p95_latency": 4,
+        "p50_latency": 6,
+        "p95_latency": 6,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2328,11 +2391,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -205,
-        "retrieval_latency_ms": -205,
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
         "llm_latency_ms": 0,
-        "p50_latency": -205,
-        "p95_latency": -205,
+        "p50_latency": 0,
+        "p95_latency": 0,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2340,18 +2403,18 @@
         "mrr": 0
       },
       "baseline_top_refs": [
-        "PHP 4:5-7",
-        "2CH 6:18-20",
-        "1KI 8:27-29",
-        "1KI 8:54",
-        "NEH 11:17"
+        "PSA 106:1-3",
+        "1SA 1:11-13",
+        "PSA 26:6-8",
+        "PSA 107:22",
+        "LEV 7:12"
       ],
       "optimized_top_refs": [
-        "PHP 4:5-7",
-        "2CH 6:18-20",
-        "1KI 8:27-29",
-        "1KI 8:54",
-        "NEH 11:17"
+        "PSA 106:1-3",
+        "1SA 1:11-13",
+        "PSA 26:6-8",
+        "PSA 107:22",
+        "LEV 7:12"
       ]
     },
     {
@@ -2359,11 +2422,11 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 5,
-        "retrieval_latency_ms": 5,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 5,
-        "p95_latency": 5,
+        "p50_latency": 6,
+        "p95_latency": 6,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2371,11 +2434,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 4,
-        "retrieval_latency_ms": 4,
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
         "llm_latency_ms": 0,
-        "p50_latency": 4,
-        "p95_latency": 4,
+        "p50_latency": 5,
+        "p95_latency": 5,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2395,18 +2458,18 @@
         "mrr": 0
       },
       "baseline_top_refs": [
-        "PRO 23:17-19",
-        "JER 31:16-18",
-        "JOB 6:10-12",
-        "PRO 24:14",
-        "ACT 24:15"
+        "2KI 11:15-17",
+        "JHN 5:28-30",
+        "PHP 3:3-5",
+        "HEB 11:20",
+        "2CH 23:15"
       ],
       "optimized_top_refs": [
-        "PRO 23:17-19",
-        "JER 31:16-18",
-        "JOB 6:10-12",
-        "PRO 24:14",
-        "ACT 24:15"
+        "2KI 11:15-17",
+        "JHN 5:28-30",
+        "PHP 3:3-5",
+        "HEB 11:20",
+        "2CH 23:15"
       ]
     },
     {
@@ -2414,11 +2477,11 @@
       "category": "topical",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 24,
-        "retrieval_latency_ms": 24,
+        "total_latency_ms": 21,
+        "retrieval_latency_ms": 21,
         "llm_latency_ms": 0,
-        "p50_latency": 24,
-        "p95_latency": 24,
+        "p50_latency": 21,
+        "p95_latency": 21,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2426,11 +2489,66 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 30,
-        "retrieval_latency_ms": 30,
+        "total_latency_ms": 14,
+        "retrieval_latency_ms": 14,
         "llm_latency_ms": 0,
-        "p50_latency": 30,
-        "p95_latency": 30,
+        "p50_latency": 14,
+        "p95_latency": 14,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -7,
+        "retrieval_latency_ms": -7,
+        "llm_latency_ms": 0,
+        "p50_latency": -7,
+        "p95_latency": -7,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "EXO 20:16",
+        "PRO 6:16-19",
+        "EPH 4:25",
+        "PRO 12:22",
+        "2PE 1:5-7"
+      ],
+      "optimized_top_refs": [
+        "EXO 20:16",
+        "PRO 6:16-19",
+        "EPH 4:25",
+        "PRO 12:22",
+        "2PE 1:5-7"
+      ]
+    },
+    {
+      "id": "EXG-01",
+      "category": "exegesis",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 11,
+        "retrieval_latency_ms": 11,
+        "llm_latency_ms": 0,
+        "p50_latency": 11,
+        "p95_latency": 11,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 17,
+        "retrieval_latency_ms": 17,
+        "llm_latency_ms": 0,
+        "p50_latency": 17,
+        "p95_latency": 17,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2450,132 +2568,22 @@
         "mrr": 0
       },
       "baseline_top_refs": [
-        "EXO 20:16",
-        "PRO 6:16-19",
-        "EPH 4:25",
-        "PRO 12:22",
-        "ROM 5:2-4"
-      ],
-      "optimized_top_refs": [
-        "EXO 20:16",
-        "PRO 6:16-19",
-        "EPH 4:25",
-        "PRO 12:22",
-        "ROM 5:2-4"
-      ]
-    },
-    {
-      "id": "EXG-01",
-      "category": "exegesis",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 30,
-        "retrieval_latency_ms": 30,
-        "llm_latency_ms": 0,
-        "p50_latency": 30,
-        "p95_latency": 30,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 37,
-        "retrieval_latency_ms": 37,
-        "llm_latency_ms": 0,
-        "p50_latency": 37,
-        "p95_latency": 37,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": 7,
-        "retrieval_latency_ms": 7,
-        "llm_latency_ms": 0,
-        "p50_latency": 7,
-        "p95_latency": 7,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
         "LUK 3:17-19",
-        "EXO 28:31-33",
-        "MRK 1:13-15",
-        "1TI 4:4",
-        "ACT 13:32"
+        "MRK 10:5-7",
+        "GAL 6:14-16",
+        "COL 1:15",
+        "ROM 8:19"
       ],
       "optimized_top_refs": [
         "LUK 3:17-19",
-        "EXO 28:31-33",
-        "MRK 1:13-15",
-        "1TI 4:4",
-        "ACT 13:32"
+        "MRK 10:5-7",
+        "GAL 6:14-16",
+        "COL 1:15",
+        "ROM 8:19"
       ]
     },
     {
       "id": "EXG-02",
-      "category": "exegesis",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 49,
-        "retrieval_latency_ms": 49,
-        "llm_latency_ms": 0,
-        "p50_latency": 49,
-        "p95_latency": 49,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "optimized": {
-        "total_latency_ms": 58,
-        "retrieval_latency_ms": 58,
-        "llm_latency_ms": 0,
-        "p50_latency": 58,
-        "p95_latency": 58,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "delta": {
-        "total_latency_ms": 9,
-        "retrieval_latency_ms": 9,
-        "llm_latency_ms": 0,
-        "p50_latency": 9,
-        "p95_latency": 9,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "ROM 8:27-29",
-        "TIT 3:7-9",
-        "1CO 1:11-13",
-        "GAL 3:17",
-        "1CO 12:6"
-      ],
-      "optimized_top_refs": [
-        "ROM 8:27-29",
-        "TIT 3:7-9",
-        "1CO 1:11-13",
-        "GAL 3:17",
-        "1CO 12:6"
-      ]
-    },
-    {
-      "id": "EXG-03",
       "category": "exegesis",
       "cacheMode": "miss",
       "baseline": {
@@ -2586,28 +2594,83 @@
         "p95_latency": 20,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
-        "hit_at_1": 0,
+        "hit_at_1": 1,
         "hit_at_5": 1,
-        "mrr": 0.2
+        "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 33,
-        "retrieval_latency_ms": 33,
+        "total_latency_ms": 26,
+        "retrieval_latency_ms": 26,
         "llm_latency_ms": 0,
-        "p50_latency": 33,
-        "p95_latency": 33,
+        "p50_latency": 26,
+        "p95_latency": 26,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
-        "hit_at_1": 0,
+        "hit_at_1": 1,
         "hit_at_5": 1,
-        "mrr": 0.2
+        "mrr": 1
       },
       "delta": {
-        "total_latency_ms": 13,
-        "retrieval_latency_ms": 13,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 13,
-        "p95_latency": 13,
+        "p50_latency": 6,
+        "p95_latency": 6,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "ROM 8:27-29",
+        "PSA 119:161-163",
+        "ROM 4:13-15",
+        "ROM 9:8",
+        "GAL 3:18"
+      ],
+      "optimized_top_refs": [
+        "ROM 8:27-29",
+        "PSA 119:161-163",
+        "ROM 4:13-15",
+        "ROM 9:8",
+        "GAL 3:18"
+      ]
+    },
+    {
+      "id": "EXG-03",
+      "category": "exegesis",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 19,
+        "retrieval_latency_ms": 19,
+        "llm_latency_ms": 0,
+        "p50_latency": 19,
+        "p95_latency": 19,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 9,
+        "retrieval_latency_ms": 9,
+        "llm_latency_ms": 0,
+        "p50_latency": 9,
+        "p95_latency": 9,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -10,
+        "retrieval_latency_ms": -10,
+        "llm_latency_ms": 0,
+        "p50_latency": -10,
+        "p95_latency": -10,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2616,17 +2679,17 @@
       },
       "baseline_top_refs": [
         "REV 22:12-14",
+        "LUK 23:50-52",
         "EXO 12:1-3",
-        "MRK 13:18-20",
-        "JHN 1:2",
-        "GEN 1:1"
+        "LUK 24:19",
+        "JAS 2:17"
       ],
       "optimized_top_refs": [
         "REV 22:12-14",
+        "LUK 23:50-52",
         "EXO 12:1-3",
-        "MRK 13:18-20",
-        "JHN 1:2",
-        "GEN 1:1"
+        "LUK 24:19",
+        "JAS 2:17"
       ]
     },
     {
@@ -2634,11 +2697,11 @@
       "category": "exegesis",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 24,
-        "retrieval_latency_ms": 24,
+        "total_latency_ms": 15,
+        "retrieval_latency_ms": 15,
         "llm_latency_ms": 0,
-        "p50_latency": 24,
-        "p95_latency": 24,
+        "p50_latency": 15,
+        "p95_latency": 15,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2646,11 +2709,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 26,
-        "retrieval_latency_ms": 26,
+        "total_latency_ms": 12,
+        "retrieval_latency_ms": 12,
         "llm_latency_ms": 0,
-        "p50_latency": 26,
-        "p95_latency": 26,
+        "p50_latency": 12,
+        "p95_latency": 12,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2658,11 +2721,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": 2,
-        "retrieval_latency_ms": 2,
+        "total_latency_ms": -3,
+        "retrieval_latency_ms": -3,
         "llm_latency_ms": 0,
-        "p50_latency": 2,
-        "p95_latency": 2,
+        "p50_latency": -3,
+        "p95_latency": -3,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2671,17 +2734,17 @@
       },
       "baseline_top_refs": [
         "1CO 1:11-13",
-        "1TI 1:1-2",
-        "2TI 1:1-2",
-        "EPH 1:1",
-        "PHP 1:1"
+        "JOB 37:21-23",
+        "1CO 7:19-21",
+        "1CO 7:24",
+        "PSA 125:2"
       ],
       "optimized_top_refs": [
         "1CO 1:11-13",
-        "1TI 1:1-2",
-        "2TI 1:1-2",
-        "EPH 1:1",
-        "PHP 1:1"
+        "JOB 37:21-23",
+        "1CO 7:19-21",
+        "1CO 7:24",
+        "PSA 125:2"
       ]
     },
     {
@@ -2689,11 +2752,11 @@
       "category": "exegesis",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 42,
-        "retrieval_latency_ms": 42,
+        "total_latency_ms": 14,
+        "retrieval_latency_ms": 14,
         "llm_latency_ms": 0,
-        "p50_latency": 42,
-        "p95_latency": 42,
+        "p50_latency": 14,
+        "p95_latency": 14,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2701,11 +2764,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 27,
-        "retrieval_latency_ms": 27,
+        "total_latency_ms": 9,
+        "retrieval_latency_ms": 9,
         "llm_latency_ms": 0,
-        "p50_latency": 27,
-        "p95_latency": 27,
+        "p50_latency": 9,
+        "p95_latency": 9,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -2713,11 +2776,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -15,
-        "retrieval_latency_ms": -15,
+        "total_latency_ms": -5,
+        "retrieval_latency_ms": -5,
         "llm_latency_ms": 0,
-        "p50_latency": -15,
-        "p95_latency": -15,
+        "p50_latency": -5,
+        "p95_latency": -5,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2725,18 +2788,18 @@
         "mrr": 0
       },
       "baseline_top_refs": [
+        "JOB 15:2-4",
         "LUK 3:17-19",
-        "LUK 7:29-31",
-        "ROM 8:27-29",
-        "MRK 1:14",
-        "1JN 4:9"
+        "EPH 3:10-12",
+        "ECC 3:1",
+        "REV 17:13"
       ],
       "optimized_top_refs": [
+        "JOB 15:2-4",
         "LUK 3:17-19",
-        "LUK 7:29-31",
-        "ROM 8:27-29",
-        "MRK 1:14",
-        "1JN 4:9"
+        "EPH 3:10-12",
+        "ECC 3:1",
+        "REV 17:13"
       ]
     },
     {
@@ -2744,35 +2807,35 @@
       "category": "exegesis",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 50,
-        "retrieval_latency_ms": 50,
+        "total_latency_ms": 22,
+        "retrieval_latency_ms": 22,
         "llm_latency_ms": 0,
-        "p50_latency": 50,
-        "p95_latency": 50,
-        "precision_at_5": 0.2,
+        "p50_latency": 22,
+        "p95_latency": 22,
+        "precision_at_5": 0,
         "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 49,
-        "retrieval_latency_ms": 49,
+        "total_latency_ms": 22,
+        "retrieval_latency_ms": 22,
         "llm_latency_ms": 0,
-        "p50_latency": 49,
-        "p95_latency": 49,
-        "precision_at_5": 0.2,
+        "p50_latency": 22,
+        "p95_latency": 22,
+        "precision_at_5": 0,
         "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -1,
-        "retrieval_latency_ms": -1,
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
         "llm_latency_ms": 0,
-        "p50_latency": -1,
-        "p95_latency": -1,
+        "p50_latency": 0,
+        "p95_latency": 0,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2780,18 +2843,18 @@
         "mrr": 0
       },
       "baseline_top_refs": [
-        "GAL 2:19-21",
         "1CO 1:12-14",
+        "JER 49:10-12",
         "GAL 6:13-15",
         "GAL 3:1",
-        "ACT 24:24"
+        "ACT 2:36"
       ],
       "optimized_top_refs": [
-        "GAL 2:19-21",
         "1CO 1:12-14",
+        "JER 49:10-12",
         "GAL 6:13-15",
         "GAL 3:1",
-        "ACT 24:24"
+        "ACT 2:36"
       ]
     },
     {
@@ -2799,71 +2862,16 @@
       "category": "exegesis",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 26,
-        "retrieval_latency_ms": 26,
+        "total_latency_ms": 17,
+        "retrieval_latency_ms": 17,
         "llm_latency_ms": 0,
-        "p50_latency": 26,
-        "p95_latency": 26,
+        "p50_latency": 17,
+        "p95_latency": 17,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
         "hit_at_5": 1,
-        "mrr": 0.33
-      },
-      "optimized": {
-        "total_latency_ms": 36,
-        "retrieval_latency_ms": 36,
-        "llm_latency_ms": 0,
-        "p50_latency": 36,
-        "p95_latency": 36,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 1,
-        "mrr": 0.33
-      },
-      "delta": {
-        "total_latency_ms": 10,
-        "retrieval_latency_ms": 10,
-        "llm_latency_ms": 0,
-        "p50_latency": 10,
-        "p95_latency": 10,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "PRO 8:9-11",
-        "PRO 4:1-2",
-        "PRO 3:4-6",
-        "HEB 11:25",
-        "ACT 4:19"
-      ],
-      "optimized_top_refs": [
-        "PRO 8:9-11",
-        "PRO 4:1-2",
-        "PRO 3:4-6",
-        "HEB 11:25",
-        "ACT 4:19"
-      ]
-    },
-    {
-      "id": "EXG-08",
-      "category": "exegesis",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 54,
-        "retrieval_latency_ms": 54,
-        "llm_latency_ms": 0,
-        "p50_latency": 54,
-        "p95_latency": 54,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
+        "mrr": 0.5
       },
       "optimized": {
         "total_latency_ms": 18,
@@ -2873,16 +2881,71 @@
         "p95_latency": 18,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.5
+      },
+      "delta": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "PRO 8:32-34",
+        "PRO 3:4-6",
+        "HEB 11:24-26",
+        "PSA 50:17",
+        "ACT 4:19"
+      ],
+      "optimized_top_refs": [
+        "PRO 8:32-34",
+        "PRO 3:4-6",
+        "HEB 11:24-26",
+        "PSA 50:17",
+        "ACT 4:19"
+      ]
+    },
+    {
+      "id": "EXG-08",
+      "category": "exegesis",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 12,
+        "retrieval_latency_ms": 12,
+        "llm_latency_ms": 0,
+        "p50_latency": 12,
+        "p95_latency": 12,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "optimized": {
+        "total_latency_ms": 13,
+        "retrieval_latency_ms": 13,
+        "llm_latency_ms": 0,
+        "p50_latency": 13,
+        "p95_latency": 13,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
         "hit_at_1": 1,
         "hit_at_5": 1,
         "mrr": 1
       },
       "delta": {
-        "total_latency_ms": -36,
-        "retrieval_latency_ms": -36,
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
         "llm_latency_ms": 0,
-        "p50_latency": -36,
-        "p95_latency": -36,
+        "p50_latency": 1,
+        "p95_latency": 1,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2892,16 +2955,16 @@
       "baseline_top_refs": [
         "ISA 53:1-12",
         "MAT 13:14",
-        "2PE 1:20",
-        "ISA 20:3",
-        "ROM 12:6"
+        "HEB 4:5",
+        "DEU 18:10",
+        "HEB 5:6"
       ],
       "optimized_top_refs": [
         "ISA 53:1-12",
         "MAT 13:14",
-        "2PE 1:20",
-        "ISA 20:3",
-        "ROM 12:6"
+        "HEB 4:5",
+        "DEU 18:10",
+        "HEB 5:6"
       ]
     },
     {
@@ -2909,11 +2972,11 @@
       "category": "theology",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 41,
-        "retrieval_latency_ms": 41,
+        "total_latency_ms": 19,
+        "retrieval_latency_ms": 19,
         "llm_latency_ms": 0,
-        "p50_latency": 41,
-        "p95_latency": 41,
+        "p50_latency": 19,
+        "p95_latency": 19,
         "precision_at_5": 0.6,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -2921,11 +2984,11 @@
         "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 97,
-        "retrieval_latency_ms": 97,
+        "total_latency_ms": 13,
+        "retrieval_latency_ms": 13,
         "llm_latency_ms": 0,
-        "p50_latency": 97,
-        "p95_latency": 97,
+        "p50_latency": 13,
+        "p95_latency": 13,
         "precision_at_5": 0.6,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -2933,11 +2996,11 @@
         "mrr": 1
       },
       "delta": {
-        "total_latency_ms": 56,
-        "retrieval_latency_ms": 56,
+        "total_latency_ms": -6,
+        "retrieval_latency_ms": -6,
         "llm_latency_ms": 0,
-        "p50_latency": 56,
-        "p95_latency": 56,
+        "p50_latency": -6,
+        "p95_latency": -6,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -2964,395 +3027,6 @@
       "category": "theology",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 58,
-        "retrieval_latency_ms": 58,
-        "llm_latency_ms": 0,
-        "p50_latency": 58,
-        "p95_latency": 58,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 49,
-        "retrieval_latency_ms": 49,
-        "llm_latency_ms": 0,
-        "p50_latency": 49,
-        "p95_latency": 49,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": -9,
-        "retrieval_latency_ms": -9,
-        "llm_latency_ms": 0,
-        "p50_latency": -9,
-        "p95_latency": -9,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "COL 2:8-10",
-        "JHN 1:40-42",
-        "JHN 4:24-26",
-        "ACT 7:13",
-        "PSA 106:2"
-      ],
-      "optimized_top_refs": [
-        "COL 2:8-10",
-        "JHN 1:40-42",
-        "JHN 4:24-26",
-        "ACT 7:13",
-        "PSA 106:2"
-      ]
-    },
-    {
-      "id": "THL-03",
-      "category": "theology",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 3,
-        "retrieval_latency_ms": 3,
-        "llm_latency_ms": 0,
-        "p50_latency": 3,
-        "p95_latency": 3,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 9,
-        "retrieval_latency_ms": 9,
-        "llm_latency_ms": 0,
-        "p50_latency": 9,
-        "p95_latency": 9,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": 6,
-        "retrieval_latency_ms": 6,
-        "llm_latency_ms": 0,
-        "p50_latency": 6,
-        "p95_latency": 6,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "1CO 15:1"
-      ],
-      "optimized_top_refs": [
-        "1CO 15:1"
-      ]
-    },
-    {
-      "id": "THL-04",
-      "category": "theology",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 157,
-        "retrieval_latency_ms": 157,
-        "llm_latency_ms": 0,
-        "p50_latency": 157,
-        "p95_latency": 157,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 50,
-        "retrieval_latency_ms": 50,
-        "llm_latency_ms": 0,
-        "p50_latency": 50,
-        "p95_latency": 50,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": -107,
-        "retrieval_latency_ms": -107,
-        "llm_latency_ms": 0,
-        "p50_latency": -107,
-        "p95_latency": -107,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "MAT 5:33-35",
-        "COL 1:16-18",
-        "DAN 2:42-44",
-        "AMO 3:3",
-        "DEU 25:5"
-      ],
-      "optimized_top_refs": [
-        "MAT 5:33-35",
-        "COL 1:16-18",
-        "DAN 2:42-44",
-        "AMO 3:3",
-        "DEU 25:5"
-      ]
-    },
-    {
-      "id": "THL-05",
-      "category": "theology",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 39,
-        "retrieval_latency_ms": 39,
-        "llm_latency_ms": 0,
-        "p50_latency": 39,
-        "p95_latency": 39,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "optimized": {
-        "total_latency_ms": 15,
-        "retrieval_latency_ms": 15,
-        "llm_latency_ms": 0,
-        "p50_latency": 15,
-        "p95_latency": 15,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "delta": {
-        "total_latency_ms": -24,
-        "retrieval_latency_ms": -24,
-        "llm_latency_ms": 0,
-        "p50_latency": -24,
-        "p95_latency": -24,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "MAT 28:18-20",
-        "LUK 1:66-68",
-        "GAL 4:5-7",
-        "ACT 4:25",
-        "1JN 2:23"
-      ],
-      "optimized_top_refs": [
-        "MAT 28:18-20",
-        "LUK 1:66-68",
-        "GAL 4:5-7",
-        "ACT 4:25",
-        "1JN 2:23"
-      ]
-    },
-    {
-      "id": "THL-06",
-      "category": "theology",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 15,
-        "retrieval_latency_ms": 15,
-        "llm_latency_ms": 0,
-        "p50_latency": 15,
-        "p95_latency": 15,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "optimized": {
-        "total_latency_ms": 31,
-        "retrieval_latency_ms": 31,
-        "llm_latency_ms": 0,
-        "p50_latency": 31,
-        "p95_latency": 31,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "delta": {
-        "total_latency_ms": 16,
-        "retrieval_latency_ms": 16,
-        "llm_latency_ms": 0,
-        "p50_latency": 16,
-        "p95_latency": 16,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "JER 31:30-34",
-        "HEB 12:24",
-        "2PE 3:13",
-        "GAL 4:24",
-        "HEB 9:15"
-      ],
-      "optimized_top_refs": [
-        "JER 31:30-34",
-        "HEB 12:24",
-        "2PE 3:13",
-        "GAL 4:24",
-        "HEB 9:15"
-      ]
-    },
-    {
-      "id": "ETH-01",
-      "category": "ethics",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 154,
-        "retrieval_latency_ms": 154,
-        "llm_latency_ms": 0,
-        "p50_latency": 154,
-        "p95_latency": 154,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 35,
-        "retrieval_latency_ms": 35,
-        "llm_latency_ms": 0,
-        "p50_latency": 35,
-        "p95_latency": 35,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": -119,
-        "retrieval_latency_ms": -119,
-        "llm_latency_ms": 0,
-        "p50_latency": -119,
-        "p95_latency": -119,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "PSA 136:23-25",
-        "LEV 26:40-42",
-        "LUK 3:20-22",
-        "PSA 143:12",
-        "PSA 119:157"
-      ],
-      "optimized_top_refs": [
-        "PSA 136:23-25",
-        "LEV 26:40-42",
-        "LUK 3:20-22",
-        "PSA 143:12",
-        "PSA 119:157"
-      ]
-    },
-    {
-      "id": "ETH-02",
-      "category": "ethics",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 6,
-        "retrieval_latency_ms": 6,
-        "llm_latency_ms": 0,
-        "p50_latency": 6,
-        "p95_latency": 6,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 1,
-        "mrr": 0.25
-      },
-      "optimized": {
-        "total_latency_ms": 28,
-        "retrieval_latency_ms": 28,
-        "llm_latency_ms": 0,
-        "p50_latency": 28,
-        "p95_latency": 28,
-        "precision_at_5": 0.2,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 1,
-        "mrr": 0.25
-      },
-      "delta": {
-        "total_latency_ms": 22,
-        "retrieval_latency_ms": 22,
-        "llm_latency_ms": 0,
-        "p50_latency": 22,
-        "p95_latency": 22,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "PSA 34:12-14",
-        "1PE 3:9-11",
-        "2CO 6:6-8",
-        "PRO 18:21",
-        "JOB 33:16"
-      ],
-      "optimized_top_refs": [
-        "PSA 34:12-14",
-        "1PE 3:9-11",
-        "2CO 6:6-8",
-        "PRO 18:21",
-        "JOB 33:16"
-      ]
-    },
-    {
-      "id": "ETH-03",
-      "category": "ethics",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 20,
-        "retrieval_latency_ms": 20,
-        "llm_latency_ms": 0,
-        "p50_latency": 20,
-        "p95_latency": 20,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
         "total_latency_ms": 19,
         "retrieval_latency_ms": 19,
         "llm_latency_ms": 0,
@@ -3364,367 +3038,12 @@
         "hit_at_5": 0,
         "mrr": 0
       },
-      "delta": {
-        "total_latency_ms": -1,
-        "retrieval_latency_ms": -1,
-        "llm_latency_ms": 0,
-        "p50_latency": -1,
-        "p95_latency": -1,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "ISA 7:13-15",
-        "LEV 18:3-5",
-        "PSA 106:2-4",
-        "ROM 11:30-31",
-        "ISA 1:21"
-      ],
-      "optimized_top_refs": [
-        "ISA 7:13-15",
-        "LEV 18:3-5",
-        "PSA 106:2-4",
-        "ROM 11:30-31",
-        "ISA 1:21"
-      ]
-    },
-    {
-      "id": "ETH-04",
-      "category": "ethics",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 2,
-        "retrieval_latency_ms": 2,
-        "llm_latency_ms": 0,
-        "p50_latency": 2,
-        "p95_latency": 2,
-        "precision_at_5": 1,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
       "optimized": {
-        "total_latency_ms": 2,
-        "retrieval_latency_ms": 2,
+        "total_latency_ms": 17,
+        "retrieval_latency_ms": 17,
         "llm_latency_ms": 0,
-        "p50_latency": 2,
-        "p95_latency": 2,
-        "precision_at_5": 1,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "delta": {
-        "total_latency_ms": 0,
-        "retrieval_latency_ms": 0,
-        "llm_latency_ms": 0,
-        "p50_latency": 0,
-        "p95_latency": 0,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "ROM 13:1"
-      ],
-      "optimized_top_refs": [
-        "ROM 13:1"
-      ]
-    },
-    {
-      "id": "ETH-05",
-      "category": "ethics",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 32,
-        "retrieval_latency_ms": 32,
-        "llm_latency_ms": 0,
-        "p50_latency": 32,
-        "p95_latency": 32,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 16,
-        "retrieval_latency_ms": 16,
-        "llm_latency_ms": 0,
-        "p50_latency": 16,
-        "p95_latency": 16,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": -16,
-        "retrieval_latency_ms": -16,
-        "llm_latency_ms": 0,
-        "p50_latency": -16,
-        "p95_latency": -16,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "EXO 20:16",
-        "PRO 6:16-19",
-        "EPH 4:25",
-        "PRO 12:22",
-        "NUM 16:9-11"
-      ],
-      "optimized_top_refs": [
-        "EXO 20:16",
-        "PRO 6:16-19",
-        "EPH 4:25",
-        "PRO 12:22",
-        "NUM 16:9-11"
-      ]
-    },
-    {
-      "id": "LNG-01",
-      "category": "original_language",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 134,
-        "retrieval_latency_ms": 134,
-        "llm_latency_ms": 0,
-        "p50_latency": 134,
-        "p95_latency": 134,
-        "precision_at_5": 0.25,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "optimized": {
-        "total_latency_ms": 3,
-        "retrieval_latency_ms": 3,
-        "llm_latency_ms": 0,
-        "p50_latency": 3,
-        "p95_latency": 3,
-        "precision_at_5": 0.25,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "delta": {
-        "total_latency_ms": -131,
-        "retrieval_latency_ms": -131,
-        "llm_latency_ms": 0,
-        "p50_latency": -131,
-        "p95_latency": -131,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "PSA 136:1",
-        "1CH 16:34",
-        "PSA 118:1",
-        "1CH 16:41"
-      ],
-      "optimized_top_refs": [
-        "PSA 136:1",
-        "1CH 16:34",
-        "PSA 118:1",
-        "1CH 16:41"
-      ]
-    },
-    {
-      "id": "LNG-02",
-      "category": "original_language",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 2,
-        "retrieval_latency_ms": 2,
-        "llm_latency_ms": 0,
-        "p50_latency": 2,
-        "p95_latency": 2,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 1,
-        "retrieval_latency_ms": 1,
-        "llm_latency_ms": 0,
-        "p50_latency": 1,
-        "p95_latency": 1,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": -1,
-        "retrieval_latency_ms": -1,
-        "llm_latency_ms": 0,
-        "p50_latency": -1,
-        "p95_latency": -1,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "JHN 21:1"
-      ],
-      "optimized_top_refs": [
-        "JHN 21:1"
-      ]
-    },
-    {
-      "id": "LNG-03",
-      "category": "original_language",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 7,
-        "retrieval_latency_ms": 7,
-        "llm_latency_ms": 0,
-        "p50_latency": 7,
-        "p95_latency": 7,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 19,
-        "retrieval_latency_ms": 19,
-        "llm_latency_ms": 0,
-        "p50_latency": 19,
-        "p95_latency": 19,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": 12,
-        "retrieval_latency_ms": 12,
-        "llm_latency_ms": 0,
-        "p50_latency": 12,
-        "p95_latency": 12,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "EXO 10:12-14",
-        "JOB 34:13-15",
-        "PSA 148:7-9",
-        "JOB 33:4",
-        "JOB 32:8"
-      ],
-      "optimized_top_refs": [
-        "EXO 10:12-14",
-        "JOB 34:13-15",
-        "PSA 148:7-9",
-        "JOB 33:4",
-        "JOB 32:8"
-      ]
-    },
-    {
-      "id": "LNG-04",
-      "category": "original_language",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 16,
-        "retrieval_latency_ms": 16,
-        "llm_latency_ms": 0,
-        "p50_latency": 16,
-        "p95_latency": 16,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 20,
-        "retrieval_latency_ms": 20,
-        "llm_latency_ms": 0,
-        "p50_latency": 20,
-        "p95_latency": 20,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "delta": {
-        "total_latency_ms": 4,
-        "retrieval_latency_ms": 4,
-        "llm_latency_ms": 0,
-        "p50_latency": 4,
-        "p95_latency": 4,
-        "precision_at_5": 0,
-        "citation_validity_rate": 0,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "baseline_top_refs": [
-        "PHP 2:1-2",
-        "ACT 18:4-6",
-        "1TI 1:1-2",
-        "GAL 3:28",
-        "2TI 1:1"
-      ],
-      "optimized_top_refs": [
-        "PHP 2:1-2",
-        "ACT 18:4-6",
-        "1TI 1:1-2",
-        "GAL 3:28",
-        "2TI 1:1"
-      ]
-    },
-    {
-      "id": "LNG-05",
-      "category": "original_language",
-      "cacheMode": "miss",
-      "baseline": {
-        "total_latency_ms": 29,
-        "retrieval_latency_ms": 29,
-        "llm_latency_ms": 0,
-        "p50_latency": 29,
-        "p95_latency": 29,
-        "precision_at_5": 0,
-        "citation_validity_rate": 1,
-        "hit_at_1": 0,
-        "hit_at_5": 0,
-        "mrr": 0
-      },
-      "optimized": {
-        "total_latency_ms": 27,
-        "retrieval_latency_ms": 27,
-        "llm_latency_ms": 0,
-        "p50_latency": 27,
-        "p95_latency": 27,
+        "p50_latency": 17,
+        "p95_latency": 17,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -3744,30 +3063,30 @@
         "mrr": 0
       },
       "baseline_top_refs": [
-        "EXO 25:36-38",
-        "2KI 18:27-29",
-        "GAL 3:17-19",
-        "NUM 27:12",
-        "PSA 119:140"
+        "COL 2:8-10",
+        "ACT 7:12-14",
+        "PSA 106:1-3",
+        "JHN 1:41",
+        "JHN 4:25"
       ],
       "optimized_top_refs": [
-        "EXO 25:36-38",
-        "2KI 18:27-29",
-        "GAL 3:17-19",
-        "NUM 27:12",
-        "PSA 119:140"
+        "COL 2:8-10",
+        "ACT 7:12-14",
+        "PSA 106:1-3",
+        "JHN 1:41",
+        "JHN 4:25"
       ]
     },
     {
-      "id": "MLT-01",
-      "category": "multiturn",
+      "id": "THL-03",
+      "category": "theology",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 57,
-        "retrieval_latency_ms": 57,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 57,
-        "p95_latency": 57,
+        "p50_latency": 6,
+        "p95_latency": 6,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -3775,11 +3094,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 49,
-        "retrieval_latency_ms": 49,
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
         "llm_latency_ms": 0,
-        "p50_latency": 49,
-        "p95_latency": 49,
+        "p50_latency": 1,
+        "p95_latency": 1,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -3787,11 +3106,747 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -8,
-        "retrieval_latency_ms": -8,
+        "total_latency_ms": -5,
+        "retrieval_latency_ms": -5,
         "llm_latency_ms": 0,
-        "p50_latency": -8,
-        "p95_latency": -8,
+        "p50_latency": -5,
+        "p95_latency": -5,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "1CO 15:1"
+      ],
+      "optimized_top_refs": [
+        "1CO 15:1"
+      ]
+    },
+    {
+      "id": "THL-04",
+      "category": "theology",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 14,
+        "retrieval_latency_ms": 14,
+        "llm_latency_ms": 0,
+        "p50_latency": 14,
+        "p95_latency": 14,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 14,
+        "retrieval_latency_ms": 14,
+        "llm_latency_ms": 0,
+        "p50_latency": 14,
+        "p95_latency": 14,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "COL 1:16-18",
+        "1SA 16:8-10",
+        "JOB 34:19-21",
+        "DAN 5:18"
+      ],
+      "optimized_top_refs": [
+        "COL 1:16-18",
+        "1SA 16:8-10",
+        "JOB 34:19-21",
+        "DAN 5:18"
+      ]
+    },
+    {
+      "id": "THL-05",
+      "category": "theology",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 10,
+        "retrieval_latency_ms": 10,
+        "llm_latency_ms": 0,
+        "p50_latency": 10,
+        "p95_latency": 10,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.33
+      },
+      "optimized": {
+        "total_latency_ms": 10,
+        "retrieval_latency_ms": 10,
+        "llm_latency_ms": 0,
+        "p50_latency": 10,
+        "p95_latency": 10,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.33
+      },
+      "delta": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "EZK 43:9-11",
+        "LUK 1:66-68",
+        "MAT 28:18-20",
+        "PSA 106:2",
+        "JOB 15:17"
+      ],
+      "optimized_top_refs": [
+        "EZK 43:9-11",
+        "LUK 1:66-68",
+        "MAT 28:18-20",
+        "PSA 106:2",
+        "JOB 15:17"
+      ]
+    },
+    {
+      "id": "THL-06",
+      "category": "theology",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 11,
+        "retrieval_latency_ms": 11,
+        "llm_latency_ms": 0,
+        "p50_latency": 11,
+        "p95_latency": 11,
+        "precision_at_5": 0.4,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "optimized": {
+        "total_latency_ms": 8,
+        "retrieval_latency_ms": 8,
+        "llm_latency_ms": 0,
+        "p50_latency": 8,
+        "p95_latency": 8,
+        "precision_at_5": 0.4,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "delta": {
+        "total_latency_ms": -3,
+        "retrieval_latency_ms": -3,
+        "llm_latency_ms": 0,
+        "p50_latency": -3,
+        "p95_latency": -3,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "JER 31:30-34",
+        "GAL 4:24",
+        "EST 4:12",
+        "HEB 9:15",
+        "HEB 8:13"
+      ],
+      "optimized_top_refs": [
+        "JER 31:30-34",
+        "GAL 4:24",
+        "EST 4:12",
+        "HEB 9:15",
+        "HEB 8:13"
+      ]
+    },
+    {
+      "id": "ETH-01",
+      "category": "ethics",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
+        "llm_latency_ms": 0,
+        "p50_latency": 6,
+        "p95_latency": 6,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
+        "llm_latency_ms": 0,
+        "p50_latency": 5,
+        "p95_latency": 5,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -1,
+        "retrieval_latency_ms": -1,
+        "llm_latency_ms": 0,
+        "p50_latency": -1,
+        "p95_latency": -1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "PSA 136:23-25",
+        "GEN 49:22-24",
+        "NUM 35:21-23",
+        "LEV 26:24",
+        "HEB 12:3"
+      ],
+      "optimized_top_refs": [
+        "PSA 136:23-25",
+        "GEN 49:22-24",
+        "NUM 35:21-23",
+        "LEV 26:24",
+        "HEB 12:3"
+      ]
+    },
+    {
+      "id": "ETH-02",
+      "category": "ethics",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
+        "llm_latency_ms": 0,
+        "p50_latency": 5,
+        "p95_latency": 5,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.2
+      },
+      "optimized": {
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
+        "llm_latency_ms": 0,
+        "p50_latency": 6,
+        "p95_latency": 6,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.2
+      },
+      "delta": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "JOB 33:15-17",
+        "PSA 34:12-14",
+        "1PE 3:9-11",
+        "2CO 6:7",
+        "PRO 18:21"
+      ],
+      "optimized_top_refs": [
+        "JOB 33:15-17",
+        "PSA 34:12-14",
+        "1PE 3:9-11",
+        "2CO 6:7",
+        "PRO 18:21"
+      ]
+    },
+    {
+      "id": "ETH-03",
+      "category": "ethics",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 9,
+        "retrieval_latency_ms": 9,
+        "llm_latency_ms": 0,
+        "p50_latency": 9,
+        "p95_latency": 9,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 8,
+        "retrieval_latency_ms": 8,
+        "llm_latency_ms": 0,
+        "p50_latency": 8,
+        "p95_latency": 8,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -1,
+        "retrieval_latency_ms": -1,
+        "llm_latency_ms": 0,
+        "p50_latency": -1,
+        "p95_latency": -1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "ISA 7:13-15",
+        "PSA 106:2-4",
+        "ACT 3:8-10",
+        "JHN 1:36",
+        "PSA 69:32"
+      ],
+      "optimized_top_refs": [
+        "ISA 7:13-15",
+        "PSA 106:2-4",
+        "ACT 3:8-10",
+        "JHN 1:36",
+        "PSA 69:32"
+      ]
+    },
+    {
+      "id": "ETH-04",
+      "category": "ethics",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "optimized": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "delta": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "ROM 13:1"
+      ],
+      "optimized_top_refs": [
+        "ROM 13:1"
+      ]
+    },
+    {
+      "id": "ETH-05",
+      "category": "ethics",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 12,
+        "retrieval_latency_ms": 12,
+        "llm_latency_ms": 0,
+        "p50_latency": 12,
+        "p95_latency": 12,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
+        "llm_latency_ms": 0,
+        "p50_latency": 6,
+        "p95_latency": 6,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -6,
+        "retrieval_latency_ms": -6,
+        "llm_latency_ms": 0,
+        "p50_latency": -6,
+        "p95_latency": -6,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "EXO 20:16",
+        "PRO 6:16-19",
+        "EPH 4:25",
+        "PRO 12:22",
+        "EPH 3:5-7"
+      ],
+      "optimized_top_refs": [
+        "EXO 20:16",
+        "PRO 6:16-19",
+        "EPH 4:25",
+        "PRO 12:22",
+        "EPH 3:5-7"
+      ]
+    },
+    {
+      "id": "LNG-01",
+      "category": "original_language",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "optimized": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "delta": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "PSA 136:1"
+      ],
+      "optimized_top_refs": [
+        "PSA 136:1"
+      ]
+    },
+    {
+      "id": "LNG-02",
+      "category": "original_language",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 1,
+        "retrieval_latency_ms": 1,
+        "llm_latency_ms": 0,
+        "p50_latency": 1,
+        "p95_latency": 1,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "JHN 21:1"
+      ],
+      "optimized_top_refs": [
+        "JHN 21:1"
+      ]
+    },
+    {
+      "id": "LNG-03",
+      "category": "original_language",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
+        "llm_latency_ms": 0,
+        "p50_latency": 4,
+        "p95_latency": 4,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
+        "llm_latency_ms": 0,
+        "p50_latency": 4,
+        "p95_latency": 4,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "JOB 34:13-15",
+        "PSA 78:25-27",
+        "JOB 33:3-5",
+        "JOB 32:8",
+        "2KI 18:28"
+      ],
+      "optimized_top_refs": [
+        "JOB 34:13-15",
+        "PSA 78:25-27",
+        "JOB 33:3-5",
+        "JOB 32:8",
+        "2KI 18:28"
+      ]
+    },
+    {
+      "id": "LNG-04",
+      "category": "original_language",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 13,
+        "retrieval_latency_ms": 13,
+        "llm_latency_ms": 0,
+        "p50_latency": 13,
+        "p95_latency": 13,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 7,
+        "retrieval_latency_ms": 7,
+        "llm_latency_ms": 0,
+        "p50_latency": 7,
+        "p95_latency": 7,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -6,
+        "retrieval_latency_ms": -6,
+        "llm_latency_ms": 0,
+        "p50_latency": -6,
+        "p95_latency": -6,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "PHP 2:1-2",
+        "NEH 10:31-33",
+        "1TI 1:1-2",
+        "2TI 1:1",
+        "EPH 1:1"
+      ],
+      "optimized_top_refs": [
+        "PHP 2:1-2",
+        "NEH 10:31-33",
+        "1TI 1:1-2",
+        "2TI 1:1",
+        "EPH 1:1"
+      ]
+    },
+    {
+      "id": "LNG-05",
+      "category": "original_language",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 11,
+        "retrieval_latency_ms": 11,
+        "llm_latency_ms": 0,
+        "p50_latency": 11,
+        "p95_latency": 11,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 13,
+        "retrieval_latency_ms": 13,
+        "llm_latency_ms": 0,
+        "p50_latency": 13,
+        "p95_latency": 13,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 2,
+        "retrieval_latency_ms": 2,
+        "llm_latency_ms": 0,
+        "p50_latency": 2,
+        "p95_latency": 2,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "2KI 18:27-29",
+        "EXO 25:36-38",
+        "NUM 27:11-13",
+        "GAL 3:18",
+        "ISA 32:20"
+      ],
+      "optimized_top_refs": [
+        "2KI 18:27-29",
+        "EXO 25:36-38",
+        "NUM 27:11-13",
+        "GAL 3:18",
+        "ISA 32:20"
+      ]
+    },
+    {
+      "id": "MLT-01",
+      "category": "multiturn",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 22,
+        "retrieval_latency_ms": 22,
+        "llm_latency_ms": 0,
+        "p50_latency": 22,
+        "p95_latency": 22,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 16,
+        "retrieval_latency_ms": 16,
+        "llm_latency_ms": 0,
+        "p50_latency": 16,
+        "p95_latency": 16,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": -6,
+        "retrieval_latency_ms": -6,
+        "llm_latency_ms": 0,
+        "p50_latency": -6,
+        "p95_latency": -6,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -3818,35 +3873,35 @@
       "category": "multiturn",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 68,
-        "retrieval_latency_ms": 68,
+        "total_latency_ms": 28,
+        "retrieval_latency_ms": 28,
         "llm_latency_ms": 0,
-        "p50_latency": 68,
-        "p95_latency": 68,
-        "precision_at_5": 0.4,
+        "p50_latency": 28,
+        "p95_latency": 28,
+        "precision_at_5": 0,
         "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 64,
-        "retrieval_latency_ms": 64,
+        "total_latency_ms": 27,
+        "retrieval_latency_ms": 27,
         "llm_latency_ms": 0,
-        "p50_latency": 64,
-        "p95_latency": 64,
-        "precision_at_5": 0.4,
+        "p50_latency": 27,
+        "p95_latency": 27,
+        "precision_at_5": 0,
         "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -4,
-        "retrieval_latency_ms": -4,
+        "total_latency_ms": -1,
+        "retrieval_latency_ms": -1,
         "llm_latency_ms": 0,
-        "p50_latency": -4,
-        "p95_latency": -4,
+        "p50_latency": -1,
+        "p95_latency": -1,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -3854,18 +3909,16 @@
         "mrr": 0
       },
       "baseline_top_refs": [
-        "GEN 41:45-47",
         "GEN 45:3-5",
-        "GEN 50:13-15",
-        "GEN 45:16",
-        "GEN 47:20"
+        "GEN 41:11-13",
+        "GEN 41:7-9",
+        "GEN 37:28"
       ],
       "optimized_top_refs": [
-        "GEN 41:45-47",
         "GEN 45:3-5",
-        "GEN 50:13-15",
-        "GEN 45:16",
-        "GEN 47:20"
+        "GEN 41:11-13",
+        "GEN 41:7-9",
+        "GEN 37:28"
       ]
     },
     {
@@ -3873,11 +3926,11 @@
       "category": "multiturn",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 4,
-        "retrieval_latency_ms": 4,
+        "total_latency_ms": 2,
+        "retrieval_latency_ms": 2,
         "llm_latency_ms": 0,
-        "p50_latency": 4,
-        "p95_latency": 4,
+        "p50_latency": 2,
+        "p95_latency": 2,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -3885,11 +3938,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 5,
-        "retrieval_latency_ms": 5,
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
         "llm_latency_ms": 0,
-        "p50_latency": 5,
-        "p95_latency": 5,
+        "p50_latency": 0,
+        "p95_latency": 0,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -3897,11 +3950,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": 1,
-        "retrieval_latency_ms": 1,
+        "total_latency_ms": -2,
+        "retrieval_latency_ms": -2,
         "llm_latency_ms": 0,
-        "p50_latency": 1,
-        "p95_latency": 1,
+        "p50_latency": -2,
+        "p95_latency": -2,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -3920,35 +3973,35 @@
       "category": "multiturn",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 66,
-        "retrieval_latency_ms": 66,
+        "total_latency_ms": 24,
+        "retrieval_latency_ms": 24,
         "llm_latency_ms": 0,
-        "p50_latency": 66,
-        "p95_latency": 66,
-        "precision_at_5": 0.8,
+        "p50_latency": 24,
+        "p95_latency": 24,
+        "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
         "hit_at_5": 1,
         "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 69,
-        "retrieval_latency_ms": 69,
+        "total_latency_ms": 23,
+        "retrieval_latency_ms": 23,
         "llm_latency_ms": 0,
-        "p50_latency": 69,
-        "p95_latency": 69,
-        "precision_at_5": 0.8,
+        "p50_latency": 23,
+        "p95_latency": 23,
+        "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
         "hit_at_5": 1,
         "mrr": 1
       },
       "delta": {
-        "total_latency_ms": 3,
-        "retrieval_latency_ms": 3,
+        "total_latency_ms": -1,
+        "retrieval_latency_ms": -1,
         "llm_latency_ms": 0,
-        "p50_latency": 3,
-        "p95_latency": 3,
+        "p50_latency": -1,
+        "p95_latency": -1,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -3957,17 +4010,17 @@
       },
       "baseline_top_refs": [
         "NEH 4:1-2",
-        "NEH 6:11-13",
-        "NEH 4:6-8",
-        "NEH 6:1",
-        "NEH 2:10"
+        "ISA 48:14-16",
+        "PSA 94:13-15",
+        "PSA 55:20",
+        "2SA 13:27"
       ],
       "optimized_top_refs": [
         "NEH 4:1-2",
-        "NEH 6:11-13",
-        "NEH 4:6-8",
-        "NEH 6:1",
-        "NEH 2:10"
+        "ISA 48:14-16",
+        "PSA 94:13-15",
+        "PSA 55:20",
+        "2SA 13:27"
       ]
     },
     {
@@ -3975,35 +4028,35 @@
       "category": "multiturn",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 58,
-        "retrieval_latency_ms": 58,
+        "total_latency_ms": 26,
+        "retrieval_latency_ms": 26,
         "llm_latency_ms": 0,
-        "p50_latency": 58,
-        "p95_latency": 58,
-        "precision_at_5": 0.4,
+        "p50_latency": 26,
+        "p95_latency": 26,
+        "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
         "hit_at_5": 1,
         "mrr": 0.5
       },
       "optimized": {
-        "total_latency_ms": 63,
-        "retrieval_latency_ms": 63,
+        "total_latency_ms": 32,
+        "retrieval_latency_ms": 32,
         "llm_latency_ms": 0,
-        "p50_latency": 63,
-        "p95_latency": 63,
-        "precision_at_5": 0.4,
+        "p50_latency": 32,
+        "p95_latency": 32,
+        "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
         "hit_at_5": 1,
         "mrr": 0.5
       },
       "delta": {
-        "total_latency_ms": 5,
-        "retrieval_latency_ms": 5,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 5,
-        "p95_latency": 5,
+        "p50_latency": 6,
+        "p95_latency": 6,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -4014,15 +4067,15 @@
         "ACT 10:1-2",
         "ACT 10:16-18",
         "ACT 10:3-4",
-        "ACT 10:25",
-        "LUK 1:68"
+        "HAB 1:1",
+        "NUM 18:1"
       ],
       "optimized_top_refs": [
         "ACT 10:1-2",
         "ACT 10:16-18",
         "ACT 10:3-4",
-        "ACT 10:25",
-        "LUK 1:68"
+        "HAB 1:1",
+        "NUM 18:1"
       ]
     },
     {
@@ -4030,11 +4083,11 @@
       "category": "adversarial",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 39,
-        "retrieval_latency_ms": 39,
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
         "llm_latency_ms": 0,
-        "p50_latency": 39,
-        "p95_latency": 39,
+        "p50_latency": 4,
+        "p95_latency": 4,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -4042,11 +4095,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 5,
-        "retrieval_latency_ms": 5,
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
         "llm_latency_ms": 0,
-        "p50_latency": 5,
-        "p95_latency": 5,
+        "p50_latency": 4,
+        "p95_latency": 4,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -4054,11 +4107,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -34,
-        "retrieval_latency_ms": -34,
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
         "llm_latency_ms": 0,
-        "p50_latency": -34,
-        "p95_latency": -34,
+        "p50_latency": 0,
+        "p95_latency": 0,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -4085,11 +4138,11 @@
       "category": "adversarial",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 638,
-        "retrieval_latency_ms": 638,
+        "total_latency_ms": 10,
+        "retrieval_latency_ms": 10,
         "llm_latency_ms": 0,
-        "p50_latency": 638,
-        "p95_latency": 638,
+        "p50_latency": 10,
+        "p95_latency": 10,
         "precision_at_5": 1,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -4097,11 +4150,11 @@
         "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 5,
-        "retrieval_latency_ms": 5,
+        "total_latency_ms": 6,
+        "retrieval_latency_ms": 6,
         "llm_latency_ms": 0,
-        "p50_latency": 5,
-        "p95_latency": 5,
+        "p50_latency": 6,
+        "p95_latency": 6,
         "precision_at_5": 1,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -4109,11 +4162,11 @@
         "mrr": 1
       },
       "delta": {
-        "total_latency_ms": -633,
-        "retrieval_latency_ms": -633,
+        "total_latency_ms": -4,
+        "retrieval_latency_ms": -4,
         "llm_latency_ms": 0,
-        "p50_latency": -633,
-        "p95_latency": -633,
+        "p50_latency": -4,
+        "p95_latency": -4,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -4140,11 +4193,11 @@
       "category": "adversarial",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 32,
-        "retrieval_latency_ms": 32,
+        "total_latency_ms": 10,
+        "retrieval_latency_ms": 10,
         "llm_latency_ms": 0,
-        "p50_latency": 32,
-        "p95_latency": 32,
+        "p50_latency": 10,
+        "p95_latency": 10,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -4152,11 +4205,11 @@
         "mrr": 0
       },
       "optimized": {
-        "total_latency_ms": 19,
-        "retrieval_latency_ms": 19,
+        "total_latency_ms": 8,
+        "retrieval_latency_ms": 8,
         "llm_latency_ms": 0,
-        "p50_latency": 19,
-        "p95_latency": 19,
+        "p50_latency": 8,
+        "p95_latency": 8,
         "precision_at_5": 0,
         "citation_validity_rate": 1,
         "hit_at_1": 0,
@@ -4164,11 +4217,11 @@
         "mrr": 0
       },
       "delta": {
-        "total_latency_ms": -13,
-        "retrieval_latency_ms": -13,
+        "total_latency_ms": -2,
+        "retrieval_latency_ms": -2,
         "llm_latency_ms": 0,
-        "p50_latency": -13,
-        "p95_latency": -13,
+        "p50_latency": -2,
+        "p95_latency": -2,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -4176,18 +4229,18 @@
         "mrr": 0
       },
       "baseline_top_refs": [
-        "LEV 22:12-14",
         "GEN 30:39-41",
         "PSA 45:1-2",
-        "PRO 26:11",
-        "JOB 33:25"
+        "PRO 26:10-12",
+        "ECC 12:7",
+        "PSA 74:6"
       ],
       "optimized_top_refs": [
-        "LEV 22:12-14",
         "GEN 30:39-41",
         "PSA 45:1-2",
-        "PRO 26:11",
-        "JOB 33:25"
+        "PRO 26:10-12",
+        "ECC 12:7",
+        "PSA 74:6"
       ]
     },
     {
@@ -4195,11 +4248,11 @@
       "category": "adversarial",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 139,
-        "retrieval_latency_ms": 139,
+        "total_latency_ms": 76,
+        "retrieval_latency_ms": 76,
         "llm_latency_ms": 0,
-        "p50_latency": 139,
-        "p95_latency": 139,
+        "p50_latency": 76,
+        "p95_latency": 76,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -4207,11 +4260,11 @@
         "mrr": 1
       },
       "optimized": {
-        "total_latency_ms": 121,
-        "retrieval_latency_ms": 121,
+        "total_latency_ms": 58,
+        "retrieval_latency_ms": 58,
         "llm_latency_ms": 0,
-        "p50_latency": 121,
-        "p95_latency": 121,
+        "p50_latency": 58,
+        "p95_latency": 58,
         "precision_at_5": 0.2,
         "citation_validity_rate": 1,
         "hit_at_1": 1,
@@ -4233,16 +4286,16 @@
       "baseline_top_refs": [
         "PSA 23:1-6",
         "NUM 26:62",
-        "1KI 20:24",
-        "ISA 9:10",
-        "GEN 24:21"
+        "JOB 11:6",
+        "JHN 16:15",
+        "ISA 9:10"
       ],
       "optimized_top_refs": [
         "PSA 23:1-6",
         "NUM 26:62",
-        "1KI 20:24",
-        "ISA 9:10",
-        "GEN 24:21"
+        "JOB 11:6",
+        "JHN 16:15",
+        "ISA 9:10"
       ]
     },
     {
@@ -4250,18 +4303,6 @@
       "category": "adversarial",
       "cacheMode": "miss",
       "baseline": {
-        "total_latency_ms": 1,
-        "retrieval_latency_ms": 1,
-        "llm_latency_ms": 0,
-        "p50_latency": 1,
-        "p95_latency": 1,
-        "precision_at_5": 1,
-        "citation_validity_rate": 1,
-        "hit_at_1": 1,
-        "hit_at_5": 1,
-        "mrr": 1
-      },
-      "optimized": {
         "total_latency_ms": 2,
         "retrieval_latency_ms": 2,
         "llm_latency_ms": 0,
@@ -4273,12 +4314,24 @@
         "hit_at_5": 1,
         "mrr": 1
       },
-      "delta": {
-        "total_latency_ms": 1,
-        "retrieval_latency_ms": 1,
+      "optimized": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
         "llm_latency_ms": 0,
-        "p50_latency": 1,
-        "p95_latency": 1,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 1,
+        "citation_validity_rate": 1,
+        "hit_at_1": 1,
+        "hit_at_5": 1,
+        "mrr": 1
+      },
+      "delta": {
+        "total_latency_ms": -2,
+        "retrieval_latency_ms": -2,
+        "llm_latency_ms": 0,
+        "p50_latency": -2,
+        "p95_latency": -2,
         "precision_at_5": 0,
         "citation_validity_rate": 0,
         "hit_at_1": 0,
@@ -4287,6 +4340,171 @@
       },
       "baseline_top_refs": [],
       "optimized_top_refs": []
+    },
+    {
+      "id": "GRG-01",
+      "category": "graphrag",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
+        "llm_latency_ms": 0,
+        "p50_latency": 5,
+        "p95_latency": 5,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.5
+      },
+      "optimized": {
+        "total_latency_ms": 9,
+        "retrieval_latency_ms": 9,
+        "llm_latency_ms": 0,
+        "p50_latency": 9,
+        "p95_latency": 9,
+        "precision_at_5": 0.2,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 1,
+        "mrr": 0.5
+      },
+      "delta": {
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
+        "llm_latency_ms": 0,
+        "p50_latency": 4,
+        "p95_latency": 4,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "EPH 2:8-10",
+        "JAS 2:14-26",
+        "ROM 3:28",
+        "GAL 2:16",
+        "ROM 4:4-5"
+      ],
+      "optimized_top_refs": [
+        "EPH 2:8-10",
+        "JAS 2:14-26",
+        "ROM 3:28",
+        "GAL 2:16",
+        "ROM 4:4-5"
+      ]
+    },
+    {
+      "id": "GRG-02",
+      "category": "graphrag",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
+        "llm_latency_ms": 0,
+        "p50_latency": 5,
+        "p95_latency": 5,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 5,
+        "retrieval_latency_ms": 5,
+        "llm_latency_ms": 0,
+        "p50_latency": 5,
+        "p95_latency": 5,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "1TH 5:19-21",
+        "ACT 13:26-28",
+        "ACT 1:15-17",
+        "1CO 13:8",
+        "1TI 1:18"
+      ],
+      "optimized_top_refs": [
+        "1TH 5:19-21",
+        "ACT 13:26-28",
+        "ACT 1:15-17",
+        "1CO 13:8",
+        "1TI 1:18"
+      ]
+    },
+    {
+      "id": "GRG-03",
+      "category": "graphrag",
+      "cacheMode": "miss",
+      "baseline": {
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
+        "llm_latency_ms": 0,
+        "p50_latency": 4,
+        "p95_latency": 4,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "optimized": {
+        "total_latency_ms": 4,
+        "retrieval_latency_ms": 4,
+        "llm_latency_ms": 0,
+        "p50_latency": 4,
+        "p95_latency": 4,
+        "precision_at_5": 0,
+        "citation_validity_rate": 1,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "delta": {
+        "total_latency_ms": 0,
+        "retrieval_latency_ms": 0,
+        "llm_latency_ms": 0,
+        "p50_latency": 0,
+        "p95_latency": 0,
+        "precision_at_5": 0,
+        "citation_validity_rate": 0,
+        "hit_at_1": 0,
+        "hit_at_5": 0,
+        "mrr": 0
+      },
+      "baseline_top_refs": [
+        "MAT 22:35-37",
+        "ROM 11:5-7",
+        "JHN 1:15-17",
+        "ROM 7:12",
+        "EST 2:17"
+      ],
+      "optimized_top_refs": [
+        "MAT 22:35-37",
+        "ROM 11:5-7",
+        "JHN 1:15-17",
+        "ROM 7:12",
+        "EST 2:17"
+      ]
     }
   ]
 }

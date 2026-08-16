@@ -1537,5 +1537,68 @@
       "1 JHN 99:99",
       "invented verse"
     ]
+  },
+  {
+    "id": "GRG-01",
+    "category": "graphrag",
+    "intent": "TOPICAL_QUERY",
+    "cacheMode": "miss",
+    "query": "What does the Bible say about faith and works together?",
+    "translation": "BSB",
+    "expectedTopRefs": [
+      "JAS 2:17",
+      "JAS 2:26",
+      "JAS 2:14",
+      "GAL 5:6",
+      "HEB 11:6"
+    ],
+    "expectedKeywords": [
+      "faith",
+      "works",
+      "dead"
+    ],
+    "citationGroundingThreshold": 0.8
+  },
+  {
+    "id": "GRG-02",
+    "category": "graphrag",
+    "intent": "TOPICAL_QUERY",
+    "cacheMode": "miss",
+    "query": "Old Testament prophecies fulfilled in Jesus",
+    "translation": "BSB",
+    "expectedTopRefs": [
+      "ISA 7:14",
+      "ISA 53:5",
+      "MIC 5:2",
+      "MATT 1:22",
+      "MATT 2:6"
+    ],
+    "expectedKeywords": [
+      "prophecy",
+      "fulfilled",
+      "virgin"
+    ],
+    "citationGroundingThreshold": 0.8
+  },
+  {
+    "id": "GRG-03",
+    "category": "graphrag",
+    "intent": "TOPICAL_QUERY",
+    "cacheMode": "miss",
+    "query": "What does Paul say about the law and grace?",
+    "translation": "BSB",
+    "expectedTopRefs": [
+      "ROM 6:14",
+      "GAL 2:21",
+      "ROM 3:20",
+      "GAL 5:4",
+      "EPH 2:8"
+    ],
+    "expectedKeywords": [
+      "law",
+      "grace",
+      "justified"
+    ],
+    "citationGroundingThreshold": 0.8
   }
 ]
