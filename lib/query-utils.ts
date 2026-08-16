@@ -390,7 +390,7 @@ export function decomposeQuery(query: string): string[] {
 
   // Match "compare A and/with B", "difference between A and B", "A vs/versus B"
   const compareMatch = normalized.match(
-    /^(?:compare|what is the difference between|difference between)\s+(.+?)\s+(?:and|with|to|\bvs\b|\bversus\b)\s+(.+)$/i
+    /^(?:compare|what is the difference between|difference between)\s+([^\n\r]+?)\s+(?:and|with|to|\bvs\b|\bversus\b)\s+([^\n\r]+)$/i
   );
   if (compareMatch) {
     const [, part1, part2] = compareMatch;
@@ -401,7 +401,7 @@ export function decomposeQuery(query: string): string[] {
     }
   }
 
-  const vsMatch = normalized.match(/^(.+?)\s+(?:\bvs\b|\bversus\b)\s+(.+)$/i);
+  const vsMatch = normalized.match(/^([^\n\r]+?)\s+(?:\bvs\b|\bversus\b)\s+([^\n\r]+)$/i);
   if (vsMatch) {
     const [, part1, part2] = vsMatch;
     const sub1 = part1.trim();
