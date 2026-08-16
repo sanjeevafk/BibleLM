@@ -493,10 +493,9 @@ export async function retrieveContextForQuery(
         latencyMs: graphResult.diagnostics.graphLatencyMs,
       });
     }
-    // Merge graph-expanded candidates: score=0 so reranker signals determine rank
-    const graphCandidates = graphResult.expandedIds
-      .filter((id) => !hybridResults.some((r) => r.verseId.toUpperCase() === id))
-      .map((id) => ({ verseId: id, score: 0 }));
+    // Merge graph-expanded candidates with calibrated graph scores
+    const graphCandidates = (graphResult.candidates ?? graphResult.expandedIds.map(id => ({ verseId: id, score: 0.5 })))
+      .filter((c) => !hybridResults.some((r) => r.verseId.toUpperCase() === c.verseId.toUpperCase()));
     allCandidates = [...hybridResults, ...graphCandidates];
   }
 

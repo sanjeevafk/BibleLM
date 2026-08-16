@@ -9,6 +9,7 @@ import {
 
 export type GraphRagResult = {
   expandedIds: string[];
+  candidates: Array<{ verseId: string; score: number }>;
   diagnostics: {
     seedCount: number;
     expandedCount: number;
@@ -71,6 +72,7 @@ export async function graphRagExpand(
   
   const emptyResult = (diagnostics: Partial<GraphRagResult['diagnostics']> = {}): GraphRagResult => ({
     expandedIds: [],
+    candidates: [],
     diagnostics: {
       seedCount,
       expandedCount: 0,
@@ -190,10 +192,19 @@ export async function graphRagExpand(
     .filter(id => nodeKindMap.get(id) === 'verse')
     .sort((a, b) => (nodeScores.get(b) || 0) - (nodeScores.get(a) || 0));
 
+  // Calibrate raw graph scores to fusedScore scale [0.45, 0.85]
+  const candidates = expandedIds.map((id) => {
+    const rawScore = nodeScores.get(id) || 0.5;
+    // Map rawScore (typically 0.3 - 1.5) to a fair base score that can compete in reranker
+    const calibratedScore = Math.min(0.85, Math.max(0.40, Number((rawScore * 0.65).toFixed(4))));
+    return { verseId: id, score: calibratedScore };
+  });
+
   const latencyMs = performance.now() - startMs;
 
   return {
     expandedIds,
+    candidates,
     diagnostics: {
       seedCount,
       expandedCount: expandedIds.length,
