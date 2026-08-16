@@ -17,7 +17,7 @@ configs:
 - config_name: default
   data_files:
   - split: train
-    path: bible-full-index.json
+    path: train.jsonl
 ---
 
 # BibleLM Dataset
