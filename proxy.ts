@@ -33,7 +33,7 @@ function getCorsOrigin(requestOrigin: string | null): string | null {
   return null;
 }
 
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
   // Only apply CORS logic to API routes
