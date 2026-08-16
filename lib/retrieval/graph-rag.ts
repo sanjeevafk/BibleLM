@@ -100,11 +100,15 @@ export async function graphRagExpand(
   let frontier = Array.from(seedSet);
   const visited = new Set<string>(frontier);
   
-  const nodeScores = new Map<string, number>();
-  const nodeKinds = new Map<string, string>();
+  // Build a lookup from the index's nodes array for correct node kind filtering
+  const nodeKindMap = new Map<string, string>();
+  for (const node of index.nodes) {
+    nodeKindMap.set(node.id, node.kind);
+  }
 
   let depthReached = 0;
   let expandedTotalCount = 0;
+  const nodeScores = new Map<string, number>();
 
   // Bounded BFS Traversal
   for (let depth = 1; depth <= maxDepth; depth++) {
@@ -170,8 +174,7 @@ export async function graphRagExpand(
       
       visited.add(c.id);
       frontier.push(c.id);
-      nodeScores.set(c.id, c.score); 
-      nodeKinds.set(c.id, c.kind);
+      nodeScores.set(c.id, c.score);
       
       expandedTotalCount++;
     }
@@ -184,7 +187,7 @@ export async function graphRagExpand(
   // Finalize results: exclude seeds and non-verse nodes
   const expandedIds = Array.from(visited)
     .filter(id => !seedSet.has(id))
-    .filter(id => nodeKinds.get(id) === 'verse')
+    .filter(id => nodeKindMap.get(id) === 'verse')
     .sort((a, b) => (nodeScores.get(b) || 0) - (nodeScores.get(a) || 0));
 
   const latencyMs = performance.now() - startMs;
