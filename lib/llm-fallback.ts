@@ -170,6 +170,8 @@ export async function generateWithFallback(
           prompt,
           temperature,
           maxTokens: maxTokens as any,
+          frequencyPenalty: 0.3,
+          presencePenalty: 0.2,
         } as any);
 
         const chunks: string[] = [];
