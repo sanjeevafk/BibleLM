@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), 'data');
 const MORPHHB_INDEX = path.join(DATA_DIR, 'morphhb-index.json');
 const OPENHEBREW_INDEX = path.join(DATA_DIR, 'openhebrewbible-index.json');
 const TRANSLATIONS_INDEX = path.join(DATA_DIR, 'translations-index.json');

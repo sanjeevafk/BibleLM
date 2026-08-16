@@ -30,8 +30,8 @@ export type OpenGntVerseLayers = {
   clauses?: { ids: string[]; meta?: Record<string, { st?: string }> };
 };
 
-const DATA_DIR = path.join(process.cwd(), 'data', 'opengnt');
-const INDEX_PATH = path.join(process.cwd(), 'data', 'opengnt-index.json');
+const DATA_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'opengnt');
+const INDEX_PATH = path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'opengnt-index.json');
 
 type IndexEntry = { morph?: string; interlinear?: string; clause?: string };
 

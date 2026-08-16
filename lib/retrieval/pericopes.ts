@@ -18,7 +18,7 @@ let cachedPericopes: PericopeItem[] | null = null;
 function loadPericopes(): PericopeItem[] {
   if (cachedPericopes) return cachedPericopes;
   try {
-    const filePath = path.join(process.cwd(), 'data', 'pericopes.json');
+    const filePath = path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'pericopes.json');
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, 'utf-8');
       cachedPericopes = JSON.parse(raw);
