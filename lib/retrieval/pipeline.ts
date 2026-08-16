@@ -25,7 +25,7 @@ import {
 import type { RetrievalInstrumentation } from './types';
 import { cloneVerses, normalizeVerses, dedupeByVerseId } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
-import { graphRagExpand, type GraphRagResult } from './graph-rag';
+import { graphRagExpand } from './graph-rag';
 import {
   hybridSearch,
   clampTopK,
@@ -477,12 +477,10 @@ export async function retrieveContextForQuery(
   const passageScores = buildPassageSignalScores(passageCandidates);
 
   // GraphRAG expansion (off by default; gated by ENABLE_GRAPH_RAG)
-  let graphRagDiagnostics: GraphRagResult['diagnostics'] | undefined;
   let allCandidates = hybridResults;
   if (ENABLE_GRAPH_RAG && hybridResults.length > 0) {
     const seedIds = hybridResults.slice(0, 10).map((r) => r.verseId);
     const graphResult = await graphRagExpand(seedIds, matchedTopics ?? new Set());
-    graphRagDiagnostics = graphResult.diagnostics;
     if (debugState) {
       addRetrievalStageTrace(debugState, {
         stage: 'graph_rag',
