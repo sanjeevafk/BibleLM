@@ -9,6 +9,7 @@ import { classifyAndExpand, decomposeQuery } from '../query-utils';
 import { getCrossReferences } from '../datasets/tsk';
 import {
   ENABLE_DETERMINISTIC_RERANKER,
+  ENABLE_GRAPH_RAG,
   ENABLE_PASSAGE_RETRIEVAL,
   ENABLE_RETRIEVAL_DEBUG,
   ENABLE_TSK_CLUSTER_BOOST,
@@ -24,6 +25,7 @@ import {
 import type { RetrievalInstrumentation } from './types';
 import { cloneVerses, normalizeVerses, dedupeByVerseId } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
+import { graphRagExpand } from './graph-rag';
 import {
   hybridSearch,
   clampTopK,
@@ -474,9 +476,30 @@ export async function retrieveContextForQuery(
       : [];
   const passageScores = buildPassageSignalScores(passageCandidates);
 
+  // GraphRAG expansion (off by default; gated by ENABLE_GRAPH_RAG)
+  let allCandidates = hybridResults;
+  if (ENABLE_GRAPH_RAG && hybridResults.length > 0) {
+    const seedIds = hybridResults.slice(0, 10).map((r) => r.verseId);
+    const graphResult = await graphRagExpand(seedIds, matchedTopics ?? new Set());
+    if (debugState) {
+      addRetrievalStageTrace(debugState, {
+        stage: 'graph_rag',
+        action: 'expanded',
+        seedCount: graphResult.diagnostics.seedCount,
+        expandedCount: graphResult.diagnostics.expandedCount,
+        depthReached: graphResult.diagnostics.traversalDepthReached,
+        latencyMs: graphResult.diagnostics.graphLatencyMs,
+      });
+    }
+    // Merge graph-expanded candidates with calibrated graph scores
+    const graphCandidates = (graphResult.candidates ?? graphResult.expandedIds.map(id => ({ verseId: id, score: 0.5 })))
+      .filter((c) => !hybridResults.some((r) => r.verseId.toUpperCase() === c.verseId.toUpperCase()));
+    allCandidates = [...hybridResults, ...graphCandidates];
+  }
+
   const candidateOrder = ENABLE_DETERMINISTIC_RERANKER
     ? await applyDeterministicReranker(
-      hybridResults,
+      allCandidates,
       directRefIds,
       topK,
       debugState,
@@ -484,7 +507,7 @@ export async function retrieveContextForQuery(
       clusterScores,
       passageScores
     )
-    : hybridResults.map((result) => result.verseId.trim().toUpperCase());
+    : allCandidates.map((result) => result.verseId.trim().toUpperCase());
 
   const pericopeRefIds: string[] = [];
   if (matchedPericopes.length > 0) {

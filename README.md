@@ -75,6 +75,11 @@ Run:
 npm run benchmark:sample
 npm run benchmark:live
 npm run benchmark:regression
+
+# GraphRAG experiment (off by default)
+ENABLE_GRAPH_RAG=1 npm run benchmark:live
+ENABLE_GRAPH_RAG=0 npm run benchmark:regression  # baseline
+ENABLE_GRAPH_RAG=1 npm run benchmark:regression  # with graph expansion
 ```
 
 Primary retrieval quality metrics:

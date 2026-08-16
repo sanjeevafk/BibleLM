@@ -22,3 +22,10 @@ export const ENABLE_RETRIEVAL_DEBUG =
   isEnabled(process.env.ENABLE_RETRIEVAL_DEBUG) ||
   isEnabled(process.env.RETRIEVAL_DEBUG) ||
   isEnabled(process.env.DEBUG_LLM);
+
+// GraphRAG rollout flags (defaults documented in project-docs/graph-rag-method.md)
+export const ENABLE_GRAPH_RAG = isEnabled(process.env.ENABLE_GRAPH_RAG);
+export const GRAPH_RAG_MAX_DEPTH = numberFromEnv(process.env.GRAPH_RAG_MAX_DEPTH, 2);
+export const GRAPH_RAG_MAX_EXPANSIONS = numberFromEnv(process.env.GRAPH_RAG_MAX_EXPANSIONS, 30);
+export const GRAPH_RAG_MAX_NEIGHBORS_PER_SEED = numberFromEnv(process.env.GRAPH_RAG_MAX_NEIGHBORS_PER_SEED, 10);
+export const GRAPH_RAG_EDGE_MIN_WEIGHT = numberFromEnv(process.env.GRAPH_RAG_EDGE_MIN_WEIGHT, 0.1);
