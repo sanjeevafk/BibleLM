@@ -45,11 +45,17 @@ async function main() {
   }
 
   // Output as JSON for diffing
-  const outputPath = graphFlag === 'ON'
-    ? '/tmp/graphrag-on.json'
-    : '/tmp/graphrag-off.json';
-
+  const path = await import('path');
   const fs = await import('fs');
+  const outDir = path.resolve(process.cwd(), 'project-docs', 'benchmark');
+  if (!fs.existsSync(outDir)) {
+    fs.mkdirSync(outDir, { recursive: true });
+  }
+  const outputPath = path.join(
+    outDir,
+    graphFlag === 'ON' ? 'ab-graphrag-on.json' : 'ab-graphrag-off.json'
+  );
+
   fs.writeFileSync(outputPath, JSON.stringify(results, null, 2));
   console.log(`Results saved to ${outputPath}`);
 }
