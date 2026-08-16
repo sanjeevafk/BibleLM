@@ -385,6 +385,22 @@ export function classifyAndExpand(query: string): {
  * Detects whether a query is a comparative or compound question,
  * and decomposes it into distinct parallel sub-queries.
  */
+function trimQuestionMarks(str: string): string {
+  let end = str.length;
+  while (end > 0 && str[end - 1] === '?') {
+    end--;
+  }
+  return str.slice(0, end);
+}
+
+function trimLeadingThe(str: string): string {
+  const trimmed = str.trim();
+  if (trimmed.toLowerCase().startsWith('the ')) {
+    return trimmed.slice(4).trim();
+  }
+  return trimmed;
+}
+
 export function decomposeQuery(query: string): string[] {
   const normalized = query.trim();
   const lower = normalized.toLowerCase();
@@ -404,8 +420,8 @@ export function decomposeQuery(query: string): string[] {
   for (const delim of delimiters) {
     const idx = targetLower.indexOf(delim);
     if (idx !== -1) {
-      const part1 = target.slice(0, idx).trim().replace(/^the\s+/i, '');
-      const part2 = target.slice(idx + delim.length).trim().replace(/^the\s+/i, '').replace(/\?+$/, '');
+      const part1 = trimLeadingThe(target.slice(0, idx));
+      const part2 = trimQuestionMarks(trimLeadingThe(target.slice(idx + delim.length)));
       if (part1.length > 2 && part2.length > 2) {
         return [part1, part2];
       }
