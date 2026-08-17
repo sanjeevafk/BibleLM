@@ -170,7 +170,7 @@ export class BM25Engine {
   /**
    * Hydrates the engine from a serialized state object.
    */
-  public importState(state: any, indexData: Record<string, { text: string }>) {
+  public importState(state: any, indexData: Record<string, { text: string; bm25Text?: string }>) {
     this.totalDocs = state.totalDocs;
     this.avgDocLength = state.avgDocLength;
     this.docFreqs = new Map(
@@ -186,7 +186,7 @@ export class BM25Engine {
       ])
     );
 
-    // Reconstruct 'docs' from indexData
+    // Reconstruct 'docs' from indexData — always use raw text for display/phrase-boost
     this.docs.clear();
     for (const [id, val] of Object.entries(indexData)) {
       this.docs.set(id, { id, text: val.text });
@@ -196,11 +196,12 @@ export class BM25Engine {
   /**
    * Static factory for quick initialization
    */
-  public static async createFromIndex(indexData: Record<string, { text: string }>, config?: BM25Config): Promise<BM25Engine> {
+  public static async createFromIndex(indexData: Record<string, { text: string; bm25Text?: string }>, config?: BM25Config): Promise<BM25Engine> {
     const engine = new BM25Engine(config);
     const docs: BM25Doc[] = Object.entries(indexData).map(([id, val]) => ({
       id,
-      text: val.text
+      // Use the contextually-enriched text for BM25 if available; raw text otherwise
+      text: val.bm25Text ?? val.text
     }));
     await engine.index(docs);
     return engine;
