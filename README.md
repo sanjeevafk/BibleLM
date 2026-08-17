@@ -39,13 +39,14 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 
 ### 1. The Engineering Strategy
 *   **Stateless Scaling**: To bypass cold-start penalties, TF/IDF state is pre-computed at build time and serialized to JSON. At runtime, the engine hydrates in **< 10ms**.
+*   **Contextual Verse Prepending**: Each indexed verse is prepended at build time with a structured context header `[Book · Chapter · Pericope/Topic]` (e.g. `[John · Chapter 3 · Salvation]`), boosting thematic precision@5 by **+140%** (20% → 48%) and thematic Hit@1 by **+200%** (20% → 60%) with **0ms runtime latency penalty**.
 *   **Multi-Translation Brotli Storage**: Supports 5 full translations (`BSB`, `WEB`, `KJV`, `ASV`, `NHEB`) stored as compressed `.json.br` book files.
 *   **Citation-Locking**: A post-generation scrubbing middleware validates every LLM citation against retrieved context. If a verse wasn't in the context, it's stripped—preventing "AI-generated" scripture.
 *   **Lexical & Morphological Tethering**: Verses are enriched with Hebrew/Greek morphology (OpenGNT & MorphHB) word-by-word, forcing the LLM to output Strong's numbers and transliterations.
 
 ### 2. The 4-Stage Retrieval Pipeline
 1.  **Theological Expansion**: Expands keywords using a domain-specific synonym map to maximize recall.
-2.  **Lexical Search (BM25)**: Custom TypeScript implementation of BM25 tuned for verse-length documents ($k1=1.2, b=0.65$).
+2.  **Context-Aware Lexical Search (BM25)**: Custom TypeScript BM25 engine ($k1=1.2, b=0.65$) indexing contextually enriched verse headers (`bm25Text`) for zero-latency thematic retrieval.
 3.  **Semantic Vector Re-ranking**: Integrates Groq `nomic-embed-text-v1.5` embeddings and Neon PostgreSQL `pgvector` for dense semantic similarity ranking.
 4.  **Context Windowing**: Automatically expands hits into narrative blocks (neighboring verses ±1) to preserve literary context.
 
@@ -64,10 +65,12 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 
 ---
 
-## Benchmark Snapshot
+## Benchmark Snapshot & Documentation
 
-- JSON report: [docs/benchmark/latest-report.json](docs/benchmark/latest-report.json)
-- Methodology & Guardrails: [docs/benchmark/README.md](docs/benchmark/README.md)
+- **Historical Architecture Changelog**: [`docs/ARCHITECTURE_CHANGELOG.md`](docs/ARCHITECTURE_CHANGELOG.md)
+- **Contextual Verse Prepending Spec**: [`docs/contextual-verse-prepending.md`](docs/contextual-verse-prepending.md)
+- **JSON Report**: [`docs/benchmark/latest-report.json`](docs/benchmark/latest-report.json)
+- **Methodology & Guardrails**: [`docs/benchmark/README.md`](docs/benchmark/README.md)
 
 Run:
 
