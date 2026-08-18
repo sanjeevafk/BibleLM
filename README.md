@@ -4,6 +4,7 @@
 [![Runtime](https://img.shields.io/badge/Runtime-Vercel%20Edge-blue?style=flat-square)](https://vercel.com/docs/functions/edge-functions)
 [![Dataset](https://img.shields.io/badge/Dataset-Hugging%20Face-yellow?style=flat-square)](https://huggingface.co/datasets/sanjeevafk/biblelm)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![launch with diploi badge](https://diploi.com/launch.svg)](https://diploi.com/launch/sanjeevafk/BibleLM)
 
 **BibleLM** is a high-performance, text-first Retrieval-Augmented Generation (RAG) architecture designed to deliver uncompromising biblical search and original-language insights. 
 
@@ -104,9 +105,10 @@ Primary retrieval quality metrics:
 
 ## Deployment & Setup
 
-BibleLM supports two primary deployment paths: **Edge-Native** (Vercel) and **Containerized** (Docker).
+BibleLM supports three primary deployment paths: **Edge-Native** (Vercel), **Containerized** (Docker), and **Managed Deployment** (Diploi).
 
 ### Option A: Local Development
+
 ```bash
 # 1. Install & Config
 npm install
@@ -120,7 +122,28 @@ npx ts-node --project tsconfig.scripts.json scripts/build-retrieval-index.ts
 npm run dev
 ```
 
-### Option B: Docker (Self-Hosted)
+## Option B: Production Deployment Options
+
+### Deploy with Diploi
+
+[![launch with diploi button](https://diploi.com/launch-big.svg)](https://diploi.com/launch/sanjeevafk/BibleLM)
+
+1. Launch the project
+
+   Click the launch button above to create a new Diploi deployment for BibleLM.
+
+2. Add environment variables
+
+   Open the **Environment** tab in the sidebar and add the required variables from [`.env.example`](.env.example).
+
+3. View the deployment
+
+   Open the preview URL from your Diploi deployment page.
+
+For more information, visit [diploi.com](https://diploi.com/).
+
+### Docker (Self-Hosted)
+
 For privacy-focused or non-Vercel deployments, a production-ready multi-stage Dockerfile is provided.
 ```bash
 # Builds a minimal Alpine-based image (~150MB)
