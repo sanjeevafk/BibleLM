@@ -11,5 +11,5 @@ export const redis = redisUrl && redisToken
   : null;
 
 if (!redis) {
-  console.warn('[redis] Upstash Redis is not configured; cache and rate-limit features are disabled.');
+  console.warn('[redis] Upstash Redis is not configured; cache and rate-limit features are disabled. For self-hosted Docker, ensure UPSTASH_REDIS_REST_URL points at the REST gateway service (redis-rest), not stock Redis (RESP-only).');
 }

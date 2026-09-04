@@ -9,6 +9,12 @@
 const VALID_TRANSLATIONS = ['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'] as const;
 export type SupportedTranslation = (typeof VALID_TRANSLATIONS)[number];
 
+/** Input bounds to prevent cost-DoS via oversized payloads. */
+export const MAX_QUERY_CHARS = 2000;
+export const MAX_MESSAGE_CHARS = 4000;
+export const MAX_HISTORY_MESSAGES = 10;
+export const MAX_HISTORY_CHARS = 8000;
+
 export type NormalizedMessage = {
   role: 'system' | 'assistant' | 'user';
   content: string;
@@ -24,6 +30,7 @@ export type ParsedChatRequest = {
 
 export type ChatRequestValidationError =
   | { type: 'missing_query' }
+  | { type: 'too_large'; detail: string }
   | { type: 'bad_body' };
 
 export type ChatRequestValidationResult =
@@ -44,25 +51,25 @@ function extractMessageContent(
   const role = message?.role;
   if (role !== 'system' && role !== 'assistant' && role !== 'user') return null;
 
+  let rawContent: string | null = null;
   if (typeof message.content === 'string') {
-    return message.content.trim() ? { role, content: message.content } : null;
-  }
-
-  if (Array.isArray(message.content)) {
+    rawContent = message.content.trim() ? message.content : null;
+  } else if (Array.isArray(message.content)) {
     const text = message.content
       .map((part: { type?: string; text?: string }) => (part?.type === 'text' ? part.text || '' : ''))
       .join('');
-    return text.trim() ? { role, content: text } : null;
-  }
-
-  if (Array.isArray(message.parts)) {
+    rawContent = text.trim() ? text : null;
+  } else if (Array.isArray(message.parts)) {
     const text = (message.parts as Array<{ type?: string; text?: string }>)
       .map((part) => (part?.type === 'text' ? part.text || '' : ''))
       .join('');
-    return text.trim() ? { role, content: text } : null;
+    rawContent = text.trim() ? text : null;
   }
 
-  return null;
+  if (!rawContent) return null;
+  // Bound single-message size to prevent context-overflow / cost-DoS.
+  const content = rawContent.length > MAX_MESSAGE_CHARS ? rawContent.slice(0, MAX_MESSAGE_CHARS) : rawContent;
+  return { role, content };
 }
 
 /**
@@ -115,8 +122,12 @@ export function parseChatRequest(
 
   if (!lastUserMessage) return { ok: false, error: { type: 'missing_query' } };
 
-  const query = lastUserMessage.content.trim();
-  if (!query) return { ok: false, error: { type: 'missing_query' } };
+  const rawQuery = lastUserMessage.content.trim();
+  if (!rawQuery) return { ok: false, error: { type: 'missing_query' } };
+  if (rawQuery.length > MAX_QUERY_CHARS) {
+    return { ok: false, error: { type: 'too_large', detail: `query exceeds ${MAX_QUERY_CHARS} chars` } };
+  }
+  const query = rawQuery;
 
   const rawTranslation =
     typeof translation === 'string' && translation.trim()
@@ -124,7 +135,17 @@ export function parseChatRequest(
       : queryTranslation || headerTranslation;
 
   const requestedTranslation = normalizeTranslation(rawTranslation);
-  const modelHistory = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
+  let modelHistory = lastUserIndex > 0 ? normalizedMessages.slice(0, lastUserIndex) : [];
+
+  // Bound history: keep most recent messages and enforce total char budget.
+  if (modelHistory.length > MAX_HISTORY_MESSAGES) {
+    modelHistory = modelHistory.slice(modelHistory.length - MAX_HISTORY_MESSAGES);
+  }
+  let totalHistoryChars = modelHistory.reduce((sum, m) => sum + m.content.length, 0);
+  while (modelHistory.length > 0 && totalHistoryChars > MAX_HISTORY_CHARS) {
+    const removed = modelHistory.shift();
+    totalHistoryChars -= removed?.content.length ?? 0;
+  }
 
   return {
     ok: true,

@@ -14,7 +14,7 @@ import {
 } from '../bible-fetch';
 import { getTranslationVerse } from '../translations';
 import { LOCAL_TRANSLATIONS } from './types';
-import { parseReferenceKey, cloneVerses } from './verse-utils';
+import { parseReferenceKey, cloneVerses, escapeLikePattern } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
 import { enrichOriginalLanguages } from './enrichment';
 import { getBM25Engine } from './search';
@@ -395,7 +395,7 @@ export async function fetchPassageWindowCandidates(
   try {
     await ensureDbReady();
     const pool = getDbPool();
-    const q = `%${query.toLowerCase().trim()}%`;
+    const q = `%${escapeLikePattern(query.toLowerCase().trim())}%`;
     const result = await pool.query<{
       passage_id: string;
       anchor_verse: string;
@@ -404,7 +404,7 @@ export async function fetchPassageWindowCandidates(
     }>(
       `SELECT passage_id, anchor_verse, verse_ids, 0::int as vote_total
        FROM passage_windows
-       WHERE lower(text) LIKE $1
+       WHERE lower(text) LIKE $1 ESCAPE '\\'
        ORDER BY passage_id
        LIMIT $2`,
       [q, maxCandidates]

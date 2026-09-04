@@ -70,3 +70,21 @@ python3 scripts/benchmark.py --framework deterministic
 | `multiturn` | Follow-up context queries | 5 | **1.000** |
 | `adversarial` | Off-topic / tricky biblical prompts | 5 | **1.000** |
 | `graphrag` | Extended cross-reference queries | 3 | **1.000** |
+
+---
+
+## 5. Addendum (2026-09-04): retrieval-only numbers vs LLM-judged recall
+
+* The **1.000 Verse Recall** above is **LLM-judged answer recall** (the final
+  answer text cites/mentions the target verse) — not pure retrieval Hit@k.
+  An answer can score here via parametric knowledge even when retrieval missed,
+  which is exactly why citation-scrubbing + empty-retrieval fail-closed exist.
+* Pure **retrieval** Hit@k measured 2026-09-04 in lexical-only mode
+  (`BIBLELM_DISABLE_DB=1`, no pgvector), same 53-scenario set:
+  **Hit@1 0.25 / Hit@5 0.40 / MRR 0.31** (held-out n=17: 0.29/0.41/0.34),
+  p50 52ms. Reports: `project-docs/benchmark/live-report-2026-09-04.json`,
+  `project-docs/benchmark/heldout-report-2026-09-04.json`.
+* Judge pinning (unchanged): NVIDIA NIM `meta/llama-3.1-8b-instruct`,
+  OrcaRouter `anthropic/claude-haiku-4.5`, Groq `gpt-4o-mini` — see §3.
+  Re-run with `BIBLELM_DISABLE_DB=0` + live Postgres to publish
+  full-stack (lexical+vector) retrieval numbers.
