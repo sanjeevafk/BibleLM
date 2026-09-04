@@ -96,6 +96,27 @@ const BOOK_CODE_TO_NAME: Record<string, string> = {
   REV: 'Revelation',
 };
 
+const GENERIC_TAG_PATTERN = /<\/?\s*[a-z_][a-z0-9_]*\s*\/?\s*>/gi;
+const QUERY_TAG_PATTERN = /<\/?\s*(user_query|conversation_history|system_instruction|reference|text)\s*\/?\s*>/gi;
+
+/**
+ * Strips tag-like sequences to a fixpoint (bounded passes).
+ * A single `replace` pass is insufficient: nested payloads such as
+ * `<<script>script>` re-form a tag after one removal (CodeQL
+ * js/incomplete-multi-character-sanitization). Loop until stable.
+ */
+export function stripTagLikeSequences(value: string, pattern: RegExp = GENERIC_TAG_PATTERN, maxPasses = 10): string {
+  let prev = value;
+  for (let i = 0; i < maxPasses; i += 1) {
+    const next = prev.replace(pattern, '');
+    if (next === prev) return next;
+    prev = next;
+  }
+  // Defense in depth: input still unstable after maxPasses — drop all
+  // angle brackets so no tag can survive.
+  return prev.replace(/[<>]/g, '');
+}
+
 export const SYSTEM_PROMPT = `You are an insightful, empathetic, and knowledgeable biblical chatbot. Your goal is to converse naturally with the user, answering their questions, providing comfort, and discussing topics while remaining firmly grounded in the biblical text.
 
 Core rules:
@@ -227,8 +248,7 @@ export function buildContextPrompt(
   translation: string,
   options?: { allowGeneralKnowledge?: boolean }
 ): string {
-  const sanitizedQuery = query
-    .replace(/<\/?\s*(user_query|conversation_history|system_instruction|reference|text)\s*\/?\s*>/gi, '')
+  const sanitizedQuery = stripTagLikeSequences(query, QUERY_TAG_PATTERN)
     .replace(/system\s+instruction\s*:/gi, 'system-instruction:')
     .replace(/\0/g, '');
   const allowGeneralKnowledge = options?.allowGeneralKnowledge ?? false;
