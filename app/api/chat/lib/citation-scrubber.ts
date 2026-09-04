@@ -16,41 +16,11 @@ import type { VerseContext } from '@/lib/bible-fetch';
 // ---------------------------------------------------------------------------
 
 function normalizeCitationToken(citation: string): string {
-  const trimmed = citation.trim();
-  let end = trimmed.length;
-  while (end > 0) {
-    const char = trimmed[end - 1];
-    if (!'()[],.;:!?'.includes(char)) break;
-    end -= 1;
-  }
-  return collapseCitationWhitespace(trimmed.slice(0, end));
-}
-
-function collapseCitationWhitespace(value: string): string {
-  let result = '';
-  let previousWasWhitespace = false;
-  for (const char of value) {
-    const isWhitespace = char === ' ' || char === '\n' || char === '\r' || char === '\t' || char === '\f' || char === '\v';
-    if (isWhitespace) {
-      if (!previousWasWhitespace && result.length > 0) result += ' ';
-      previousWasWhitespace = true;
-      continue;
-    }
-    result += char;
-    previousWasWhitespace = false;
-  }
-  return result.trim();
+  return citation.trim().replace(/[()[\],.;:!?]+$/, '').replace(/\s+/g, ' ');
 }
 
 function removeAllOccurrences(value: string, target: string): string {
-  if (!target) return value;
-  let result = value;
-  let index = result.indexOf(target);
-  while (index !== -1) {
-    result = `${result.slice(0, index)}${result.slice(index + target.length)}`;
-    index = result.indexOf(target);
-  }
-  return result;
+  return target ? value.replaceAll(target, '') : value;
 }
 
 function stripBracketedCitationSegments(content: string, citation: string, opening: string, closing: string): string {

@@ -3,9 +3,9 @@
  * OpenHebrew Bible layers, and OpenGNT layers.
  */
 
-import { getMorphhbWords } from '../morphhb';
+import { getMorphForVerse as getMorphhbWords } from '../datasets/morphhb';
 import { getStrongsEntry } from '../datasets/strongs';
-import { getOpenHebrewBibleLayers, type OpenHebrewVerseLayers } from '../openhebrewbible';
+import { getOpenHebrewBibleLayers, type OpenHebrewVerseLayers } from '../datasets/open-hebrew-bible';
 import { getOpenGNTLayers, type OpenGntVerseLayers } from '../opengnt';
 import { getTranslationVerse } from '../translations';
 import { fetchExternalWithTimeoutBudget, type VerseContext } from '../bible-fetch';
