@@ -74,10 +74,9 @@ type Report = {
 const ROOT = path.resolve(__dirname, '..', '..');
 const SCENARIOS_PATH = path.join(__dirname, 'fixtures', 'scenarios.json');
 const SAMPLE_RESULTS_PATH = path.join(__dirname, 'fixtures', 'sample-results.json');
-const REPORT_DIR = path.join(ROOT, 'project-docs', 'benchmark');
+const REPORT_DIR = path.join(ROOT, 'docs', 'benchmark');
 const REPORT_JSON_PATH = path.join(REPORT_DIR, 'latest-report.json');
 const REPORT_MD_PATH = path.join(REPORT_DIR, 'latest-report.md');
-const DOCS_REPORT_DIR = path.join(ROOT, 'docs', 'benchmark');
 
 function parseMode(): 'sample' | 'live' | 'heldout' {
   const index = process.argv.indexOf('--mode');
@@ -129,10 +128,6 @@ function computeDelta(baseline: AggregateMetrics, optimized: AggregateMetrics): 
   };
 }
 
-function ensureReportDir(): void {
-  fs.mkdirSync(REPORT_DIR, { recursive: true });
-  fs.mkdirSync(DOCS_REPORT_DIR, { recursive: true });
-}
 
 function renderMarkdown(report: Report): string {
   const scenarioRows = report.per_scenario
@@ -431,11 +426,9 @@ async function main(): Promise<void> {
   const mode = parseMode();
   const report =
     mode === 'live' ? await buildLiveReport() : mode === 'heldout' ? await buildHeldoutReport() : buildSampleReport();
-  ensureReportDir();
+  fs.mkdirSync(REPORT_DIR, { recursive: true });
   fs.writeFileSync(REPORT_JSON_PATH, JSON.stringify(report, null, 2));
   fs.writeFileSync(REPORT_MD_PATH, renderMarkdown(report));
-  fs.writeFileSync(path.join(DOCS_REPORT_DIR, 'latest-report.json'), JSON.stringify(report, null, 2));
-  fs.writeFileSync(path.join(DOCS_REPORT_DIR, 'latest-report.md'), renderMarkdown(report));
   console.log(JSON.stringify({
     report_json: REPORT_JSON_PATH,
     report_markdown: REPORT_MD_PATH,

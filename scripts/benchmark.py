@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--output",
-        default="benchmark_results.json",
+        default="docs/benchmark/benchmark_results.json",
         help="Path to save full JSON results",
     )
     p.add_argument(
