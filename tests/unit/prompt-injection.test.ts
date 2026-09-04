@@ -24,6 +24,21 @@ describe('sanitizeHistoryContent', () => {
   it('removes null bytes', () => {
     expect(sanitizeHistoryContent('a\0b')).toBe('ab');
   });
+
+  it('strips nested tag payloads to fixpoint (no <script> re-forms)', () => {
+    // Single-pass replace turns `<<script>script>` into `<script>` — must not survive.
+    const out = sanitizeHistoryContent('<<script>script>alert(1)<</script>/script>');
+    expect(out).not.toContain('<script>');
+    expect(out).not.toContain('<');
+    expect(out).toContain('alert(1)');
+  });
+
+  it('strips nested history-block closings', () => {
+    const out = sanitizeHistoryContent('hi <<conversation_history>conversation_history> bye');
+    expect(out).not.toContain('conversation_history>');
+    expect(out).toContain('hi');
+    expect(out).toContain('bye');
+  });
 });
 
 describe('appendConversationHistory', () => {

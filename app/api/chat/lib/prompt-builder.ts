@@ -6,7 +6,7 @@
  * no I/O, no side-effects, fully testable.
  */
 
-import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
+import { buildContextPrompt, SYSTEM_PROMPT, stripTagLikeSequences } from '@/lib/prompts';
 import type { VerseContext } from '@/lib/bible-fetch';
 
 export type HistoryMessage = {
@@ -62,7 +62,9 @@ export function sanitizeHistoryContent(content: string): string {
   // Remove any tag resembling <user_query>, <conversation_history>,
   // <system_instruction>, <reference>, <text>, etc. (case-insensitive,
   // optional slash/whitespace) to prevent closing the history block.
-  out = out.replace(/<\/?\s*[a-z_][a-z0-9_]*\s*\/?\s*>/gi, '');
+  // Fixpoint stripping: a single pass leaves nested payloads like
+  // `<<script>script>` intact as `<script>` after one removal.
+  out = stripTagLikeSequences(out);
   // Neutralize "SYSTEM INSTRUCTION:" smuggling anywhere in user content
   // (line-start or inline) so it cannot pose as a directive block.
   out = out.replace(/system\s+instruction\s*:/gi, 'system-instruction:');
