@@ -13,17 +13,16 @@ This benchmark currently evaluates retrieval quality and retrieval latency.
 Source of truth:
 - `tests/benchmark/fixtures/scenarios.json`
 
-Current categories include:
-- direct verse
-- verse explanation
-- topical
-- teaching
-- theology
-- narrative
-- passage
-- psalm
-- cache-hit scenarios
-- cache-miss scenarios
+Current categories (9) include:
+- `passage`
+- `topical`
+- `exegesis`
+- `theology`
+- `ethics`
+- `original_language`
+- `multiturn`
+- `adversarial`
+- `graphrag`
 
 ## How Scoring Works
 For each scenario:
@@ -62,7 +61,7 @@ These flags support safe rollback and controlled production rollout. They can al
 - `npm run benchmark:sample`
   - Generates a stable benchmark report from the committed sample fixture set.
   - Writes: `docs/benchmark/latest-report.json` and `docs/benchmark/latest-report.md`
-  - Compare against the tracked baseline snapshots: `docs/benchmark/baseline-report.json` and `docs/benchmark/baseline-report.md`
+  - Compare against the tracked baseline snapshots: `docs/benchmark/live-report-2026-09-04.json` and `docs/benchmark/heldout-report-2026-09-04.json`
 - `npm run benchmark:live`
   - Executes real retrieval calls using the scenario fixture set.
   - Runs in JSON-only benchmark mode (`BIBLELM_DISABLE_DB=1`, `BIBLELM_DISABLE_EXTERNAL_FALLBACK=1`) for deterministic local results without PostgreSQL or external APIs.
@@ -76,9 +75,9 @@ Generated reports:
 - `docs/benchmark/latest-report.json`
 - `docs/benchmark/latest-report.md`
 
-Baselines for comparison:
-- `docs/benchmark/baseline-report.json`
-- `docs/benchmark/baseline-report.md`
+Dated baseline snapshots:
+- `docs/benchmark/live-report-2026-09-04.json` / `docs/benchmark/live-report-2026-09-04.md`
+- `docs/benchmark/heldout-report-2026-09-04.json` / `docs/benchmark/heldout-report-2026-09-04.md`
 
 ## Known Limitations
 - Ground-truth references are curated and still limited in coverage.

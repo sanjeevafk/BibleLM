@@ -57,7 +57,7 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 
 Measured 2026-09-04, commit `cleanup/ponytail-audit` + review fixes, lexical-only
 mode (`BIBLELM_DISABLE_DB=1`, no Postgres/pgvector), local run. Retrieval-only
-(no LLM latency). See dated reports in `project-docs/benchmark/`.
+(no LLM latency). See dated reports in `docs/benchmark/`.
 
 | Metric | Full set (n=53) | Held-out (n=17) | Benchmark Target | Status |
 | :--- | :--- | :--- | :--- | :--- |

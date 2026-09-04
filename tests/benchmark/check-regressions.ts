@@ -20,7 +20,7 @@ type Report = {
   performance_deltas: AggregateMetrics;
 };
 
-const DEFAULT_REPORT_PATH = path.resolve(process.cwd(), 'project-docs', 'benchmark', 'latest-report.json');
+const DEFAULT_REPORT_PATH = path.resolve(process.cwd(), 'docs', 'benchmark', 'latest-report.json');
 
 function parseThreshold(envVarName: string, defaultValue: number): number {
   const rawValue = process.env[envVarName];
