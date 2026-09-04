@@ -68,6 +68,110 @@ pub struct Bm25Doc {
     pub text: String,
 }
 
+/// One search hit: index into the doc-id table + BM25 score.
+#[derive(Debug, Clone)]
+pub struct SearchHit {
+    pub doc: u32,
+    pub score: f64,
+}
+
+/// Phrase normalization: mirrors TS `normalizeForPhrase` (same char class
+/// as the tokenizer, but whitespace-collapsed instead of split).
+pub fn normalize_phrase(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last_was_space = true; // trims leading whitespace like TS .trim()
+    for c in text.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '\'' {
+            out.push(c);
+            last_was_space = false;
+        } else if is_js_whitespace(c) {
+            if !last_was_space {
+                out.push(' ');
+                last_was_space = true;
+            }
+        } else if !last_was_space {
+            // Other punctuation → single space (TS replaces with ' ').
+            out.push(' ');
+            last_was_space = true;
+        }
+    }
+    if last_was_space {
+        out.pop();
+    }
+    out
+}
+
+impl Bm25Index {
+    /// Query-time search mirroring `BM25Engine.search` bit-for-bit:
+    /// smoothed IDF, k1/b TF saturation, stable score-desc order, ×1.5
+    /// phrase boost confined to the top-100 candidates.
+    ///
+    /// `texts` must be aligned with `doc_ids` (raw display text, used only
+    /// for the phrase boost — TS reconstructs `docs` from the index file).
+    pub fn search(&self, query: &str, texts: &[String], limit: usize) -> Vec<SearchHit> {
+        let query_tokens = tokenize(query);
+        if query_tokens.is_empty() {
+            return Vec::new();
+        }
+        debug_assert_eq!(texts.len(), self.doc_ids.len());
+
+        // Insertion order = first encounter while sweeping query tokens in
+        // order (duplicates re-add, exactly like TS).
+        let mut scores: Vec<(u32, f64)> = Vec::new();
+        let mut position: HashMap<u32, usize> = HashMap::new();
+        for term in &query_tokens {
+            let entry = match self
+                .terms
+                .binary_search_by_key(&term.as_str(), |e| e.term.as_str())
+            {
+                Ok(i) => &self.terms[i],
+                Err(_) => continue,
+            };
+            let df = entry.postings.len() as f64;
+            let n = self.total_docs as f64;
+            let idf = (((n - df + 0.5) / (df + 0.5)) + 1.0).ln();
+            for (doc, tf) in &entry.postings {
+                let tf = *tf as f64;
+                let dl = self.doc_lengths[*doc as usize] as f64;
+                let numerator = tf * (BM25_K1 + 1.0);
+                let denominator =
+                    tf + BM25_K1 * (1.0 - BM25_B + BM25_B * (dl / self.avg_doc_length));
+                let term_score = idf * (numerator / denominator);
+                match position.get(doc) {
+                    Some(&pos) => scores[pos].1 += term_score,
+                    None => {
+                        position.insert(*doc, scores.len());
+                        scores.push((*doc, term_score));
+                    }
+                }
+            }
+        }
+
+        // Stable sort, score desc (TS Array.sort is stable).
+        scores.sort_by(|a, b| b.1.total_cmp(&a.1));
+
+        // Phrase boost confined to top-100 (CPU guard, mirrors TS).
+        let normalized_query = normalize_phrase(query);
+        if normalized_query.len() > 5 {
+            let window = scores.len().min(100);
+            for slot in scores.iter_mut().take(window) {
+                let doc_text = texts.get(slot.0 as usize).map(String::as_str).unwrap_or("");
+                if normalize_phrase(doc_text).contains(normalized_query.as_str()) {
+                    slot.1 *= 1.5;
+                }
+            }
+            let (head, _) = scores.split_at_mut(window);
+            head.sort_by(|a, b| b.1.total_cmp(&a.1));
+        }
+
+        scores.truncate(limit);
+        scores
+            .into_iter()
+            .map(|(doc, score)| SearchHit { doc, score })
+            .collect()
+    }
+}
+
 /// Built inverted index.
 #[derive(Debug)]
 pub struct Bm25Index {
@@ -375,5 +479,67 @@ mod tests {
     fn decode_rejects_garbage() {
         assert!(Bm25Index::decode(b"nope").is_err());
         assert!(Bm25Index::decode(b"BLM1\x01\x00\x00\x00").is_err());
+    }
+
+    fn tiny_index() -> (Bm25Index, Vec<String>) {
+        let docs = vec![
+            Bm25Doc { id: "A".into(), text: "god loves the world".into() },
+            Bm25Doc { id: "B".into(), text: "god is love".into() },
+            Bm25Doc { id: "C".into(), text: "the world is wide and the world is big".into() },
+        ];
+        let texts: Vec<String> = docs.iter().map(|d| d.text.clone()).collect();
+        (Bm25Index::build(&docs), texts)
+    }
+
+    fn ids<'a>(index: &'a Bm25Index, hits: &[SearchHit]) -> Vec<&'a str> {
+        hits.iter().map(|h| index.doc_ids[h.doc as usize].as_str()).collect()
+    }
+
+    /// Exact scores generated by the TS engine (`BM25Engine.search`):
+    /// god world → A 1.0314294108135844, B 0.5562921233843273, C 0.5535004265456638
+    /// love → B 1.1609007971087013
+    /// god god → B 1.1125842467686546, A 1.0314294108135844 (dupes re-add)
+    /// xyz → []
+    /// the world is wide and round → C 3.2377141488015764 (phrase-boosted), A, B
+    #[test]
+    fn search_scores_match_ts_bit_for_bit() {
+        let (index, texts) = tiny_index();
+        let cases: &[(&str, &[(&str, f64)])] = &[
+            ("god world", &[("A", 1.0314294108135844), ("B", 0.5562921233843273), ("C", 0.5535004265456638)]),
+            ("love", &[("B", 1.1609007971087013)]),
+            ("god god", &[("B", 1.1125842467686546), ("A", 1.0314294108135844)]),
+            ("xyz", &[]),
+            (
+                "the world is wide and round",
+                &[("C", 3.2377141488015764), ("A", 1.0314294108135844), ("B", 0.5562921233843273)],
+            ),
+        ];
+        for (query, expected) in cases {
+            let hits = index.search(query, &texts, 10);
+            assert_eq!(ids(&index, &hits).len(), expected.len(), "query {query:?}");
+            for (hit, (id, score)) in hits.iter().zip(expected.iter()) {
+                assert_eq!(index.doc_ids[hit.doc as usize].as_str(), *id, "query {query:?}");
+                assert!(
+                    (hit.score - score).abs() < 1e-12,
+                    "query {query:?} doc {id}: rs={} ts={score}",
+                    hit.score
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn search_respects_limit_and_empty_query() {
+        let (index, texts) = tiny_index();
+        assert!(index.search("", &texts, 10).is_empty());
+        assert!(index.search("   ", &texts, 10).is_empty());
+        assert_eq!(index.search("god world", &texts, 1).len(), 1);
+    }
+
+    #[test]
+    fn normalize_phrase_matches_ts() {
+        assert_eq!(normalize_phrase("  Hello,  World!  "), "hello world");
+        assert_eq!(normalize_phrase("John 3:16 — loved"), "john 3 16 loved");
+        assert_eq!(normalize_phrase("don't"), "don't");
     }
 }
