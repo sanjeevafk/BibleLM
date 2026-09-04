@@ -1,0 +1,18 @@
+[package]
+name = "biblelm-build"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "biblelm-build"
+path = "src/main.rs"
+
+[dependencies]
+biblelm-types = { workspace = true }
+biblelm-index = { workspace = true }
+biblelm-graph = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
