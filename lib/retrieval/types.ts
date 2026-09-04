@@ -17,7 +17,7 @@ export const NT_BOOKS = new Set([
   '1PE', '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV',
 ]);
 
-export const LOCAL_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB']);
+export const LOCAL_TRANSLATIONS = new Set(['BSB', 'KJV', 'WEB', 'ASV', 'NHEB', 'PESHITTA']);
 
 export const CONTEXT_CACHE_VERSION = 'v11';
 export const DATASET_VERSION = '2026-03-retrieval-enrichment';

@@ -17,6 +17,7 @@ export type StructuredVerseResponse = {
     summary: string;
   };
   original_language?: StructuredOriginalLanguageEntry[];
+  peshitta?: string;
 };
 
 export type StructuredChatResponse = {
@@ -111,6 +112,7 @@ export function buildStructuredVerseResponse(
     },
     ...(summary ? { analysis: { summary } } : {}),
     ...(originalLanguage.length > 0 ? { original_language: originalLanguage } : {}),
+    ...(verse.peshitta ? { peshitta: normalizeText(verse.peshitta) } : {}),
   };
 }
 
@@ -138,6 +140,7 @@ export function compactStructuredChatResponse(
         verse: section.verse,
         ...(analysisSummary ? { analysis: { summary: analysisSummary } } : {}),
         ...(originalLanguage.length > 0 ? { original_language: originalLanguage } : {}),
+        ...(section.peshitta ? { peshitta: normalizeText(section.peshitta) } : {}),
       };
     })
     .filter((section) => Boolean(section.verse?.reference && section.verse?.translation && section.verse?.text));

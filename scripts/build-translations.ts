@@ -16,7 +16,8 @@ const TRANSLATION_FILES = [
   { code: 'KJV', file: 'KJV.csv', required: true },
   { code: 'WEB', file: 'WEB.csv', required: true },
   { code: 'NHEB', file: 'NHEB.csv', required: false },
-  { code: 'ASV', file: 'ASV.csv', required: true }
+  { code: 'ASV', file: 'ASV.csv', required: true },
+  { code: 'PESHITTA', file: 'Peshitta.csv', required: false }
 ];
 
 const BOOK_NUMBER_TO_CODE: Record<number, string> = {
