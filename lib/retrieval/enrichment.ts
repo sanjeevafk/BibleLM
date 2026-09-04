@@ -7,6 +7,7 @@ import { getMorphhbWords } from '../morphhb';
 import { getStrongsEntry } from '../datasets/strongs';
 import { getOpenHebrewBibleLayers, type OpenHebrewVerseLayers } from '../openhebrewbible';
 import { getOpenGNTLayers, type OpenGntVerseLayers } from '../opengnt';
+import { getTranslationVerse } from '../translations';
 import { fetchExternalWithTimeoutBudget, type VerseContext } from '../bible-fetch';
 import { OT_BOOKS, NT_BOOKS } from './types';
 import { parseReferenceKey } from './verse-utils';
@@ -218,6 +219,10 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
         layerTasks.push((async () => {
           const layers = await getOpenGNTLayers(verse.reference);
           if (layers) verse.openGnt = formatOpenGntLayers(layers);
+        })());
+        layerTasks.push((async () => {
+          const peshittaText = await getTranslationVerse(verse.reference, 'PESHITTA');
+          if (peshittaText) verse.peshitta = peshittaText;
         })());
       }
       if (layerTasks.length > 0) await Promise.all(layerTasks);

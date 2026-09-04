@@ -20,6 +20,7 @@ export type VerseBlock = {
   translation?: string;
   analysisSummary?: string;
   originalLanguage?: StructuredOriginalLanguageEntry[];
+  peshitta?: string;
 };
 
 function splitOriginalLanguageSection(markdown: string): { main: string; original: string } {
@@ -165,6 +166,17 @@ export function MessageCitations({ blocks, preamble, fallbackSummary }: MessageC
                   </AccordionItem>
                 </Accordion>
               ) : null}
+
+              {block.peshitta && (
+                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                  <div className="flex items-center justify-between text-[10px] font-mono font-medium text-muted-foreground/70 uppercase tracking-wider mb-1.5">
+                    <span>Syriac Peshitta (Aramaic NT)</span>
+                  </div>
+                  <p className="font-serif text-sm sm:text-base text-foreground/90 leading-relaxed text-right font-normal" dir="rtl">
+                    {block.peshitta}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         );

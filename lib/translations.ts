@@ -37,7 +37,9 @@ const TRANSLATION_ALIASES: Record<string, string> = {
   KJV: 'KJV',
   WEB: 'WEB',
   NHEB: 'NHEB',
-  ASV: 'ASV'
+  ASV: 'ASV',
+  PESHITTA: 'PESHITTA',
+  SYR: 'PESHITTA'
 };
 
 const BOOK_NUMBER_TO_CODE: Record<number, string> = {
