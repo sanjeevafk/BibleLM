@@ -23,7 +23,7 @@ import {
   RETRIEVAL_SCORE_WEIGHTS,
 } from './types';
 import type { RetrievalInstrumentation } from './types';
-import { cloneVerses, normalizeVerses, dedupeByVerseId } from './verse-utils';
+import { cloneVerses, normalizeVerses, dedupeByVerseId, escapeLikePattern } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
 import { graphRagExpand } from './graph-rag';
 import {
@@ -171,15 +171,17 @@ async function getClusterBoostScores(normalizedQuery: string): Promise<Map<strin
     const pool = getDbPool();
     if (!pool) return new Map<string, number>();
 
-    const likeClauses = tokens.map((_, idx) => `label LIKE ?`).join(' OR ');
+    // pg uses $1,$2 placeholders (not `?`). Escape LIKE wildcards so user
+    // tokens containing %/_ match literally.
+    const likeClauses = tokens.map((_, idx) => `label LIKE $${idx + 1} ESCAPE '\\'`).join(' OR ');
     const sql = `
       SELECT members, vote_total
       FROM tsk_clusters
       WHERE ${likeClauses}
       ORDER BY vote_total DESC
-      LIMIT ?
+      LIMIT $${tokens.length + 1}
     `;
-    const params = [...tokens.map((token) => `%${token}%`), MAX_CLUSTER_CANDIDATES];
+    const params = [...tokens.map((token) => `%${escapeLikePattern(token)}%`), MAX_CLUSTER_CANDIDATES];
     const result = await pool.query<{ members: string | null; vote_total: number | null }>(sql, params);
     const rows = result.rows;
 

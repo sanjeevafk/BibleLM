@@ -62,7 +62,7 @@ type ScenarioReport = {
 
 type Report = {
   generated_at: string;
-  mode: 'sample' | 'live';
+  mode: 'sample' | 'live' | 'heldout';
   notes?: string[];
   scenarios: Scenario[];
   baseline_metrics: AggregateMetrics;
@@ -79,10 +79,12 @@ const REPORT_JSON_PATH = path.join(REPORT_DIR, 'latest-report.json');
 const REPORT_MD_PATH = path.join(REPORT_DIR, 'latest-report.md');
 const DOCS_REPORT_DIR = path.join(ROOT, 'docs', 'benchmark');
 
-function parseMode(): 'sample' | 'live' {
+function parseMode(): 'sample' | 'live' | 'heldout' {
   const index = process.argv.indexOf('--mode');
   const value = index >= 0 ? process.argv[index + 1] : undefined;
-  return value === 'live' ? 'live' : 'sample';
+  if (value === 'live') return 'live';
+  if (value === 'heldout') return 'heldout';
+  return 'sample';
 }
 
 function average(values: number[]): number {
@@ -213,6 +215,11 @@ function buildSampleReport(): Report {
   return {
     generated_at: new Date().toISOString(),
     mode: 'sample',
+    notes: [
+      'SYNTHETIC FIXTURE — demonstrates report shape only. Values come from',
+      'fixtures/sample-results.json (hand-written), NOT from measured retrieval.',
+      'Never cite sample-mode numbers as quality claims. Use live/heldout modes.',
+    ],
     scenarios,
     baseline_metrics: baselineMetrics,
     post_optimization_metrics: postOptimizationMetrics,
@@ -253,6 +260,12 @@ function prepareSearchQuery(scenario: Scenario): string {
 
 async function runSingleScenario(scenario: Scenario): Promise<{ run: BenchmarkRun; topRefs: string[] }> {
   const startedAt = Date.now();
+  // Honor cacheMode: `hit` warms the retrieval cache first and measures the
+  // second call; `miss` measures a single cold call. When no cache backend is
+  // configured both converge — the ~0 delta then honestly reflects no cache.
+  if (scenario.cacheMode === 'hit') {
+    await retrieveContextForQuery(prepareSearchQuery(scenario), scenario.translation || 'BSB').catch(() => []);
+  }
   const retrievalStart = Date.now();
   const searchQuery = prepareSearchQuery(scenario);
   const verses = await retrieveContextForQuery(searchQuery, scenario.translation || 'BSB');
@@ -268,17 +281,21 @@ async function runSingleScenario(scenario: Scenario): Promise<{ run: BenchmarkRu
   ];
 
   if (expectedTargets.length === 0) {
-    // Adversarial item with no expected verses (e.g. invalid reference check)
+    // Adversarial item with no expected verses (e.g. invalid reference
+    // Hezekiah 4:12, 1 JHN 99:99). Success = returning nothing, not a free
+    // perfect score: any retrieved ref is a false hit.
+    const returnedNothing = topRefs.length === 0;
+    const score = returnedNothing ? 1 : 0;
     return {
       run: {
         total_latency_ms: finishedAt - startedAt,
         retrieval_latency_ms: retrievalEnd - retrievalStart,
         llm_latency_ms: 0,
-        precision_at_5: 1,
+        precision_at_5: score,
         citation_validity_rate: 1,
-        hit_at_1: 1,
-        hit_at_5: 1,
-        mrr: 1,
+        hit_at_1: score,
+        hit_at_5: score,
+        mrr: score,
       },
       topRefs,
     };
@@ -327,6 +344,38 @@ async function runScenarioBatch(scenario: Scenario, iterations: number): Promise
 
 async function buildLiveReport(): Promise<Report> {
   const scenarios = loadJsonFile<Scenario[]>(SCENARIOS_PATH);
+  return buildMeasuredReport(scenarios, 'live', [
+    'Retrieval-quality benchmark: real retrieveContextForQuery calls, no LLM.',
+    'Baseline = cacheMode miss (cold), Optimized = cacheMode hit (cache warmed first).',
+    'Delta ~0 with no cache backend configured honestly reflects no cache.',
+    'llm_latency_ms is 0 by design — this benchmark targets retrieval only.',
+    `DB mode: ${process.env.BIBLELM_DISABLE_DB === '1' ? 'lexical-only (BIBLELM_DISABLE_DB=1)' : 'full (DB enabled if POSTGRES_URL set)'}.`,
+  ]);
+}
+
+/**
+ * Held-out evaluation: deterministic subset (every 4th scenario + all
+ * adversarial) reserved from tuning. Run after any retrieval change and
+ * report these numbers — not full-set numbers — as the quality claim.
+ */
+export function selectHeldoutScenarios(scenarios: Scenario[]): Scenario[] {
+  return scenarios.filter(
+    (scenario, index) => scenario.category === 'adversarial' || index % 4 === 3
+  );
+}
+
+async function buildHeldoutReport(): Promise<Report> {
+  const scenarios = loadJsonFile<Scenario[]>(SCENARIOS_PATH);
+  const heldout = selectHeldoutScenarios(scenarios);
+  return buildMeasuredReport(heldout, 'heldout', [
+    `Held-out subset: ${heldout.length}/${scenarios.length} scenarios (every 4th + all adversarial).`,
+    'Reserved from tuning — cite THESE numbers as the quality claim, not full-set.',
+    'Baseline = miss (cold), Optimized = hit (warmed). llm_latency_ms = 0 by design.',
+    `DB mode: ${process.env.BIBLELM_DISABLE_DB === '1' ? 'lexical-only (BIBLELM_DISABLE_DB=1)' : 'full (DB enabled if POSTGRES_URL set)'}.`,
+  ]);
+}
+
+async function buildMeasuredReport(scenarios: Scenario[], mode: 'live' | 'heldout', notes: string[]): Promise<Report> {
   const baselineByScenario: Record<string, BenchmarkRun[]> = {};
   const optimizedByScenario: Record<string, BenchmarkRun[]> = {};
   const perScenarioRefs: Record<string, { baseline: string[]; optimized: string[] }> = {};
@@ -368,12 +417,8 @@ async function buildLiveReport(): Promise<Report> {
 
   return {
     generated_at: new Date().toISOString(),
-    mode: 'live',
-    notes: [
-      'Golden eval dataset benchmark report covering 50 evaluation items.',
-      'Executes real retrieval pipeline calls and computes metrics from expectedVerses, mustContainVerses, and parallelVerses.',
-      'llm_latency_ms is set to 0 in live mode because this benchmark targets retrieval quality and retrieval latency only.',
-    ],
+    mode,
+    notes,
     scenarios,
     baseline_metrics: baselineMetrics,
     post_optimization_metrics: postOptimizationMetrics,
@@ -384,7 +429,8 @@ async function buildLiveReport(): Promise<Report> {
 
 async function main(): Promise<void> {
   const mode = parseMode();
-  const report = mode === 'live' ? await buildLiveReport() : buildSampleReport();
+  const report =
+    mode === 'live' ? await buildLiveReport() : mode === 'heldout' ? await buildHeldoutReport() : buildSampleReport();
   ensureReportDir();
   fs.writeFileSync(REPORT_JSON_PATH, JSON.stringify(report, null, 2));
   fs.writeFileSync(REPORT_MD_PATH, renderMarkdown(report));

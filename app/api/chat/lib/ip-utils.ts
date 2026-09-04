@@ -58,3 +58,14 @@ export function getClientIp(req: Request): string | null {
 
   return null;
 }
+
+/**
+ * Builds a rate-limit key that never skips limiting.
+ * When no valid client IP is present (direct IP, stripped headers),
+ * falls back to a shared `unknown` bucket so abuse without headers
+ * is still throttled instead of unlimited.
+ */
+export function getRateLimitKey(req: Request, prefix = 'ratelimit'): string {
+  const ip = getClientIp(req);
+  return ip ? `${prefix}:${ip}` : `${prefix}:unknown`;
+}

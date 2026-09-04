@@ -36,7 +36,11 @@ function getCorsOrigin(requestOrigin: string | null): string | null {
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
-  // Only apply CORS logic to API routes
+  // Only apply CORS logic to API routes.
+  // NOTE: Rate limiting is intentionally NOT done here — middleware/proxy
+  // cannot hold shared state across isolates. Limits live in each route
+  // handler (chat/evaluate/keep-alive) via Redis + in-memory fallback,
+  // fail-closed even when client IP headers are missing.
   if (!pathname.startsWith('/api/')) {
     return NextResponse.next();
   }

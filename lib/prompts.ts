@@ -96,6 +96,27 @@ const BOOK_CODE_TO_NAME: Record<string, string> = {
   REV: 'Revelation',
 };
 
+const GENERIC_TAG_PATTERN = /<\/?\s*[a-z_][a-z0-9_]*\s*\/?\s*>/gi;
+const QUERY_TAG_PATTERN = /<\/?\s*(user_query|conversation_history|system_instruction|reference|text)\s*\/?\s*>/gi;
+
+/**
+ * Strips tag-like sequences to a fixpoint (bounded passes).
+ * A single `replace` pass is insufficient: nested payloads such as
+ * `<<script>script>` re-form a tag after one removal (CodeQL
+ * js/incomplete-multi-character-sanitization). Loop until stable.
+ */
+export function stripTagLikeSequences(value: string, pattern: RegExp = GENERIC_TAG_PATTERN, maxPasses = 10): string {
+  let prev = value;
+  for (let i = 0; i < maxPasses; i += 1) {
+    const next = prev.replace(pattern, '');
+    if (next === prev) return next;
+    prev = next;
+  }
+  // Defense in depth: input still unstable after maxPasses — drop all
+  // angle brackets so no tag can survive.
+  return prev.replace(/[<>]/g, '');
+}
+
 export const SYSTEM_PROMPT = `You are an insightful, empathetic, and knowledgeable biblical chatbot. Your goal is to converse naturally with the user, answering their questions, providing comfort, and discussing topics while remaining firmly grounded in the biblical text.
 
 Core rules:
@@ -224,16 +245,21 @@ function applyContextBudget(
 export function buildContextPrompt(
   query: string,
   verses: VerseContext[],
-  translation: string
+  translation: string,
+  options?: { allowGeneralKnowledge?: boolean }
 ): string {
-  const sanitizedQuery = query.replace(/<\/?\s*(user_query|conversation_history)\s*>/gi, '');
+  const sanitizedQuery = stripTagLikeSequences(query, QUERY_TAG_PATTERN)
+    .replace(/system\s+instruction\s*:/gi, 'system-instruction:')
+    .replace(/\0/g, '');
+  const allowGeneralKnowledge = options?.allowGeneralKnowledge ?? false;
 
   const isCosmologyQuery = /\b(cosmolog|cosmo|astronom|science|scientific|universe|cosmic|celestial|planet|earth\b|sun\b|moon\b|stars\b|star\s*light|heaven\b|heavens\b|sky\b|firmament|expanse|vault|dome|horizon|constellation|zodiac|eclipse|solar|lunar|sunrise|sunset|day\s*night|geocentr|heliocentr|flat\s*earth|round\s*earth|globe|sphere|orbit|rotation|revolv|axis|tilt|equinox|solstice|pillar\s*of\s*the\s*earth|foundations\s*of\s*the\s*earth|corners\s*of\s*the\s*earth|ends\s*of\s*the\s*earth)\b/i.test(
     sanitizedQuery
   );
 
   if (!verses || verses.length === 0) {
-    return `SYSTEM INSTRUCTION
+    if (allowGeneralKnowledge) {
+      return `SYSTEM INSTRUCTION
 ${SYSTEM_PROMPT}
 
 QUERY
@@ -249,6 +275,23 @@ None
 
 RESPONSE FORMAT
 You may respond conversationally based on general biblical knowledge. You do not need to strictly cite verses if none were provided, but keep your response grounded in biblical principles. Be helpful and natural.`;
+    }
+    return `SYSTEM INSTRUCTION
+${SYSTEM_PROMPT}
+
+QUERY
+<user_query>
+${sanitizedQuery}
+</user_query>
+
+RETRIEVED SCRIPTURE CONTEXT
+No verses were retrieved for this biblical query.
+
+ALLOWED CITATIONS
+None
+
+RESPONSE FORMAT
+No supporting passages were found in the authoritative sources. Say so plainly, do not invent verses or citations, and invite the user to rephrase or provide a reference. If a greeting or conversational reply is appropriate, keep it brief and do not present general knowledge as quoted Scripture.`;
   }
 
   const primaryVerses = verses.filter(v => !v.isCrossReference);
