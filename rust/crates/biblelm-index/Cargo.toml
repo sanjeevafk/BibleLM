@@ -1,0 +1,11 @@
+[package]
+name = "biblelm-index"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+biblelm-types = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

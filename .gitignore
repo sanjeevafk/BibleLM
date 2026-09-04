@@ -59,3 +59,7 @@ verify_regex.js
 response.txt
 output.txt
 test_*.py
+
+# Rust build artifacts + reproducible Rust index outputs (rebuild: biblelm-build all)
+rust/target/
+data/rust/
