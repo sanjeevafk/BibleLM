@@ -146,7 +146,7 @@ export default function Home() {
             </div>
             <h3 className="text-lg font-bold">Hybrid Retrieval (Lexical + Semantic)</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Fuse.js lexical search + embeddings with Reciprocal Rank Fusion, plus domain-aware boosts and query expansion.
+              BM25 lexical search + embeddings with Reciprocal Rank Fusion, plus domain-aware boosts and query expansion.
               Strict dedupe by verseId, with topK capped at 10–15.
             </p>
           </div>
@@ -198,7 +198,7 @@ export default function Home() {
             <li><span className="font-semibold">Default Translation:</span> Berean Study Bible (BSB)</li>
             <li><span className="font-semibold">Original Languages:</span> OpenScriptures MorphHB, OpenHebrewBible layers (CC BY-NC 4.0), Strong&apos;s Concordance</li>
             <li><span className="font-semibold">Cross-References:</span> Treasury of Scripture Knowledge (TSK)</li>
-            <li><span className="font-semibold">Retrieval Stack:</span> Fuse.js lexical search, embeddings + pgvector, RRF, and metadata-aware boosts</li>
+            <li><span className="font-semibold">Retrieval Stack:</span> BM25 lexical search, embeddings + pgvector, RRF, and metadata-aware boosts</li>
             <li><span className="font-semibold">Fallbacks:</span> Public free APIs (bolls.life, etc.)</li>
           </ul>
         </div>

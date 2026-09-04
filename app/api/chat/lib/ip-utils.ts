@@ -3,20 +3,7 @@
  * Pure functions — no side effects, no external I/O.
  */
 
-function isValidIPv4(value: string): boolean {
-  const parts = value.split('.');
-  if (parts.length !== 4) return false;
-  return parts.every((part) => {
-    if (!/^\d{1,3}$/.test(part)) return false;
-    const num = Number(part);
-    return num >= 0 && num <= 255;
-  });
-}
-
-function isLikelyIPv6(value: string): boolean {
-  if (!value.includes(':')) return false;
-  return /^[0-9a-f:]+$/i.test(value);
-}
+import { isIP } from 'net';
 
 function normalizeIpCandidate(candidate: string | null | undefined): string | null {
   if (!candidate) return null;
@@ -49,10 +36,7 @@ function normalizeIpCandidate(candidate: string | null | undefined): string | nu
   // Remove IPv6 scope zone, e.g. "fe80::1%eth0".
   value = value.split('%')[0];
 
-  if (isValidIPv4(value) || isLikelyIPv6(value)) {
-    return value.toLowerCase();
-  }
-  return null;
+  return isIP(value) !== 0 ? value.toLowerCase() : null;
 }
 
 /**
