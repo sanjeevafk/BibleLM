@@ -47,10 +47,8 @@ async function main() {
   // Output as JSON for diffing
   const path = await import('path');
   const fs = await import('fs');
-  const outDir = path.resolve(process.cwd(), 'project-docs', 'benchmark');
-  if (!fs.existsSync(outDir)) {
-    fs.mkdirSync(outDir, { recursive: true });
-  }
+  const outDir = path.resolve(process.cwd(), 'docs', 'benchmark');
+  fs.mkdirSync(outDir, { recursive: true });
   const outputPath = path.join(
     outDir,
     graphFlag === 'ON' ? 'ab-graphrag-on.json' : 'ab-graphrag-off.json'

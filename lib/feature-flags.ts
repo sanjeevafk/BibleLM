@@ -11,7 +11,7 @@ export function numberFromEnv(value: string | undefined, fallback: number): numb
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-// Retrieval rollout flags (defaults documented in project-docs/benchmark-rollout.md)
+// Retrieval rollout flags (defaults documented in docs/benchmark/README.md)
 export const ENABLE_SEMANTIC_RERANKER = isEnabled(process.env.ENABLE_SEMANTIC_RERANKER);
 export const ENABLE_DETERMINISTIC_RERANKER = process.env.ENABLE_DETERMINISTIC_RERANKER !== '0';
 export const ENABLE_TOPIC_RETRIEVAL_BOOST = isEnabled(process.env.ENABLE_TOPIC_RETRIEVAL_BOOST);
@@ -23,7 +23,7 @@ export const ENABLE_RETRIEVAL_DEBUG =
   isEnabled(process.env.RETRIEVAL_DEBUG) ||
   isEnabled(process.env.DEBUG_LLM);
 
-// GraphRAG rollout flags (defaults documented in project-docs/graph-rag-method.md)
+// GraphRAG rollout flags (defaults documented in docs/graph-rag-method.md)
 export const ENABLE_GRAPH_RAG = isEnabled(process.env.ENABLE_GRAPH_RAG);
 export const GRAPH_RAG_MAX_DEPTH = numberFromEnv(process.env.GRAPH_RAG_MAX_DEPTH, 2);
 export const GRAPH_RAG_MAX_EXPANSIONS = numberFromEnv(process.env.GRAPH_RAG_MAX_EXPANSIONS, 30);

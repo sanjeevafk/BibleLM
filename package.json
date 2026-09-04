@@ -15,7 +15,7 @@
     "benchmark:live": "BIBLELM_DISABLE_DB=1 BIBLELM_DISABLE_EXTERNAL_FALLBACK=1 BIBLELM_SILENT_TRANSLATION_WARNINGS=1 ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode live",
     "benchmark:heldout": "BIBLELM_DISABLE_DB=1 BIBLELM_DISABLE_EXTERNAL_FALLBACK=1 BIBLELM_SILENT_TRANSLATION_WARNINGS=1 ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode heldout",
     "benchmark:contract": "ts-node --project tsconfig.scripts.json tests/benchmark/check-route-contract.ts",
-    "benchmark:regression": "ts-node --project tsconfig.scripts.json tests/benchmark/check-regressions.ts project-docs/benchmark/latest-report.json",
+    "benchmark:regression": "ts-node --project tsconfig.scripts.json tests/benchmark/check-regressions.ts docs/benchmark/latest-report.json",
     "benchmark:flags": "ts-node --project tsconfig.scripts.json tests/benchmark/check-feature-flags.ts",
     "benchmark:ragas": "python3 scripts/benchmark.py --framework ragas",
     "benchmark:deepeval": "python3 scripts/benchmark.py --framework deepeval",

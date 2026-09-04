@@ -82,8 +82,8 @@ python3 scripts/benchmark.py --framework deterministic
 * Pure **retrieval** Hit@k measured 2026-09-04 in lexical-only mode
   (`BIBLELM_DISABLE_DB=1`, no pgvector), same 53-scenario set:
   **Hit@1 0.25 / Hit@5 0.40 / MRR 0.31** (held-out n=17: 0.29/0.41/0.34),
-  p50 52ms. Reports: `project-docs/benchmark/live-report-2026-09-04.json`,
-  `project-docs/benchmark/heldout-report-2026-09-04.json`.
+  p50 52ms. Reports: `docs/benchmark/live-report-2026-09-04.json`,
+  `docs/benchmark/heldout-report-2026-09-04.json`.
 * Judge pinning (unchanged): NVIDIA NIM `meta/llama-3.1-8b-instruct`,
   OrcaRouter `anthropic/claude-haiku-4.5`, Groq `gpt-4o-mini` — see §3.
   Re-run with `BIBLELM_DISABLE_DB=0` + live Postgres to publish

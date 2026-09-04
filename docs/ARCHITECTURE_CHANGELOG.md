@@ -47,9 +47,9 @@ Chronological log of major technical milestones, retrieval optimizations, and ar
 ## 5. Golden Evaluation Dataset & Automated Benchmark Harness
 * **Category:** Evaluation & Quality Guardrails
 * **Commits:** `1ad57d5`, `8bea6ed`
-* **Description:** Builds an automated end-to-end benchmark framework ([`tests/benchmark/run-benchmarks.ts`](file:///home/sanjeev/Downloads/bibleLM/tests/benchmark/run-benchmarks.ts)) testing 56 Golden Eval scenarios across 10 categories (theology, ethics, exegesis, passage, adversarial).
+* **Description:** Builds an automated end-to-end benchmark framework ([`tests/benchmark/run-benchmarks.ts`](file:///home/sanjeev/Downloads/bibleLM/tests/benchmark/run-benchmarks.ts)) testing 53 Golden Eval scenarios across 9 categories (passage, topical, exegesis, theology, ethics, original_language, multiturn, adversarial, graphrag).
 * **Empirical Impact:** Enforces automated CI regression checks (`npm run benchmark:regression`) for Hit@1, Hit@5, MRR, latency (P50/P95), and citation validity rate.
-* **Key Artifacts:** [`data/golden-eval-dataset.json`](file:///home/sanjeev/Downloads/bibleLM/data/golden-eval-dataset.json), [`tests/benchmark/run-benchmarks.ts`](file:///home/sanjeev/Downloads/bibleLM/tests/benchmark/run-benchmarks.ts).
+* **Key Artifacts:** [`tests/benchmark/fixtures/scenarios.json`](file:///home/sanjeev/Downloads/bibleLM/tests/benchmark/fixtures/scenarios.json), [`tests/benchmark/run-benchmarks.ts`](file:///home/sanjeev/Downloads/bibleLM/tests/benchmark/run-benchmarks.ts).
 
 ---
 
@@ -68,3 +68,15 @@ Chronological log of major technical milestones, retrieval optimizations, and ar
 * **Description:** Stores 5 full translations (`BSB`, `WEB`, `KJV`, `ASV`, `NHEB`) as Brotli-compressed `.json.br` book files. Pre-computes BM25 state into `bm25-state.json` (9.77 MB) for <10ms Edge cold-start hydration.
 * **Empirical Impact:** Complete serverless deployment without expensive vector database infrastructure costs.
 * **Key Artifacts:** [`data/translations/`](file:///home/sanjeev/Downloads/bibleLM/data/translations), [`lib/retrieval/bm25.ts`](file:///home/sanjeev/Downloads/bibleLM/lib/retrieval/bm25.ts).
+
+---
+
+## 8. Rust Native Offline Build CLI & Query-Time BM25 Search Engine
+* **Category:** High-Performance Native Indexing & Retrieval
+* **Commits:** `ad14cb4`, `4e0a317`, `2acde7e`
+* **Description:** Implements a modular Rust workspace (`biblelm-types`, `biblelm-index`, `biblelm-graph`, `biblelm-build`) providing byte-exact TypeScript-parity BM25 and TSK graph pre-compilation into compact binary formats (`BLM1`, `BLMG`). Ports query-time BM25 scoring with smoothed IDF, k1/b TF saturation, stable float sorting (`f64::total_cmp`), and top-100 phrase boosting. Includes an offline `eval` subcommand with side-by-side metric comparison against TypeScript.
+* **Empirical Impact:**
+  - **Pre-compilation speed:** Compiles full Bible index and cross-reference graph in **~4s** (vs 30s+ in Node.js).
+  - **Binary compactness:** Reduces BM25 index and graph storage to **6.5 MB / 5.6 MB** (vs 9.8 MB / 21 MB in JSON).
+  - **Retrieval Parity:** **100% bit-for-bit parity** with TypeScript engine (0 differing top-5 refs across all 53 golden scenarios).
+* **Key Artifacts:** [`rust/crates/biblelm-index/src/lib.rs`](file:///home/sanjeev/Downloads/bibleLM/rust/crates/biblelm-index/src/lib.rs), [`rust/crates/biblelm-build/src/main.rs`](file:///home/sanjeev/Downloads/bibleLM/rust/crates/biblelm-build/src/main.rs), [`rust/crates/biblelm-build/src/eval.rs`](file:///home/sanjeev/Downloads/bibleLM/rust/crates/biblelm-build/src/eval.rs), [`scripts/eval-raw-bm25.ts`](file:///home/sanjeev/Downloads/bibleLM/scripts/eval-raw-bm25.ts).
