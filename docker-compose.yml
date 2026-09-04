@@ -9,8 +9,10 @@
 #
 # Services:
 #   biblelm   — Next.js app (port 3000)
-#   redis     — Optional Upstash-compatible Redis for rate limiting / caching
-#               Remove this service if you rely on the Upstash cloud.
+#   redis     — Plain Redis store (RESP on 6379, internal only)
+#   redis-rest — Upstash REST gateway (serverless-redis-http) in front of redis.
+#               REQUIRED because @upstash/redis speaks REST, not RESP.
+#               Remove redis + redis-rest if you rely on Upstash cloud.
 # =============================================================================
 
 services:
@@ -29,12 +31,15 @@ services:
     environment:
       # ── LLM Providers ──────────────────────────────────────────────────────
       GROQ_API_KEY: ${GROQ_API_KEY}
-      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
+      # Canonical: HF_TOKEN. HUGGINGFACE_API_KEY kept as legacy alias.
+      HF_TOKEN: ${HF_TOKEN:-${HUGGINGFACE_API_KEY:-}}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-${HF_TOKEN:-}}
 
       # ── Rate Limiting / Caching ─────────────────────────────────────────────
-      # Point at the local redis service defined below.
+      # Point at the local REST gateway defined below (NOT stock Redis: stock
+      # redis:7-alpine speaks RESP, while @upstash/redis requires REST).
       # Override with Upstash cloud credentials if you prefer the managed service.
-      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-http://redis:8079}
+      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-http://redis-rest}
       UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-local-dev-token}
 
       # ── Runtime ────────────────────────────────────────────────────────────
@@ -43,6 +48,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      redis-rest:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 30s
@@ -51,14 +58,15 @@ services:
       start_period: 15s
 
   # ---------------------------------------------------------------------------
-  # Local Redis (Upstash-compatible REST gateway via upstash/redis-local)
-  # Provides distributed rate limiting and response caching without needing
-  # a paid Upstash account in self-hosted mode.
+  # Local Redis store (RESP only — NOT directly usable by @upstash/redis).
+  # Provides persistence for the REST gateway below.
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: biblelm-redis
     restart: unless-stopped
+    expose:
+      - "6379"
     # Persist data across restarts so the response cache survives container
     # recreation. Remove the volume mount to run fully ephemeral.
     volumes:
@@ -69,6 +77,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Upstash REST gateway (serverless-redis-http) — translates @upstash/redis
+  # REST calls to RESP for the `redis` service above.
+  # Self-hosted equivalent of Upstash cloud REST API for local/dev parity.
+  # ---------------------------------------------------------------------------
+  redis-rest:
+    image: hiett/serverless-redis-http:latest
+    container_name: biblelm-redis-rest
+    restart: unless-stopped
+    expose:
+      - "80"
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-local-dev-token}
+      SRH_CONNECTION_STRING: "redis://redis:6379"
+    depends_on:
+      redis:
+        condition: service_healthy
 
 volumes:
   redis_data:

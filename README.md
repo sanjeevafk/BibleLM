@@ -55,14 +55,25 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 
 ## Performance & Evaluation Metrics
 
-| Metric | Measured Value | Benchmark Target | Status |
-| :--- | :--- | :--- | :--- |
-| **Hit @ 1** | **100.0%** | ≥ 90.0% | ✅ PASS |
-| **Hit @ 5** | **100.0%** | ≥ 95.0% | ✅ PASS |
-| **Mean Reciprocal Rank (MRR)** | **1.000** | ≥ 0.900 | ✅ PERFECT |
-| **Average Search Latency** | **155.4 ms** | < 300 ms | ✅ PASS |
-| **Citation Validity Rate** | **86.7%** | ≥ 80.0% | ✅ PASS |
-| **Golden Eval Test Cases** | **56 Scenarios** | 8 Categories | ✅ COMPLETE |
+Measured 2026-09-04, commit `cleanup/ponytail-audit` + review fixes, lexical-only
+mode (`BIBLELM_DISABLE_DB=1`, no Postgres/pgvector), local run. Retrieval-only
+(no LLM latency). See dated reports in `project-docs/benchmark/`.
+
+| Metric | Full set (n=53) | Held-out (n=17) | Benchmark Target | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Hit @ 1** | **25%** | **29%** | ≥ 90.0% | ❌ BELOW TARGET (lexical-only) |
+| **Hit @ 5** | **40%** | **41%** | ≥ 95.0% | ❌ BELOW TARGET (lexical-only) |
+| **Mean Reciprocal Rank (MRR)** | **0.31** | **0.34** | ≥ 0.900 | ❌ BELOW TARGET (lexical-only) |
+| **Median Retrieval Latency (p50)** | **52 ms** | **159 ms** | < 300 ms | ✅ PASS |
+| **p95 Retrieval Latency** | **603 ms** | **2735 ms** | — | ℹ️ first-run index hydration dominates p95 |
+| **Golden Eval Test Cases** | **53 scenarios** | **9 categories** | 8 categories | ✅ COMPLETE |
+
+> Previous table claimed Hit@1/Hit@5 100% / MRR 1.000 — those were
+> `benchmark:sample` synthetic fixture values (`tests/benchmark/fixtures/sample-results.json`,
+> hand-written), not measured retrieval. Do not cite them. Production numbers
+> with Postgres/pgvector + semantic rerank enabled are expected to be higher
+> than lexical-only; re-run `benchmark:heldout` with `BIBLELM_DISABLE_DB=0`
+> and a live DB to publish them.
 
 ---
 
@@ -77,8 +88,9 @@ Most RAG systems rely on expensive, high-latency vector databases. BibleLM is bu
 Run:
 
 ```bash
-npm run benchmark:sample
-npm run benchmark:live
+npm run benchmark:sample    # synthetic fixture demo only — NOT a quality claim
+npm run benchmark:live      # full 53-scenario measured retrieval (no LLM)
+npm run benchmark:heldout   # 17-scenario held-out subset — cite THESE numbers
 npm run benchmark:regression
 
 # GraphRAG experiment (off by default)

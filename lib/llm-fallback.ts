@@ -35,6 +35,37 @@ function isQuotaError(error: unknown): boolean {
   );
 }
 
+function isRetryableError(error: unknown): boolean {
+  if (isQuotaError(error)) return true;
+  const status = (error as { status?: number; statusCode?: number })?.status
+    ?? (error as { statusCode?: number })?.statusCode;
+  if (typeof status === 'number' && status >= 500 && status < 600) return true;
+  const message = String((error as { message?: string })?.message || error || '').toUpperCase();
+  return (
+    message.includes('500') ||
+    message.includes('502') ||
+    message.includes('503') ||
+    message.includes('504') ||
+    message.includes('TIMEOUT') ||
+    message.includes('TIMED OUT') ||
+    message.includes('ECONNRESET') ||
+    message.includes('ETIMEDOUT') ||
+    message.includes('EAI_AGAIN') ||
+    message.includes('OVERLOADED') ||
+    message.includes('UNAVAILABLE') ||
+    message.includes('FETCH FAILED') ||
+    message.includes('NETWORK')
+  );
+}
+
+function isAuthError(error: unknown): boolean {
+  const status = (error as { status?: number; statusCode?: number })?.status
+    ?? (error as { statusCode?: number })?.statusCode;
+  if (status === 401 || status === 403) return true;
+  const message = String((error as { message?: string })?.message || error || '').toUpperCase();
+  return message.includes('401') || message.includes('INVALID API KEY') || message.includes('UNAUTHORIZED');
+}
+
 function extractTranslation(prompt: string): string | undefined {
   const match = prompt.match(/Requested translation:\s*([A-Z0-9-]+)/i);
   return match?.[1]?.trim();
@@ -169,10 +200,10 @@ export async function generateWithFallback(
           model: groq(modelName),
           prompt,
           temperature,
-          maxTokens: maxTokens as any,
+          maxOutputTokens: maxTokens,
           frequencyPenalty: 0.3,
           presencePenalty: 0.2,
-        } as any);
+        });
 
         const chunks: string[] = [];
         for await (const chunk of (await groqStream).textStream) {
@@ -185,10 +216,17 @@ export async function generateWithFallback(
           console.log(`[llm] Using Groq: ${modelName}`);
           return { type: 'content', content: text, modelUsed: `groq:${modelName}`, chunks };
         }
+        // Empty output: try next model before falling back to context-only.
+        console.warn(`[llm] Groq returned empty text (${modelName}); trying next model.`);
+        continue;
       } catch (error) {
         console.warn('[llm] Groq error (%s):', modelName, error);
-        if (isQuotaError(error)) {
-          // If the first model hits quota, try the secondary one.
+        if (isAuthError(error)) {
+          // Misconfiguration — retrying another model won't help.
+          break;
+        }
+        if (isRetryableError(error)) {
+          // Quota, 5xx, timeout, network: try the secondary model.
           continue;
         }
         // For other errors, break and hit the fail-safe.

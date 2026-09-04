@@ -23,7 +23,7 @@ import {
   type StructuredChatResponse,
 } from '@/lib/verse-response';
 
-import { getClientIp } from './lib/ip-utils';
+import { getRateLimitKey } from './lib/ip-utils';
 import { scrubInvalidCitations } from './lib/citation-scrubber';
 import {
   normalizeResponseContent,
@@ -145,6 +145,8 @@ function setLatencyMetric(metrics: LatencyMetrics, metric: LatencyMetricName, du
 // ---------------------------------------------------------------------------
 
 const inflightRequests = new Map<string, Promise<PipelineExecutionResult>>();
+const MAX_INFLIGHT_REQUESTS = 200;
+const INFLIGHT_TTL_MS = 30_000;
 
 function normalizeInflightQuery(query: string): string {
   return query.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -249,6 +251,7 @@ async function executeUncachedPipeline(options: {
   const retrieveStartedAt = performance.now();
 
   let verses: VerseContext[] = [];
+  let allowGeneralKnowledge = false;
   const hasHistory = options.modelHistory && options.modelHistory.length > 0;
 
   if (!hasHistory) {
@@ -293,6 +296,7 @@ async function executeUncachedPipeline(options: {
     if (classification.category === 'CONVERSATIONAL' || classification.category === 'OFF_TOPIC') {
       debugLog('Skipping retrieval for category:', classification.category);
       verses = [];
+      allowGeneralKnowledge = true;
     } else if (
       classification.category === 'BIBLICAL' &&
       classification.searchQuery &&
@@ -320,7 +324,9 @@ async function executeUncachedPipeline(options: {
   pipelineMetrics.retrieve_total_ms = roundLatencyMs(performance.now() - retrieveStartedAt);
 
   const promptBuildStartedAt = performance.now();
-  const { finalPrompt, context } = buildRetrievalPrompt(options.query, verses, options.requestedTranslation);
+  const { finalPrompt, context } = buildRetrievalPrompt(options.query, verses, options.requestedTranslation, {
+    allowGeneralKnowledge,
+  });
   const prompt = appendConversationHistory(finalPrompt, options.modelHistory);
   pipelineMetrics.prompt_build_ms = roundLatencyMs(performance.now() - promptBuildStartedAt);
 
@@ -396,6 +402,13 @@ export async function POST(req: Request) {
     }
     const parsed = parseChatRequest(body, req);
     if (!parsed.ok) {
+      if (parsed.error.type === 'too_large') {
+        statusCode = 413;
+        return new Response(JSON.stringify({ error: 'Request too large', detail: parsed.error.detail }), {
+          status: statusCode,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        });
+      }
       statusCode = 400;
       const message =
         parsed.error.type === 'bad_body' ? 'Invalid request body' : 'Missing user query';
@@ -408,45 +421,45 @@ export async function POST(req: Request) {
     debugLog('Provider key:', { hasGroq: Boolean(process.env.GROQ_API_KEY) });
 
     let rateLimitWarning: string | null = null;
+    // Fail-closed: missing/invalid IP uses a shared `unknown` bucket (stricter
+    // threshold) instead of skipping limiting entirely.
+    const UNKNOWN_IP_MAX_REQUESTS = 30;
 
     if (redis) {
-      const ip = getClientIp(req);
-      if (ip) {
-        const rateLimitKey = `ratelimit:${ip}`;
-        const count = await incrementRateLimitCounter(rateLimitKey);
-        debugLog(`Rate limit count: ${count ?? 'n/a'} for IP ${ip}`);
-        if (typeof count === 'number') {
-          if (count > RATE_LIMIT_WARN_THRESHOLD && count <= RATE_LIMIT_MAX_REQUESTS) {
-            rateLimitWarning = `Approaching rate limit (${count}/${RATE_LIMIT_MAX_REQUESTS} req/min)`;
-          }
-          if (count > RATE_LIMIT_MAX_REQUESTS) {
-            statusCode = 429;
-            return new Response(JSON.stringify({
-              error: 'Rate limit exceeded (60 req/min). Try again in 60s.',
-            }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-          }
+      const rateLimitKey = getRateLimitKey(req);
+      const isUnknown = rateLimitKey.endsWith(':unknown');
+      const maxForKey = isUnknown ? UNKNOWN_IP_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS;
+      const count = await incrementRateLimitCounter(rateLimitKey);
+      debugLog(`Rate limit count: ${count ?? 'n/a'} for key ${rateLimitKey}`);
+      if (typeof count === 'number') {
+        if (count > RATE_LIMIT_WARN_THRESHOLD && count <= maxForKey) {
+          rateLimitWarning = `Approaching rate limit (${count}/${maxForKey} req/min)`;
         }
-      } else {
-        debugLog('Rate limiting skipped: unable to determine valid client IP.');
+        if (count > maxForKey) {
+          statusCode = 429;
+          return new Response(JSON.stringify({
+            error: `Rate limit exceeded (${maxForKey} req/min). Try again in 60s.`,
+          }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+        }
       }
     } else {
       // Redis unavailable — use in-memory sliding-window fallback.
       // Not cluster-safe: configure Upstash Redis for multi-instance deployments.
-      const ip = getClientIp(req);
-      if (ip) {
-        const result = inMemoryRateLimit(`ratelimit:${ip}`, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_SECONDS * 1000);
-        debugLog(`[in-memory rate limit] count=${result.count} for IP ${ip}`);
+      const rateLimitKey = getRateLimitKey(req);
+      const isUnknown = rateLimitKey.endsWith(':unknown');
+      const maxForKey = isUnknown ? UNKNOWN_IP_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS;
+      {
+        const result = inMemoryRateLimit(rateLimitKey, maxForKey, RATE_LIMIT_WINDOW_SECONDS * 1000);
+        debugLog(`[in-memory rate limit] count=${result.count} for key ${rateLimitKey}`);
         if (!result.allowed) {
           statusCode = 429;
           return new Response(JSON.stringify({
-            error: 'Rate limit exceeded (60 req/min). Try again in 60s.',
+            error: `Rate limit exceeded (${maxForKey} req/min). Try again in 60s.`,
           }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
         }
         if (result.count > RATE_LIMIT_WARN_THRESHOLD) {
-          rateLimitWarning = `Approaching rate limit (${result.count}/${RATE_LIMIT_MAX_REQUESTS} req/min)`;
+          rateLimitWarning = `Approaching rate limit (${result.count}/${maxForKey} req/min)`;
         }
-      } else {
-        debugLog('Rate limiting skipped: unable to determine valid client IP.');
       }
     }
 
@@ -506,7 +519,7 @@ export async function POST(req: Request) {
 
       const response = cachedResult.toUIMessageStreamResponse({
         headers: Object.keys(cachedHeaders).length > 0 ? cachedHeaders : undefined,
-        messageMetadata: ({ part }: { part: any }) => {
+        messageMetadata: ({ part }: { part: { type: string } }) => {
           if (part.type === 'start' || part.type === 'finish') {
             return {
               modelUsed: cachedResponse.modelUsed,
@@ -514,7 +527,7 @@ export async function POST(req: Request) {
               finalFallback,
               verses: cachedResponse.verses,
               metadata: cachedResponse.metadata,
-            } as any;
+            } as unknown as Record<string, unknown>;
           }
           return undefined;
         },
@@ -539,7 +552,19 @@ export async function POST(req: Request) {
           inflightRequests.delete(inflightKey);
         }
       });
+      // Bound memory: evict oldest entry when over capacity + TTL safety net
+      // in case a pipeline promise never settles promptly.
+      if (inflightRequests.size >= MAX_INFLIGHT_REQUESTS) {
+        const oldestKey = inflightRequests.keys().next().value;
+        if (oldestKey !== undefined) inflightRequests.delete(oldestKey);
+      }
       inflightRequests.set(inflightKey, pipelinePromise);
+      const inflightTimer = setTimeout(() => {
+        if (inflightRequests.get(inflightKey) === pipelinePromise) {
+          inflightRequests.delete(inflightKey);
+        }
+      }, INFLIGHT_TTL_MS);
+      if (typeof inflightTimer.unref === 'function') inflightTimer.unref();
     }
 
     const pipelineResult = await pipelinePromise;
@@ -565,7 +590,7 @@ export async function POST(req: Request) {
             finalFallback,
             verses: normalizedResponse.verses,
             metadata: normalizedResponse.metadata,
-          } as any;
+          } as unknown as Record<string, unknown>;
         }
         return undefined;
       },
