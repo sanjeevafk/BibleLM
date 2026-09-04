@@ -4,6 +4,8 @@ members = [
     "crates/biblelm-types",
     "crates/biblelm-index",
     "crates/biblelm-graph",
+    "crates/biblelm-morph",
+    "crates/biblelm-pipeline",
     "crates/biblelm-build",
 ]
 
@@ -11,11 +13,14 @@ members = [
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 rayon = "1"
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 biblelm-types = { path = "crates/biblelm-types" }
 biblelm-index = { path = "crates/biblelm-index" }
 biblelm-graph = { path = "crates/biblelm-graph" }
+biblelm-morph = { path = "crates/biblelm-morph" }
+biblelm-pipeline = { path = "crates/biblelm-pipeline" }
 
 [profile.release]
 opt-level = 3

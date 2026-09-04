@@ -42,6 +42,8 @@ enum Command {
     Verify(VerifyArgs),
     /// Side-by-side retrieval eval: Rust BM25 over scenarios.json
     Eval(EvalArgs),
+    /// Live retrieval test: BM25 + GraphRAG + RRF
+    Query(QueryArgs),
 }
 
 #[derive(Args)]
@@ -99,6 +101,20 @@ struct EvalArgs {
     /// TS raw-BM25 reference ({scenarioId: [refs]}) for exact comparison
     #[arg(long)]
     compare_ts: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct QueryArgs {
+    /// Search query text (e.g. "faith without works" or "Melchizedek")
+    query: String,
+    #[arg(long, default_value = ".")]
+    root: PathBuf,
+    #[arg(long, default_value = "data/rust/bm25.bin")]
+    bm25: PathBuf,
+    #[arg(long, default_value = "data/rust/tsk-graph.bin")]
+    graph: PathBuf,
+    #[arg(long, default_value = "5")]
+    top_k: usize,
 }
 
 fn repo_path(root: &Path, p: &str) -> PathBuf {
@@ -368,7 +384,93 @@ fn main() -> Result<()> {
         Command::Eval(a) => {
             cmd_eval(&a)?;
         }
+        Command::Query(a) => {
+            cmd_query(&a)?;
+        }
     }
+    Ok(())
+}
+
+fn cmd_query(a: &QueryArgs) -> Result<()> {
+    let root = &a.root;
+    let bm25_path = repo_path(root, &a.bm25.to_string_lossy());
+    let graph_path = repo_path(root, &a.graph.to_string_lossy());
+    let full_index_path = repo_path(root, "data/bible-full-index.json");
+
+    let bm25_bytes = fs::read(&bm25_path)
+        .with_context(|| format!("reading BM25 index from {}", bm25_path.display()))?;
+    let bm25_index = Bm25Index::decode(&bm25_bytes)?;
+
+    let texts_by_id: std::collections::HashMap<String, String> = if full_index_path.exists() {
+        let raw = fs::read_to_string(&full_index_path)?;
+        let full: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&raw)?;
+        full.into_iter()
+            .map(|(id, v)| {
+                let text = v.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string();
+                (id, text)
+            })
+            .collect()
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    let texts: Vec<String> = bm25_index
+        .doc_ids
+        .iter()
+        .map(|id| texts_by_id.get(id).cloned().unwrap_or_default())
+        .collect();
+
+    println!("Query: \"{}\"", a.query);
+    println!("--------------------------------------------------");
+
+    let start_bm25 = std::time::Instant::now();
+    let bm25_hits = bm25_index.search(&a.query, &texts, a.top_k);
+    let bm25_us = start_bm25.elapsed().as_micros();
+
+    println!("BM25 Lexical Search (took {} µs):", bm25_us);
+    for (rank, hit) in bm25_hits.iter().enumerate() {
+        let verse_id = &bm25_index.doc_ids[hit.doc as usize];
+        let snippet = texts_by_id.get(verse_id).map(|s| s.as_str()).unwrap_or("");
+        println!("  #{}: {} (score: {:.4}) - \"{}\"", rank + 1, verse_id, hit.score, snippet);
+    }
+
+    if graph_path.exists() {
+        let graph_bytes = fs::read(&graph_path)?;
+        if let Ok(graph) = TskGraph::decode(&graph_bytes) {
+            let seed_ids: Vec<&str> = bm25_hits
+                .iter()
+                .map(|h| bm25_index.doc_ids[h.doc as usize].as_str())
+                .collect();
+            let start_graph = std::time::Instant::now();
+            let graph_res = graph.graph_rag_expand(
+                &seed_ids,
+                &std::collections::HashSet::new(),
+                &biblelm_graph::GraphRagOptions::default(),
+            );
+            let graph_us = start_graph.elapsed().as_micros();
+
+            println!("\nGraphRAG Expansion (took {} µs, depth {}):", graph_us, graph_res.diagnostics.traversal_depth_reached);
+            for (rank, c) in graph_res.candidates.iter().take(a.top_k).enumerate() {
+                let snippet = texts_by_id.get(&c.verse_id).map(|s| s.as_str()).unwrap_or("");
+                println!("  +{}: {} (calibrated: {:.4}) - \"{}\"", rank + 1, c.verse_id, c.score, snippet);
+            }
+
+            // RRF fusion
+            let bm25_ids: Vec<String> = bm25_hits
+                .iter()
+                .map(|h| bm25_index.doc_ids[h.doc as usize].clone())
+                .collect();
+            let graph_ids: Vec<String> = graph_res.candidates.iter().map(|c| c.verse_id.clone()).collect();
+            let fused = biblelm_pipeline::fuse_lexical_semantic_rrf(&bm25_ids, &graph_ids, 60.0);
+
+            println!("\nFused RRF Ranking (BM25 + GraphRAG):");
+            for (rank, hit) in fused.iter().take(a.top_k).enumerate() {
+                let snippet = texts_by_id.get(&hit.verse_id).map(|s| s.as_str()).unwrap_or("");
+                println!("  #{}: {} (fused score: {:.6}) - \"{}\"", rank + 1, hit.verse_id, hit.score, snippet);
+            }
+        }
+    }
+    println!("--------------------------------------------------");
     Ok(())
 }
 

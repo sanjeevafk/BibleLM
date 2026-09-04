@@ -176,6 +176,120 @@ impl TskGraph {
         buf
     }
 
+    pub fn decode(bytes: &[u8]) -> anyhow::Result<Self> {
+        if bytes.len() < 24 {
+            anyhow::bail!("truncated header: expected at least 24 bytes, got {}", bytes.len());
+        }
+        if &bytes[0..4] != b"BLMG" {
+            anyhow::bail!("invalid magic: expected BLMG");
+        }
+        let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        if version != 1 {
+            anyhow::bail!("unsupported version: {version}");
+        }
+        let raw_edges = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+        let nnodes = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
+
+        let mut offset = 24;
+        let mut node_names = Vec::with_capacity(nnodes);
+        let mut neighbor_meta = Vec::with_capacity(nnodes);
+
+        for _ in 0..nnodes {
+            if offset + 2 > bytes.len() {
+                anyhow::bail!("unexpected EOF reading node name len");
+            }
+            let slen = u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+            if offset + slen > bytes.len() {
+                anyhow::bail!("unexpected EOF reading node name");
+            }
+            let name = std::str::from_utf8(&bytes[offset..offset + slen])
+                .map_err(|e| anyhow::anyhow!("invalid utf8: {e}"))?
+                .to_string();
+            offset += slen;
+
+            if offset + 8 > bytes.len() {
+                anyhow::bail!("unexpected EOF reading neighbor count");
+            }
+            let nneighbors = u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap()) as usize;
+            offset += 8;
+
+            let n_bytes = nneighbors
+                .checked_mul(12)
+                .ok_or_else(|| anyhow::anyhow!("overflow calculating neighbor bytes"))?;
+            if offset + n_bytes > bytes.len() {
+                anyhow::bail!("unexpected EOF reading neighbor records");
+            }
+            neighbor_meta.push((offset, nneighbors));
+            offset += n_bytes;
+            node_names.push(name);
+        }
+
+        let mut adjacency = BTreeMap::new();
+        for (i, name) in node_names.iter().enumerate() {
+            let (n_start, n_count) = neighbor_meta[i];
+            let mut neighbors = Vec::with_capacity(n_count);
+            let mut n_off = n_start;
+            for _ in 0..n_count {
+                let target_idx = u32::from_le_bytes(bytes[n_off..n_off + 4].try_into().unwrap()) as usize;
+                n_off += 4;
+                let weight = f64::from_le_bytes(bytes[n_off..n_off + 8].try_into().unwrap());
+                n_off += 8;
+
+                if target_idx >= node_names.len() {
+                    anyhow::bail!("invalid node index: {target_idx} >= {nnodes}");
+                }
+                neighbors.push((node_names[target_idx].clone(), weight));
+            }
+            adjacency.insert(name.clone(), neighbors);
+        }
+
+        Ok(TskGraph { adjacency, raw_edges })
+    }
+
+    /// Converts this TSK graph into a full `GraphIndex` where all nodes are verses.
+    pub fn to_graph_index(&self) -> GraphIndex {
+        let nodes: Vec<GraphNode> = self
+            .adjacency
+            .keys()
+            .map(|id| GraphNode {
+                id: id.clone(),
+                kind: NodeKind::Verse,
+            })
+            .collect();
+
+        let mut adjacency = HashMap::new();
+        for (node, neighbors) in &self.adjacency {
+            let edge_list: Vec<GraphEdge> = neighbors
+                .iter()
+                .map(|(id, w)| GraphEdge {
+                    id: id.clone(),
+                    weight: *w,
+                    kind: "tsk".to_string(),
+                })
+                .collect();
+            adjacency.insert(node.clone(), edge_list);
+        }
+
+        GraphIndex {
+            version: "1.0".to_string(),
+            nodes,
+            adjacency,
+            metadata: None,
+        }
+    }
+
+    /// Runs GraphRAG expansion over this TSK graph.
+    pub fn graph_rag_expand(
+        &self,
+        seed_verse_ids: &[&str],
+        query_topic_ids: &std::collections::HashSet<&str>,
+        opts: &GraphRagOptions,
+    ) -> GraphRagResult {
+        let index = self.to_graph_index();
+        index.graph_rag_expand(seed_verse_ids, query_topic_ids, opts)
+    }
+
     /// Adjacency JSON shaped like TS `graph-index.json` `adjacency` for
     /// differential testing: `{id: [{id, weight, kind: "tsk"}]}`.
     pub fn export_adjacency_json(&self) -> serde_json::Value {
@@ -188,6 +302,404 @@ impl TskGraph {
             map.insert(node.clone(), serde_json::Value::Array(list));
         }
         serde_json::Value::Object(map)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-source Graph Index & Graph-RAG Traversal (Phase 2)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum NodeKind {
+    #[serde(rename = "verse")]
+    Verse,
+    #[serde(rename = "topic")]
+    Topic,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GraphNode {
+    pub id: String,
+    pub kind: NodeKind,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GraphEdge {
+    pub id: String,
+    pub weight: f64,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GraphIndex {
+    #[serde(default)]
+    pub version: String,
+    pub nodes: Vec<GraphNode>,
+    pub adjacency: HashMap<String, Vec<GraphEdge>>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GraphRagOptions {
+    pub max_depth: usize,
+    pub max_expansions: usize,
+    pub max_neighbors_per_seed: usize,
+    pub edge_min_weight: f64,
+}
+
+impl Default for GraphRagOptions {
+    fn default() -> Self {
+        Self {
+            max_depth: 2,
+            max_expansions: 30,
+            max_neighbors_per_seed: 10,
+            edge_min_weight: 0.1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct GraphCandidate {
+    #[serde(rename = "verseId")]
+    pub verse_id: String,
+    pub score: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct GraphRagDiagnostics {
+    #[serde(rename = "seedCount")]
+    pub seed_count: usize,
+    #[serde(rename = "expandedCount")]
+    pub expanded_count: usize,
+    #[serde(rename = "traversalDepthReached")]
+    pub traversal_depth_reached: usize,
+    #[serde(rename = "graphLatencyMs")]
+    pub graph_latency_ms: f64,
+    #[serde(rename = "graphContributionTopK")]
+    pub graph_contribution_top_k: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct GraphRagResult {
+    #[serde(rename = "expandedIds")]
+    pub expanded_ids: Vec<String>,
+    pub candidates: Vec<GraphCandidate>,
+    pub diagnostics: GraphRagDiagnostics,
+}
+
+impl GraphIndex {
+    /// Loads from JSON string (matching `data/graph-index.json`).
+    pub fn from_json_str(json: &str) -> anyhow::Result<Self> {
+        let index: GraphIndex = serde_json::from_str(json)?;
+        Ok(index)
+    }
+
+    /// Performs GraphRAG expansion with bit-for-bit algorithmic parity to
+    /// TypeScript `lib/retrieval/graph-rag.ts:graphRagExpand`.
+    pub fn graph_rag_expand(
+        &self,
+        seed_verse_ids: &[&str],
+        query_topic_ids: &std::collections::HashSet<&str>,
+        opts: &GraphRagOptions,
+    ) -> GraphRagResult {
+        let start = std::time::Instant::now();
+        let seed_count = seed_verse_ids.len();
+
+        let empty_result = |traversal_depth: usize| GraphRagResult {
+            expanded_ids: Vec::new(),
+            candidates: Vec::new(),
+            diagnostics: GraphRagDiagnostics {
+                seed_count,
+                expanded_count: 0,
+                traversal_depth_reached: traversal_depth,
+                graph_latency_ms: start.elapsed().as_secs_f64() * 1000.0,
+                graph_contribution_top_k: 0,
+            },
+        };
+
+        if seed_count == 0 {
+            return empty_result(0);
+        }
+
+        // Initialize frontier with normalized, deduplicated seeds
+        // (TS: const seedSet = new Set(seedVerseIds.map(id => id.toUpperCase())))
+        let mut seed_set = std::collections::HashSet::new();
+        let mut frontier: Vec<String> = Vec::new();
+        let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // Track insertion order in visited to match JS Set iteration order
+        let mut visited_order: Vec<String> = Vec::new();
+
+        for s in seed_verse_ids {
+            let upper = s.to_uppercase();
+            if seed_set.insert(upper.clone()) {
+                frontier.push(upper.clone());
+                visited.insert(upper.clone());
+                visited_order.push(upper);
+            }
+        }
+
+        // Build lookup from nodes array for node kind filtering
+        let mut node_kind_map: HashMap<&str, NodeKind> = HashMap::with_capacity(self.nodes.len());
+        for n in &self.nodes {
+            node_kind_map.insert(n.id.as_str(), n.kind);
+        }
+
+        let mut depth_reached = 0;
+        let mut expanded_total_count = 0;
+        let mut node_scores: HashMap<String, f64> = HashMap::new();
+
+        // Bounded BFS Traversal
+        for depth in 1..=opts.max_depth {
+            depth_reached = depth;
+
+            // Collect candidates for this depth step: neighbor_id -> (score, kind)
+            // Use IndexMap/Vec to preserve first-seen insertion order for stable tie-breaking
+            let mut current_candidates: Vec<(String, f64, String)> = Vec::new();
+            let mut candidate_pos: HashMap<String, usize> = HashMap::new();
+
+            for node_id in &frontier {
+                let neighbors = match self.adjacency.get(node_id) {
+                    Some(n) => n,
+                    None => continue,
+                };
+
+                // Filter: weight >= edgeMinWeight; not in visited; take top maxNeighborsPerSeed
+                let mut valid_neighbors: Vec<&GraphEdge> = neighbors
+                    .iter()
+                    .filter(|n| n.weight >= opts.edge_min_weight && !visited.contains(&n.id))
+                    .collect();
+
+                // Stable sort descending by weight
+                valid_neighbors.sort_by(|a, b| b.weight.total_cmp(&a.weight));
+                valid_neighbors.truncate(opts.max_neighbors_per_seed);
+
+                for neighbor in valid_neighbors {
+                    let mut topic_bonus = 0.0;
+
+                    if neighbor.kind == "topic" {
+                        if query_topic_ids.contains(neighbor.id.as_str()) {
+                            topic_bonus = 1.0;
+                        }
+                    } else if neighbor.kind == "verse" {
+                        if let Some(n_neighbors) = self.adjacency.get(&neighbor.id) {
+                            let has_matching_topic = n_neighbors.iter().any(|nn| {
+                                nn.kind == "topic" && query_topic_ids.contains(nn.id.as_str())
+                            });
+                            if has_matching_topic {
+                                topic_bonus = 1.0;
+                            }
+                        }
+                    }
+
+                    let score = neighbor.weight + (0.2 * topic_bonus) + ((1.0 / depth as f64) * 0.1);
+
+                    if let Some(&pos) = candidate_pos.get(&neighbor.id) {
+                        if score > current_candidates[pos].1 {
+                            current_candidates[pos].1 = score;
+                        }
+                    } else {
+                        let pos = current_candidates.len();
+                        candidate_pos.insert(neighbor.id.clone(), pos);
+                        current_candidates.push((neighbor.id.clone(), score, neighbor.kind.clone()));
+                    }
+                }
+            }
+
+            if current_candidates.is_empty() {
+                break;
+            }
+
+            // Stable sort descending by score
+            current_candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
+
+            // Take top maxExpansions for this depth step
+            let accepted_candidates = &current_candidates[0..current_candidates.len().min(opts.max_expansions)];
+
+            frontier.clear();
+            for (id, score, _) in accepted_candidates {
+                if expanded_total_count >= opts.max_expansions {
+                    break;
+                }
+
+                visited.insert(id.clone());
+                visited_order.push(id.clone());
+                frontier.push(id.clone());
+                node_scores.insert(id.clone(), *score);
+
+                expanded_total_count += 1;
+            }
+
+            if expanded_total_count >= opts.max_expansions || frontier.is_empty() {
+                break;
+            }
+        }
+
+        // Finalize results: exclude seeds and non-verse nodes
+        let mut expanded_ids: Vec<String> = visited_order
+            .into_iter()
+            .filter(|id| !seed_set.contains(id))
+            .filter(|id| node_kind_map.get(id.as_str()) == Some(&NodeKind::Verse))
+            .collect();
+
+        // Stable sort descending by node score
+        expanded_ids.sort_by(|a, b| {
+            let sa = node_scores.get(a).copied().unwrap_or(0.0);
+            let sb = node_scores.get(b).copied().unwrap_or(0.0);
+            sb.total_cmp(&sa)
+        });
+
+        // Calibrate raw graph scores: clamp(round4(raw_score * 0.65), 0.40, 0.85)
+        let candidates = expanded_ids
+            .iter()
+            .map(|id| {
+                let raw_score = node_scores.get(id).copied().unwrap_or(0.5);
+                let calibrated = ((raw_score * 0.65 * 10000.0).round() / 10000.0).clamp(0.40, 0.85);
+                GraphCandidate {
+                    verse_id: id.clone(),
+                    score: calibrated,
+                }
+            })
+            .collect();
+
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let expanded_count = expanded_ids.len();
+
+        GraphRagResult {
+            expanded_ids,
+            candidates,
+            diagnostics: GraphRagDiagnostics {
+                seed_count,
+                expanded_count,
+                traversal_depth_reached: depth_reached,
+                graph_latency_ms: latency_ms,
+                graph_contribution_top_k: expanded_count,
+            },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CSR (Compressed Sparse Row) Graph Representation
+// ---------------------------------------------------------------------------
+
+/// Compact linear memory graph for instant slice-based traversal.
+#[derive(Debug, Clone)]
+pub struct CsrGraph {
+    pub node_names: Vec<String>,
+    pub node_kinds: Vec<NodeKind>,
+    pub offsets: Vec<u32>,
+    pub target_indices: Vec<u32>,
+    pub weights: Vec<f64>,
+    pub edge_kinds: Vec<String>,
+    pub name_to_index: HashMap<String, u32>,
+}
+
+impl CsrGraph {
+    pub fn from_graph_index(index: &GraphIndex) -> Self {
+        let mut node_names = Vec::with_capacity(index.nodes.len());
+        let mut node_kinds = Vec::with_capacity(index.nodes.len());
+        let mut name_to_index = HashMap::with_capacity(index.nodes.len());
+
+        for (i, node) in index.nodes.iter().enumerate() {
+            node_names.push(node.id.clone());
+            node_kinds.push(node.kind);
+            name_to_index.insert(node.id.clone(), i as u32);
+        }
+
+        // Add any missing nodes present in adjacency
+        for (src, edges) in &index.adjacency {
+            if !name_to_index.contains_key(src) {
+                let idx = node_names.len() as u32;
+                node_names.push(src.clone());
+                node_kinds.push(NodeKind::Verse);
+                name_to_index.insert(src.clone(), idx);
+            }
+            for edge in edges {
+                if !name_to_index.contains_key(&edge.id) {
+                    let idx = node_names.len() as u32;
+                    node_names.push(edge.id.clone());
+                    node_kinds.push(if edge.kind == "topic" { NodeKind::Topic } else { NodeKind::Verse });
+                    name_to_index.insert(edge.id.clone(), idx);
+                }
+            }
+        }
+
+        let n = node_names.len();
+        let mut offsets = Vec::with_capacity(n + 1);
+        let mut target_indices = Vec::new();
+        let mut weights = Vec::new();
+        let mut edge_kinds = Vec::new();
+
+        for name in &node_names {
+            offsets.push(target_indices.len() as u32);
+            if let Some(neighbors) = index.adjacency.get(name) {
+                for edge in neighbors {
+                    if let Some(&t_idx) = name_to_index.get(&edge.id) {
+                        target_indices.push(t_idx);
+                        weights.push(edge.weight);
+                        edge_kinds.push(edge.kind.clone());
+                    }
+                }
+            }
+        }
+        offsets.push(target_indices.len() as u32);
+
+        CsrGraph {
+            node_names,
+            node_kinds,
+            offsets,
+            target_indices,
+            weights,
+            edge_kinds,
+            name_to_index,
+        }
+    }
+
+    pub fn to_graph_index(&self) -> GraphIndex {
+        let nodes: Vec<GraphNode> = self
+            .node_names
+            .iter()
+            .zip(&self.node_kinds)
+            .map(|(name, &kind)| GraphNode {
+                id: name.clone(),
+                kind,
+            })
+            .collect();
+
+        let mut adjacency = HashMap::new();
+        for (i, name) in self.node_names.iter().enumerate() {
+            let start = self.offsets[i] as usize;
+            let end = self.offsets[i + 1] as usize;
+            let mut edges = Vec::with_capacity(end - start);
+            for e in start..end {
+                let target_idx = self.target_indices[e] as usize;
+                edges.push(GraphEdge {
+                    id: self.node_names[target_idx].clone(),
+                    weight: self.weights[e],
+                    kind: self.edge_kinds[e].clone(),
+                });
+            }
+            adjacency.insert(name.clone(), edges);
+        }
+
+        GraphIndex {
+            version: "1.0-csr".to_string(),
+            nodes,
+            adjacency,
+            metadata: None,
+        }
+    }
+
+    pub fn graph_rag_expand(
+        &self,
+        seed_verse_ids: &[&str],
+        query_topic_ids: &std::collections::HashSet<&str>,
+        opts: &GraphRagOptions,
+    ) -> GraphRagResult {
+        // Traversal is equivalent to GraphIndex traversal
+        let index = self.to_graph_index();
+        index.graph_rag_expand(seed_verse_ids, query_topic_ids, opts)
     }
 }
 
@@ -267,5 +779,173 @@ mod tests {
         // Range truncates to start.
         let (f, _, _) = parse_xref_line("Ps.89.11-Ps.89.12\tGen.1.1\t10").unwrap();
         assert_eq!(f, "PSA 89:11");
+    }
+
+    #[test]
+    fn binary_encode_decode_roundtrip() {
+        let edges = vec![
+            ("GEN 1:1".to_string(), "PSA 104:24".to_string(), 0.8),
+            ("GEN 1:1".to_string(), "JHN 1:1".to_string(), 0.6),
+            ("JHN 1:1".to_string(), "COL 1:16".to_string(), 0.75),
+        ];
+        let original = TskGraph::build(&edges);
+        let encoded = original.encode();
+        let decoded = TskGraph::decode(&encoded).expect("decode failed");
+
+        assert_eq!(decoded.raw_edges, original.raw_edges);
+        assert_eq!(decoded.adjacency, original.adjacency);
+    }
+
+    fn fixture_graph_index() -> GraphIndex {
+        let nodes = vec![
+            GraphNode { id: "GEN 1:1".into(), kind: NodeKind::Verse },
+            GraphNode { id: "GEN 1:2".into(), kind: NodeKind::Verse },
+            GraphNode { id: "GEN 1:3".into(), kind: NodeKind::Verse },
+            GraphNode { id: "JOHN 1:1".into(), kind: NodeKind::Verse },
+            GraphNode { id: "JOHN 1:3".into(), kind: NodeKind::Verse },
+            GraphNode { id: "creation".into(), kind: NodeKind::Topic },
+        ];
+
+        let mut adjacency = HashMap::new();
+        adjacency.insert(
+            "GEN 1:1".into(),
+            vec![
+                GraphEdge { id: "GEN 1:2".into(), weight: 0.8, kind: "cluster".into() },
+                GraphEdge { id: "creation".into(), weight: 0.9, kind: "topic".into() },
+                GraphEdge { id: "JOHN 1:1".into(), weight: 0.6, kind: "cluster".into() },
+            ],
+        );
+        adjacency.insert(
+            "GEN 1:2".into(),
+            vec![
+                GraphEdge { id: "GEN 1:1".into(), weight: 0.8, kind: "cluster".into() },
+                GraphEdge { id: "GEN 1:3".into(), weight: 0.7, kind: "cluster".into() },
+            ],
+        );
+        adjacency.insert(
+            "JOHN 1:1".into(),
+            vec![
+                GraphEdge { id: "GEN 1:1".into(), weight: 0.6, kind: "cluster".into() },
+                GraphEdge { id: "JOHN 1:3".into(), weight: 0.5, kind: "cluster".into() },
+                GraphEdge { id: "creation".into(), weight: 0.7, kind: "topic".into() },
+            ],
+        );
+        adjacency.insert(
+            "creation".into(),
+            vec![
+                GraphEdge { id: "GEN 1:1".into(), weight: 0.9, kind: "topic".into() },
+                GraphEdge { id: "JOHN 1:1".into(), weight: 0.7, kind: "topic".into() },
+                GraphEdge { id: "GEN 1:3".into(), weight: 0.4, kind: "topic".into() },
+            ],
+        );
+        adjacency.insert(
+            "JOHN 1:3".into(),
+            vec![
+                GraphEdge { id: "JOHN 1:1".into(), weight: 0.5, kind: "cluster".into() },
+            ],
+        );
+        adjacency.insert(
+            "GEN 1:3".into(),
+            vec![
+                GraphEdge { id: "GEN 1:2".into(), weight: 0.7, kind: "cluster".into() },
+                GraphEdge { id: "creation".into(), weight: 0.4, kind: "topic".into() },
+            ],
+        );
+
+        GraphIndex {
+            version: "2026-01-01T00:00:00.000Z".into(),
+            nodes,
+            adjacency,
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn graph_rag_depth_1_respects_depth() {
+        let index = fixture_graph_index();
+        let topics = std::collections::HashSet::new();
+        let opts = GraphRagOptions {
+            max_depth: 1,
+            max_expansions: 30,
+            max_neighbors_per_seed: 10,
+            edge_min_weight: 0.01,
+        };
+        let result = index.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
+
+        assert!(result.diagnostics.traversal_depth_reached <= 1);
+        assert!(!result.expanded_ids.contains(&"GEN 1:1".to_string()));
+    }
+
+    #[test]
+    fn graph_rag_respects_max_expansions() {
+        let index = fixture_graph_index();
+        let topics = std::collections::HashSet::new();
+        let opts = GraphRagOptions {
+            max_depth: 3,
+            max_expansions: 2,
+            max_neighbors_per_seed: 10,
+            edge_min_weight: 0.01,
+        };
+        let result = index.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
+        assert!(result.expanded_ids.len() <= 2);
+    }
+
+    #[test]
+    fn graph_rag_higher_weight_ranks_above_lower() {
+        let index = fixture_graph_index();
+        let topics = std::collections::HashSet::new();
+        let opts = GraphRagOptions {
+            max_depth: 1,
+            max_expansions: 30,
+            max_neighbors_per_seed: 10,
+            edge_min_weight: 0.01,
+        };
+        let result = index.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
+
+        let gen12_pos = result.expanded_ids.iter().position(|id| id == "GEN 1:2");
+        let john11_pos = result.expanded_ids.iter().position(|id| id == "JOHN 1:1");
+
+        assert!(gen12_pos.is_some() && john11_pos.is_some());
+        assert!(gen12_pos.unwrap() < john11_pos.unwrap());
+    }
+
+    #[test]
+    fn graph_rag_topic_bonus_boosts_matching() {
+        let index = fixture_graph_index();
+        let mut topics = std::collections::HashSet::new();
+        topics.insert("creation");
+
+        let opts = GraphRagOptions {
+            max_depth: 1,
+            max_expansions: 30,
+            max_neighbors_per_seed: 10,
+            edge_min_weight: 0.01,
+        };
+        let with_topic = index.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
+        let empty_topics = std::collections::HashSet::new();
+        let without_topic = index.graph_rag_expand(&["GEN 1:1"], &empty_topics, &opts);
+
+        assert!(with_topic.diagnostics.expanded_count >= without_topic.diagnostics.expanded_count);
+    }
+
+    #[test]
+    fn csr_graph_matches_graph_index_expansion() {
+        let index = fixture_graph_index();
+        let csr = CsrGraph::from_graph_index(&index);
+        let mut topics = std::collections::HashSet::new();
+        topics.insert("creation");
+
+        let opts = GraphRagOptions {
+            max_depth: 2,
+            max_expansions: 30,
+            max_neighbors_per_seed: 10,
+            edge_min_weight: 0.01,
+        };
+
+        let res_index = index.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
+        let res_csr = csr.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
+
+        assert_eq!(res_index.expanded_ids, res_csr.expanded_ids);
+        assert_eq!(res_index.candidates, res_csr.candidates);
     }
 }
