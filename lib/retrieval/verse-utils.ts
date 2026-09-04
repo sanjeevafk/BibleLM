@@ -161,3 +161,11 @@ export function groupSequentialVerses(verses: VerseContext[]): VerseContext[] {
 export function normalizeVerses(verses: VerseContext[]): VerseContext[] {
   return groupSequentialVerses(dedupeVerses(verses));
 }
+
+/**
+ * Escapes `%`, `_`, and `\` for SQL LIKE patterns.
+ * Use with `... LIKE $n ESCAPE '\\'`.
+ */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (m) => `\\${m}`);
+}

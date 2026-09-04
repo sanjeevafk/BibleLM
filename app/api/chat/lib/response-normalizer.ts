@@ -16,7 +16,7 @@ import {
   normalizeOriginalLanguageEntries,
   type StructuredChatResponse,
 } from '@/lib/verse-response';
-import { expandCitationReference } from '@/lib/prompts';
+import { expandCitationReference, buildCitationWhitelist } from '@/lib/prompts';
 import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
 
 const DEBUG_LLM = ENABLE_RETRIEVAL_DEBUG;
@@ -290,7 +290,6 @@ export function logContextUtilizationDiagnostics(
   if (!DEBUG_LLM) return;
 
   // Build whitelist from retrieved verses
-  const { buildCitationWhitelist } = require('@/lib/prompts');
   const retrievedWhitelist = new Set<string>();
   for (const citation of buildCitationWhitelist(verses)) {
     const normalized = citation.trim().toLowerCase();
@@ -368,5 +367,10 @@ export async function streamTextFromContent(
     }),
   };
 
-  return streamText({ model: cachedStreamModel as any, messages: messages as any });
+  // Simulated cache-playback model: not a real provider model, so the
+  // loose cast is intentional and isolated here.
+  return streamText({
+    model: cachedStreamModel,
+    messages,
+  } as unknown as Parameters<typeof streamText>[0]);
 }

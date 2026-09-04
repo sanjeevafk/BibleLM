@@ -6,7 +6,8 @@
 # files output by Next.js "standalone" mode — no node_modules, no source.
 #
 # Build:
-#   docker build --build-arg GROQ_API_KEY=<key> -t biblelm .
+#   docker build -t biblelm .
+#   (Runtime secrets via --env-file .env.local or compose environment, NOT build-arg.)
 #
 # Run:
 #   docker run -p 3000:3000 --env-file .env.local biblelm
@@ -43,13 +44,10 @@ RUN npm ci
 # Copy the rest of the source
 COPY . .
 
-# Pre-process data bundles (morphology, translations, opengnt, etc.)
-# These produce the JSON files under data/ that are bundled into the build.
-# If data/ is already populated (e.g. checked into git) you can comment these out.
-RUN npm run build:morphhb
-RUN npm run build:openhebrewbible
-RUN npm run build:translations
-RUN npm run build:opengnt
+# Pre-process data bundles via `npm run build`, which already runs
+# build:morphhb + build:openhebrewbible + build:translations + build:opengnt
+# (see package.json) before `next build`. Do NOT duplicate those steps here.
+# If data/ is already populated (e.g. checked into git) the scripts are idempotent.
 
 # Build the Next.js app in standalone mode
 # NEXT_TELEMETRY_DISABLED silences the anonymous telemetry prompt

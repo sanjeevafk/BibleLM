@@ -55,16 +55,26 @@ function buildCacheKey({ query, translation, model, historyHash }: CacheKeyInput
   return crypto.createHash('sha256').update(input).digest('hex');
 }
 
+const MAX_CACHE_KEY_QUERY_CHARS = 200;
+
+function normalizeCacheQuery(query: string): { normalized: string; hash: string } {
+  const normalized = query.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, MAX_CACHE_KEY_QUERY_CHARS);
+  const hash = crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+  return { normalized, hash };
+}
+
 function buildRetrievalContextCacheKey({
   query,
   translation,
   version,
 }: RetrievalContextCacheKeyInput): string {
-  return `context:${version}:${translation}:${query.trim().toLowerCase()}`;
+  const { normalized, hash } = normalizeCacheQuery(query);
+  return `context:${version}:${translation}:${normalized}:${hash}`;
 }
 
 function buildEmbeddingCacheKey({ normalizedQuery, embeddingModel }: EmbeddingCacheKeyInput): string {
-  return `embed:${normalizedQuery}:${embeddingModel}`;
+  const { normalized, hash } = normalizeCacheQuery(normalizedQuery);
+  return `embed:${normalized}:${embeddingModel}:${hash}`;
 }
 
 export { buildCacheKey, buildRetrievalContextCacheKey, buildEmbeddingCacheKey };

@@ -6,7 +6,7 @@
  * no I/O, no side-effects, fully testable.
  */
 
-import { buildContextPrompt, SYSTEM_PROMPT } from '@/lib/prompts';
+import { buildContextPrompt, SYSTEM_PROMPT, stripTagLikeSequences } from '@/lib/prompts';
 import type { VerseContext } from '@/lib/bible-fetch';
 
 export type HistoryMessage = {
@@ -24,9 +24,10 @@ export type HistoryMessage = {
 export function buildRetrievalPrompt(
   query: string,
   verses: VerseContext[],
-  translation: string
+  translation: string,
+  options?: { allowGeneralKnowledge?: boolean }
 ): { finalPrompt: string; context: string } {
-  const finalPrompt = buildContextPrompt(query, verses, translation);
+  const finalPrompt = buildContextPrompt(query, verses, translation, options);
   const context = finalPrompt.startsWith(SYSTEM_PROMPT)
     ? finalPrompt.slice(SYSTEM_PROMPT.length).trim()
     : finalPrompt;
@@ -43,10 +44,29 @@ export function appendConversationHistory(
 ): string {
   const historyLines = history
     .filter((m) => m.role !== 'system')
-    .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`)
+    .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${sanitizeHistoryContent(m.content)}`)
     .join('\n');
 
   return historyLines.trim()
     ? `${finalPrompt}\n\nCONVERSATION HISTORY\n<conversation_history>\n${historyLines}\n</conversation_history>`
     : finalPrompt;
+}
+
+/**
+ * Strips prompt-injection carriers from conversation history.
+ * History is client-controlled: remove tag closings, SYSTEM INSTRUCTION
+ * smuggling, and control chars before interpolating into the prompt.
+ */
+export function sanitizeHistoryContent(content: string): string {
+  let out = content.replace(/\0/g, '');
+  // Remove any tag resembling <user_query>, <conversation_history>,
+  // <system_instruction>, <reference>, <text>, etc. (case-insensitive,
+  // optional slash/whitespace) to prevent closing the history block.
+  // Fixpoint stripping: a single pass leaves nested payloads like
+  // `<<script>script>` intact as `<script>` after one removal.
+  out = stripTagLikeSequences(out);
+  // Neutralize "SYSTEM INSTRUCTION:" smuggling anywhere in user content
+  // (line-start or inline) so it cannot pose as a directive block.
+  out = out.replace(/system\s+instruction\s*:/gi, 'system-instruction:');
+  return out;
 }
