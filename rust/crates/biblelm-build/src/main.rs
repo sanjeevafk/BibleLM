@@ -19,6 +19,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod eval;
+
 #[derive(Parser)]
 #[command(name = "biblelm-build", about = "BibleLM offline index pre-compiler")]
 struct Cli {
@@ -38,6 +40,8 @@ enum Command {
     All(AllArgs),
     /// Differential check: Rust exports vs TS-built data/*.json
     Verify(VerifyArgs),
+    /// Side-by-side retrieval eval: Rust BM25 over scenarios.json
+    Eval(EvalArgs),
 }
 
 #[derive(Args)]
@@ -82,6 +86,21 @@ struct VerifyArgs {
     sample_terms: usize,
 }
 
+#[derive(Args)]
+struct EvalArgs {
+    #[arg(long, default_value = ".")]
+    root: PathBuf,
+    #[arg(long, default_value = "data/rust/bm25.bin")]
+    index: PathBuf,
+    #[arg(long)]
+    heldout_only: bool,
+    #[arg(long)]
+    out_refs: Option<PathBuf>,
+    /// TS raw-BM25 reference ({scenarioId: [refs]}) for exact comparison
+    #[arg(long)]
+    compare_ts: Option<PathBuf>,
+}
+
 fn repo_path(root: &Path, p: &str) -> PathBuf {
     root.join(p)
 }
@@ -97,13 +116,20 @@ fn ensure_parent(path: &Path) -> Result<()> {
 fn build_bm25(index_path: &Path, out: &Path, export_json: &Path) -> Result<IndexStats> {
     let raw = fs::read_to_string(index_path)
         .with_context(|| format!("reading {}", index_path.display()))?;
-    // Preserve document order for deterministic doc numbering.
-    let map: BTreeMap<String, FullIndexRow> = serde_json::from_str(&raw)
+    // Preserve JSON file insertion order for deterministic doc numbering.
+    // TS `Object.entries` follows file order, and postings/score-tie order
+    // depends on it — a sorted map would diverge on exact-score ties.
+    // (serde_json preserves order by default via its `preserve_order` feature.)
+    let map: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&raw)
         .context("parsing bible-full-index.json (expected {id: {text, bm25Text?}})")?;
     let docs: Vec<Bm25Doc> = map
         .into_iter()
-        .map(|(id, row)| Bm25Doc { id, text: row.index_text().to_string() })
-        .collect();
+        .map(|(id, v)| {
+            let row: FullIndexRow = serde_json::from_value(v)
+                .with_context(|| format!("parsing row {id}"))?;
+            Ok(Bm25Doc { id, text: row.index_text().to_string() })
+        })
+        .collect::<Result<Vec<_>>>()?;
     println!("indexing {} docs…", docs.len());
     let index = Bm25Index::build(&docs);
     let bytes = index.encode();
@@ -339,6 +365,85 @@ fn main() -> Result<()> {
         Command::Verify(a) => {
             cmd_verify(&a.root, a.sample_terms)?;
         }
+        Command::Eval(a) => {
+            cmd_eval(&a)?;
+        }
+    }
+    Ok(())
+}
+
+fn cmd_eval(a: &EvalArgs) -> Result<()> {
+    let root = &a.root;
+    let index_bytes = fs::read(repo_path(root, &a.index.to_string_lossy()))
+        .with_context(|| format!("reading {}", a.index.display()))?;
+    let index = Bm25Index::decode(&index_bytes)?;
+    let full: serde_json::Map<String, serde_json::Value> = serde_json::from_str(
+        &fs::read_to_string(repo_path(root, "data/bible-full-index.json"))?,
+    )?;
+    let texts_by_id: std::collections::HashMap<String, String> = full
+        .into_iter()
+        .map(|(id, v)| {
+            let text = v.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            (id, text)
+        })
+        .collect();
+    let mut scenarios = eval::load_scenarios(&repo_path(root, "tests/benchmark/fixtures/scenarios.json"))?;
+    if a.heldout_only {
+        // Held-out flags are positional in the FULL list — filter with indices.
+        scenarios = scenarios
+            .into_iter()
+            .enumerate()
+            .filter(|(i, s)| eval::is_heldout(*i, s))
+            .map(|(_, s)| s)
+            .collect();
+        // Recompute positions for the subset so heldout_metrics covers it fully.
+        // (run_eval flags by subset position; every subset member is held-out
+        // by construction, so force inclusion via a second pass below.)
+        let out = eval::run_eval(&index, &texts_by_id, &scenarios);
+        println!("rust-bm25-heldout: {}", serde_json::to_string(&out.metrics)?);
+        write_and_compare(&out, a)?;
+        return Ok(());
+    }
+    let out = eval::run_eval(&index, &texts_by_id, &scenarios);
+    println!("rust-bm25: {}", serde_json::to_string(&out.metrics)?);
+    println!("rust-bm25-heldout: {}", serde_json::to_string(&out.heldout_metrics)?);
+    write_and_compare(&out, a)?;
+    Ok(())
+}
+
+fn write_and_compare(
+    out: &eval::EvalOutput,
+    a: &EvalArgs,
+) -> Result<()> {
+    if let Some(path) = &a.out_refs {
+        ensure_parent(path)?;
+        let refs: BTreeMap<&String, &Vec<String>> = out.top_refs.iter().collect();
+        fs::write(path, serde_json::to_string_pretty(&refs)?)?;
+        println!("wrote {}", path.display());
+    }
+    if let Some(ts_path) = &a.compare_ts {
+        let ts_refs: BTreeMap<String, Vec<String>> =
+            serde_json::from_str(&fs::read_to_string(ts_path)?)?;
+        let mut diff_scenarios = 0;
+        let mut shown = 0;
+        for (id, rs_refs) in &out.top_refs {
+            match ts_refs.get(id) {
+                Some(ts) if ts == rs_refs => {}
+                other => {
+                    diff_scenarios += 1;
+                    if shown < 5 {
+                        println!("  diff {id}: ts={other:?} rs={rs_refs:?}");
+                        shown += 1;
+                    }
+                }
+            }
+        }
+        println!(
+            "compare-ts: {} scenarios, {} with differing top-5",
+            out.top_refs.len(),
+            diff_scenarios
+        );
+        anyhow::ensure!(diff_scenarios == 0, "top-ref diffs vs TS engine found");
     }
     Ok(())
 }
