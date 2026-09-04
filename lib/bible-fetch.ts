@@ -6,6 +6,7 @@ export type VerseContext = {
   isCrossReference?: boolean;
   openHebrew?: string;
   openGnt?: string;
+  peshitta?: string;
 };
 
 const EXTERNAL_VERSE_FETCH_TIMEOUT_MS = 1500;

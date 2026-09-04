@@ -197,6 +197,7 @@ function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
         verseText: verse.text,
         translation: verse.translation,
         originalLanguage,
+        peshitta: verse.peshitta,
       };
     });
 }
@@ -213,6 +214,7 @@ function buildBlocksFromStructuredResponse(sections: StructuredVerseResponse[]):
       translation: section.verse.translation,
       analysisSummary: section.analysis?.summary,
       originalLanguage: section.original_language,
+      peshitta: section.peshitta,
     }));
 }
 
