@@ -41,9 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 #local-files
-datasets/
-scratch/
-local-docs/
+/datasets/
+/scratch/
+/local-docs/
 
 # generated benchmark outputs
 docs/benchmark/latest-report.json

@@ -11,6 +11,10 @@ const brotliDecompress = promisify(zlib.brotliDecompress);
 const gunzip = promisify(zlib.gunzip);
 
 export function resolveDatasetPath(...segments: string[]): string {
+  // If caller already specified root dir ('data' or 'datasets'), avoid duplicating 'data'
+  if (segments[0] === 'data' || segments[0] === 'datasets') {
+    return path.join(/* turbopackIgnore: true */ process.cwd(), ...segments);
+  }
   return path.join(/* turbopackIgnore: true */ process.cwd(), 'data', ...segments);
 }
 
@@ -27,6 +31,12 @@ async function resolveDatasetFilePath(candidates: string[]): Promise<string | nu
   for (const candidate of candidates) {
     if (await fileExists(candidate)) {
       return candidate;
+    }
+    if (await fileExists(`${candidate}.br`)) {
+      return `${candidate}.br`;
+    }
+    if (await fileExists(`${candidate}.gz`)) {
+      return `${candidate}.gz`;
     }
   }
 
