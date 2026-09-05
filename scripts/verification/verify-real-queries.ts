@@ -160,10 +160,18 @@ Furthermore, Jesus taught about repentance in [LUK 13:3] and [REV 99:99].
 
   console.log(`Scrubber Execution: ${scrubMs} ms`);
   console.log(`Scrubbed Output:\n${scrubbed.trim()}`);
-  console.assert(scrubbed.includes('HEB 7:1'), 'HEB 7:1 should be preserved');
-  console.assert(scrubbed.includes('PSA 110:4'), 'PSA 110:4 should be preserved');
-  console.assert(!scrubbed.includes('LUK 13:3'), 'LUK 13:3 must be scrubbed');
-  console.assert(!scrubbed.includes('REV 99:99'), 'Phantom citation REV 99:99 must be scrubbed');
+  if (!scrubbed.includes('HEB 7:1')) {
+    throw new Error('[FAIL] HEB 7:1 should be preserved in scrubbed output');
+  }
+  if (!scrubbed.includes('PSA 110:4')) {
+    throw new Error('[FAIL] PSA 110:4 should be preserved in scrubbed output');
+  }
+  if (scrubbed.includes('LUK 13:3')) {
+    throw new Error('[FAIL] LUK 13:3 must be scrubbed from output');
+  }
+  if (scrubbed.includes('REV 99:99')) {
+    throw new Error('[FAIL] Phantom citation REV 99:99 must be scrubbed from output');
+  }
   console.log('\n[PASS] Citation scrubber successfully preserved verified scriptures and excised hallucinations.\n');
 
   console.log('================================================================');

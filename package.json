@@ -11,7 +11,7 @@
     "build:opengnt": "ts-node --project tsconfig.scripts.json scripts/build-opengnt.ts",
     "build:graph-index": "ts-node --project tsconfig.scripts.json scripts/build-graph-index.ts",
     "build:hf-dataset": "ts-node --project tsconfig.scripts.json scripts/build-hf-dataset.ts",
-    "build:wasm": "wasm-pack build rust/crates/biblelm-wasm --target nodejs --out-dir $(pwd)/rust/pkg && rm -f rust/pkg/.gitignore",
+    "build:wasm": "wasm-pack build rust/crates/biblelm-wasm --target nodejs --out-dir ../../pkg && node -e \"require('fs').rmSync('rust/pkg/.gitignore', { force: true })\"",
     "verify:independent": "ts-node --project tsconfig.scripts.json scripts/verification/independent-verification.ts",
     "verify:queries": "ts-node --project tsconfig.scripts.json scripts/verification/verify-real-queries.ts",
 

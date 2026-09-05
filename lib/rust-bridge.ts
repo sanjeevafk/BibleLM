@@ -41,7 +41,7 @@ export interface BiblelmWasmModule {
   wasm_parse_hebrew_morph(code: string): any;
   wasm_scrub_citations(content: string, allowed_refs: any): string;
   wasm_search(query: string, top_k: number): any;
-  wasm_set_bm25_texts?(texts_js: any): boolean;
+  wasm_set_bm25_texts?(texts: string[]): boolean;
 }
 
 export function isRustEngineActive(): boolean {
@@ -83,7 +83,6 @@ export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    initAttempted = true;
     if (!isRustEngineActive()) {
       return null;
     }
@@ -91,9 +90,11 @@ export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
     try {
       const wasmPkgPath = path.resolve(process.cwd(), 'rust', 'pkg', 'biblelm_wasm.js');
       if (!fs.existsSync(wasmPkgPath)) {
+        initPromise = null;
         return null;
       }
 
+      initAttempted = true;
       const wasm: BiblelmWasmModule = loadWasmPackage(wasmPkgPath);
       wasm.init_panic_hook();
 
@@ -102,6 +103,21 @@ export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
       if (fs.existsSync(bm25BinPath)) {
         const bm25Bytes = fs.readFileSync(bm25BinPath);
         wasm.wasm_init_bm25(new Uint8Array(bm25Bytes));
+      }
+
+      // Hydrate BM25 verse texts for phrase boost parity if available
+      const bibleIndexPath = path.resolve(process.cwd(), 'data', 'bible-full-index.json');
+      if (typeof wasm.wasm_set_bm25_texts === 'function' && fs.existsSync(bibleIndexPath)) {
+        try {
+          const raw = fs.readFileSync(bibleIndexPath, 'utf8');
+          const bibleIndex: any = JSON.parse(raw);
+          const texts = Object.values(bibleIndex).map((row: any) =>
+            typeof row === 'string' ? row : (row.text ?? '')
+          );
+          wasm.wasm_set_bm25_texts(texts);
+        } catch (err) {
+          console.warn('[rust-bridge] wasm_set_bm25_texts hydration warning:', err);
+        }
       }
 
       // Hydrate TSK graph binary index if present
@@ -121,6 +137,7 @@ export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
       wasmInstance = wasm;
       return wasm;
     } catch (err) {
+      initAttempted = true;
       console.warn('[rust-bridge] Failed to initialize Rust WASM engine, falling back to TypeScript:', err);
       wasmInstance = null;
       return null;
@@ -154,7 +171,7 @@ export async function rustSearch(query: string, topK: number): Promise<VerseResu
   if (wasm && wasm.wasm_is_bm25_initialized()) {
     try {
       const hits = wasm.wasm_search(query, topK);
-      if (Array.isArray(hits) && hits.length > 0) {
+      if (Array.isArray(hits)) {
         return hits.map((h: { verseId: string; score: number }) => ({
           verseId: h.verseId,
           score: Number(h.score),
