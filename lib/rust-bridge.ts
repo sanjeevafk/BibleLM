@@ -25,7 +25,24 @@ import { scrubInvalidCitations as tsScrubInvalidCitations } from '../app/api/cha
 import { graphRagExpand as tsGraphRagExpand } from './retrieval/graph-rag';
 import { getBM25Engine } from './retrieval/search';
 
-export type BiblelmWasmModule = typeof import('../rust/pkg/biblelm_wasm.js');
+export interface BiblelmWasmModule {
+  init_panic_hook(): void;
+  wasm_enrich_verse(ref_id: string): any;
+  wasm_fuse_rrf(lexical_ids: any, semantic_ids: any, rrf_k: number): any;
+  wasm_graph_expand(seed_ids: any, query_topics: any, opts: any): any;
+  wasm_init_bm25(bytes: Uint8Array): boolean;
+  wasm_init_graph(bytes: Uint8Array): boolean;
+  wasm_init_strongs(bytes: Uint8Array): boolean;
+  wasm_is_bm25_initialized(): boolean;
+  wasm_is_graph_initialized(): boolean;
+  wasm_is_strongs_initialized(): boolean;
+  wasm_lookup_strongs(strongs_id: string): any;
+  wasm_parse_greek_morph(code: string): any;
+  wasm_parse_hebrew_morph(code: string): any;
+  wasm_scrub_citations(content: string, allowed_refs: any): string;
+  wasm_search(query: string, top_k: number): any;
+  wasm_set_bm25_texts?(texts_js: any): boolean;
+}
 
 export function isRustEngineActive(): boolean {
   return process.env.ENABLE_RUST_ENGINE !== '0' && ENABLE_RUST_ENGINE;
