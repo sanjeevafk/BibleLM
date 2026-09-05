@@ -24,13 +24,17 @@ import { getBM25Engine } from './retrieval/search';
 
 export type BiblelmWasmModule = typeof import('../rust/pkg/biblelm_wasm.js');
 
+export function isRustEngineActive(): boolean {
+  return process.env.ENABLE_RUST_ENGINE !== '0' && ENABLE_RUST_ENGINE;
+}
+
 let wasmInstance: BiblelmWasmModule | null = null;
 let initAttempted = false;
 let initPromise: Promise<BiblelmWasmModule | null> | null = null;
 
 function getSyncWasm(): BiblelmWasmModule | null {
+  if (!isRustEngineActive()) return null;
   if (wasmInstance) return wasmInstance;
-  if (!ENABLE_RUST_ENGINE) return null;
   try {
     const wasmPkgPath = path.resolve(process.cwd(), 'rust', 'pkg', 'biblelm_wasm.js');
     if (!fs.existsSync(wasmPkgPath)) return null;
@@ -47,12 +51,13 @@ function getSyncWasm(): BiblelmWasmModule | null {
  * Initializes the Rust WebAssembly engine and hydrates pre-compiled binary indexes.
  */
 export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
+  if (!isRustEngineActive()) return null;
   if (initAttempted) return wasmInstance;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
     initAttempted = true;
-    if (!ENABLE_RUST_ENGINE) {
+    if (!isRustEngineActive()) {
       return null;
     }
 
@@ -179,7 +184,7 @@ export function rustScrubCitations(
   allowed: (string | VerseContext)[]
 ): string {
   const wasm = wasmInstance || getSyncWasm();
-  if (wasm && ENABLE_RUST_ENGINE) {
+  if (wasm && isRustEngineActive()) {
     try {
       const allowedRefs = allowed.map((a) => (typeof a === 'string' ? a : a.reference));
       return wasm.wasm_scrub_citations(content, allowedRefs);
@@ -240,7 +245,7 @@ export function rustFuseRrf(
   rrfK = 60
 ): Array<{ verseId: string; score: number }> {
   const wasm = wasmInstance || getSyncWasm();
-  if (wasm && ENABLE_RUST_ENGINE) {
+  if (wasm && isRustEngineActive()) {
     try {
       const res = wasm.wasm_fuse_rrf(lexicalIds, semanticIds, rrfK);
       if (Array.isArray(res)) {

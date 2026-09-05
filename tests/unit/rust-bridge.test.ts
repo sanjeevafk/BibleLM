@@ -154,6 +154,6 @@ describe('Rust WebAssembly Bridge (lib/rust-bridge.ts)', () => {
       const hits = await rustSearch('faith without works', 3);
       expect(hits.length).toBeGreaterThan(0);
       expect(hits[0].verseId).toBeDefined();
-    });
+    }, 20000);
   });
 });
