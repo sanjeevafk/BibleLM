@@ -14,7 +14,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createRequire } from 'module';
 import { ENABLE_RUST_ENGINE } from './feature-flags';
+
+const nodeRequire = typeof __filename !== 'undefined' ? createRequire(__filename) : null;
 import type { VerseContext } from './bible-fetch';
 import type { VerseResult } from './retrieval/types';
 import type { GraphRagResult } from './retrieval/graph-rag';
@@ -32,13 +35,20 @@ let wasmInstance: BiblelmWasmModule | null = null;
 let initAttempted = false;
 let initPromise: Promise<BiblelmWasmModule | null> | null = null;
 
+function loadWasmPackage(pkgPath: string): BiblelmWasmModule {
+  if (nodeRequire) {
+    return nodeRequire(pkgPath);
+  }
+  return require(pkgPath);
+}
+
 function getSyncWasm(): BiblelmWasmModule | null {
   if (!isRustEngineActive()) return null;
   if (wasmInstance) return wasmInstance;
   try {
     const wasmPkgPath = path.resolve(process.cwd(), 'rust', 'pkg', 'biblelm_wasm.js');
     if (!fs.existsSync(wasmPkgPath)) return null;
-    const wasm: BiblelmWasmModule = require(wasmPkgPath);
+    const wasm: BiblelmWasmModule = loadWasmPackage(wasmPkgPath);
     wasm.init_panic_hook();
     wasmInstance = wasm;
     return wasm;
@@ -67,7 +77,7 @@ export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
         return null;
       }
 
-      const wasm: BiblelmWasmModule = require(wasmPkgPath);
+      const wasm: BiblelmWasmModule = loadWasmPackage(wasmPkgPath);
       wasm.init_panic_hook();
 
       // Hydrate BM25 binary index if present

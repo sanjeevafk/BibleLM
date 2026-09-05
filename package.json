@@ -12,6 +12,7 @@
     "build:graph-index": "ts-node --project tsconfig.scripts.json scripts/build-graph-index.ts",
     "build:hf-dataset": "ts-node --project tsconfig.scripts.json scripts/build-hf-dataset.ts",
     "build:wasm": "wasm-pack build rust/crates/biblelm-wasm --target nodejs --out-dir $(pwd)/rust/pkg",
+    "verify:independent": "ts-node --project tsconfig.scripts.json scripts/independent-verification.ts",
 
     "benchmark:sample": "ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode sample",
     "benchmark:live": "BIBLELM_DISABLE_DB=1 BIBLELM_DISABLE_EXTERNAL_FALLBACK=1 BIBLELM_SILENT_TRANSLATION_WARNINGS=1 ts-node --project tsconfig.scripts.json tests/benchmark/run-benchmarks.ts --mode live",
