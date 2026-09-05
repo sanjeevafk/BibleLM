@@ -149,7 +149,7 @@ ${present.map((p, i) => `${i + 1}. [${p.candidate.verseId}] "${p.text}"`).join('
 Ranked IDs JSON:`;
 
     const result = await generateText({
-      model: groq('llama-3.1-8b-instant'),
+      model: groq(process.env.GROQ_PRIMARY_MODEL || 'openai/gpt-oss-20b'),
       prompt,
       temperature: 0.0,
     });

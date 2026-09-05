@@ -99,7 +99,7 @@ function wordCount(text: string): number {
 async function gen(prompt: string, maxTok: number): Promise<{ text: string; latencyMs: number }> {
   const start = Date.now();
   const result = await (generateText as any)({
-    model: groq('llama-3.1-8b-instant'),
+    model: groq(process.env.GROQ_PRIMARY_MODEL || 'openai/gpt-oss-20b'),
     prompt,
     temperature: 0.1,
     maxTokens: maxTok,

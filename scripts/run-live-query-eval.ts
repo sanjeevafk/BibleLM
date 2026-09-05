@@ -142,7 +142,7 @@ async function runBenchmark() {
 
     try {
       const llmResult = await generateText({
-        model: groq('llama-3.1-8b-instant'),
+        model: groq(process.env.GROQ_PRIMARY_MODEL || 'openai/gpt-oss-20b'),
         prompt: prompt,
         temperature: 0.1,
       });
