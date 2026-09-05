@@ -57,7 +57,7 @@ describe('generateWithFallback', () => {
     });
 
     const result = await callFallback();
-    expect(result.modelUsed).toContain('llama-3.1-8b-instant');
+    expect(result.modelUsed).toContain('openai/gpt-oss-20b');
     expect(result.content).toBe('Hello world');
     expect((result as any).finalFallback).toBeFalsy();
   });
@@ -69,7 +69,7 @@ describe('generateWithFallback', () => {
       .mockResolvedValueOnce({ textStream: mockTextStream(['Secondary response']) });
 
     const result = await callFallback();
-    expect(result.modelUsed).toContain('llama-3.3-70b-versatile');
+    expect(result.modelUsed).toContain('openai/gpt-oss-120b');
     expect(result.content).toBe('Secondary response');
   });
 

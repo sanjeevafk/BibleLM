@@ -42,8 +42,8 @@ import { classifyAndRewriteQuery } from './lib/query-classifier';
 // Constants
 // ---------------------------------------------------------------------------
 
-const GROQ_PRIMARY_MODEL = 'llama-3.1-8b-instant';
-const GROQ_SECONDARY_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_PRIMARY_MODEL = process.env.GROQ_PRIMARY_MODEL || 'openai/gpt-oss-20b';
+const GROQ_SECONDARY_MODEL = process.env.GROQ_SECONDARY_MODEL || 'openai/gpt-oss-120b';
 const CACHE_MODEL_CANDIDATES = [
   `groq:${GROQ_PRIMARY_MODEL}`,
   `groq:${GROQ_SECONDARY_MODEL}`,
@@ -331,7 +331,7 @@ async function executeUncachedPipeline(options: {
   pipelineMetrics.prompt_build_ms = roundLatencyMs(performance.now() - promptBuildStartedAt);
 
   const generation = await generateWithFallback(prompt, {
-    maxTokens: 900,
+    maxTokens: 1200,
     temperature: 0.1,
     onTiming: (durationMs) => { pipelineMetrics.llm_ms = roundLatencyMs(durationMs); },
   });

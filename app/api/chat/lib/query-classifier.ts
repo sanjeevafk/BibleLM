@@ -54,7 +54,7 @@ Respond in this exact JSON format:
   let text = '';
   try {
     const result = await generateText({
-      model: groq('llama-3.1-8b-instant'),
+      model: groq(process.env.GROQ_PRIMARY_MODEL || 'openai/gpt-oss-20b'),
       system: systemInstruction,
       prompt: `CONVERSATION HISTORY:\n<conversation_history>\n${historyText}\n</conversation_history>\n\nLATEST USER QUERY:\n<user_query>\n${stripPromptTags(query)}\n</user_query>\n\nJSON Response:`,
       temperature: 0.1,

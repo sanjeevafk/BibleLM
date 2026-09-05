@@ -43,7 +43,7 @@ describe('generateWithFallback retryable errors', () => {
       .mockRejectedValueOnce(Object.assign(new Error('Internal Server Error'), { status: 500 }))
       .mockResolvedValueOnce({ textStream: mockTextStream(['recovered']) });
     const result = await callFallback();
-    expect(result.modelUsed).toContain('llama-3.3-70b-versatile');
+    expect(result.modelUsed).toContain('openai/gpt-oss-120b');
     expect(result.content).toBe('recovered');
   });
 
