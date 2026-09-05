@@ -29,3 +29,7 @@ export const GRAPH_RAG_MAX_DEPTH = numberFromEnv(process.env.GRAPH_RAG_MAX_DEPTH
 export const GRAPH_RAG_MAX_EXPANSIONS = numberFromEnv(process.env.GRAPH_RAG_MAX_EXPANSIONS, 30);
 export const GRAPH_RAG_MAX_NEIGHBORS_PER_SEED = numberFromEnv(process.env.GRAPH_RAG_MAX_NEIGHBORS_PER_SEED, 10);
 export const GRAPH_RAG_EDGE_MIN_WEIGHT = numberFromEnv(process.env.GRAPH_RAG_EDGE_MIN_WEIGHT, 0.1);
+
+// Rust / WebAssembly Acceleration flag
+export const ENABLE_RUST_ENGINE = process.env.ENABLE_RUST_ENGINE !== '0';
+

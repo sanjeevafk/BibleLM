@@ -388,6 +388,42 @@ pub struct GraphRagResult {
     pub diagnostics: GraphRagDiagnostics,
 }
 
+#[derive(Clone, Copy)]
+struct Timer {
+    #[cfg(not(target_arch = "wasm32"))]
+    start: std::time::Instant,
+    #[cfg(target_arch = "wasm32")]
+    start_ms: f64,
+}
+
+impl Timer {
+    fn start() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self {
+                start: std::time::Instant::now(),
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self {
+                start_ms: js_sys::Date::now(),
+            }
+        }
+    }
+
+    fn elapsed_ms(&self) -> f64 {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.start.elapsed().as_secs_f64() * 1000.0
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            js_sys::Date::now() - self.start_ms
+        }
+    }
+}
+
 impl GraphIndex {
     /// Loads from JSON string (matching `data/graph-index.json`).
     pub fn from_json_str(json: &str) -> anyhow::Result<Self> {
@@ -403,7 +439,7 @@ impl GraphIndex {
         query_topic_ids: &std::collections::HashSet<&str>,
         opts: &GraphRagOptions,
     ) -> GraphRagResult {
-        let start = std::time::Instant::now();
+        let timer = Timer::start();
         let seed_count = seed_verse_ids.len();
 
         let empty_result = |traversal_depth: usize| GraphRagResult {
@@ -413,7 +449,7 @@ impl GraphIndex {
                 seed_count,
                 expanded_count: 0,
                 traversal_depth_reached: traversal_depth,
-                graph_latency_ms: start.elapsed().as_secs_f64() * 1000.0,
+                graph_latency_ms: timer.elapsed_ms(),
                 graph_contribution_top_k: 0,
             },
         };
@@ -562,7 +598,7 @@ impl GraphIndex {
             })
             .collect();
 
-        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let latency_ms = timer.elapsed_ms();
         let expanded_count = expanded_ids.len();
 
         GraphRagResult {

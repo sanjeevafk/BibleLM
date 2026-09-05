@@ -62,4 +62,6 @@ test_*.py
 
 # Rust build artifacts + reproducible Rust index outputs (rebuild: biblelm-build all)
 rust/target/
+rust/pkg/
 data/rust/
+

@@ -100,7 +100,7 @@ fn citation_regex() -> &'static Regex {
     static REGEX: OnceLock<Regex> = OnceLock::new();
     REGEX.get_or_init(|| {
         Regex::new(
-            r"\b(?:[1-3]\s+[A-Za-z]+(?:\s+[A-Za-z]+)*|[1-3][A-Za-z]{2}|[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+\d+:\d+(?:[-–]\d+)?\b"
+            r"\b(?:[1-3][A-Za-z]{2,3}|[A-Za-z]{2,3}|[1-3]\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+\d+:\d+(?:[-–]\d+)?\b"
         ).expect("valid citation regex")
     })
 }
