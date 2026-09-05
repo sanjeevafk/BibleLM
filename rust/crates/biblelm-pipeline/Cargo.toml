@@ -1,14 +1,11 @@
 [package]
-name = "biblelm-graph"
+name = "biblelm-pipeline"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 biblelm-types = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3"
-

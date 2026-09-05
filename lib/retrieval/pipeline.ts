@@ -25,7 +25,7 @@ import {
 import type { RetrievalInstrumentation } from './types';
 import { cloneVerses, normalizeVerses, dedupeByVerseId, escapeLikePattern } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
-import { graphRagExpand } from './graph-rag';
+import { rustGraphExpand as graphRagExpand } from '../rust-bridge';
 import {
   hybridSearch,
   clampTopK,

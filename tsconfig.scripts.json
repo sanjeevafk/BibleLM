@@ -4,13 +4,16 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "target": "ES2020",
+    "baseUrl": ".",
     "esModuleInterop": true,
     "skipLibCheck": true
+
   },
   "ts-node": {
     "compilerOptions": {
       "module": "commonjs"
-    }
+    },
+    "require": ["tsconfig-paths/register"]
   },
   "include": ["scripts/**/*", "tests/benchmark/**/*"]
 }
