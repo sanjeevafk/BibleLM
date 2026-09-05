@@ -81,7 +81,6 @@ mode (`BIBLELM_DISABLE_DB=1`, no Postgres/pgvector), local run. Retrieval-only
 
 - **LLM Evaluation Report (RAGAS + DeepEval)**: [`docs/benchmark/LLM_EVALUATION_REPORT.md`](docs/benchmark/LLM_EVALUATION_REPORT.md)
 - **Historical Architecture Changelog**: [`docs/ARCHITECTURE_CHANGELOG.md`](docs/ARCHITECTURE_CHANGELOG.md)
-- **Contextual Verse Prepending Spec**: [`docs/contextual-verse-prepending.md`](docs/contextual-verse-prepending.md)
 - **JSON Report**: [`docs/benchmark/latest-report.json`](docs/benchmark/latest-report.json)
 - **Methodology & Guardrails**: [`docs/benchmark/README.md`](docs/benchmark/README.md)
 

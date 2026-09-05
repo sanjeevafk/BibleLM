@@ -23,7 +23,7 @@ export const ENABLE_RETRIEVAL_DEBUG =
   isEnabled(process.env.RETRIEVAL_DEBUG) ||
   isEnabled(process.env.DEBUG_LLM);
 
-// GraphRAG rollout flags (defaults documented in docs/graph-rag-method.md)
+// GraphRAG rollout flags (defaults documented in docs/ARCHITECTURE_CHANGELOG.md)
 export const ENABLE_GRAPH_RAG = isEnabled(process.env.ENABLE_GRAPH_RAG);
 export const GRAPH_RAG_MAX_DEPTH = numberFromEnv(process.env.GRAPH_RAG_MAX_DEPTH, 2);
 export const GRAPH_RAG_MAX_EXPANSIONS = numberFromEnv(process.env.GRAPH_RAG_MAX_EXPANSIONS, 30);
