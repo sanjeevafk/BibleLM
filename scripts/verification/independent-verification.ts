@@ -9,7 +9,6 @@ import {
   rustScrubCitations,
   rustFuseRrf,
   rustLookupStrongs,
-  isRustEngineActive,
 } from '../../lib/rust-bridge';
 import { getBM25Engine } from '../../lib/retrieval/search';
 import { graphRagExpand as tsGraphRagExpand } from '../../lib/retrieval/graph-rag';

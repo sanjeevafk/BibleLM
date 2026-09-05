@@ -6,7 +6,6 @@
  */
 
 import { performance } from 'perf_hooks';
-import { hybridSearch } from '../../lib/retrieval/search';
 import { retrieveContextForQuery } from '../../lib/retrieval/pipeline';
 import {
   initRustEngine,
@@ -14,8 +13,6 @@ import {
   rustSearch,
   rustGraphExpand,
   rustScrubCitations,
-  rustLookupStrongs,
-  rustEnrichVerse,
   resetRustEngineForTesting,
 } from '../../lib/rust-bridge';
 
@@ -91,7 +88,7 @@ async function runRealQueryVerification() {
     resetRustEngineForTesting();
 
     const t0Ts = performance.now();
-    const tsHits = await rustSearch(q.query, 5);
+    await rustSearch(q.query, 5);
     const tsLatency = (performance.now() - t0Ts).toFixed(3);
 
     // Re-enable Rust
