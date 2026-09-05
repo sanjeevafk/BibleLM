@@ -7,7 +7,7 @@ This benchmark currently evaluates retrieval quality and retrieval latency.
 - Grounding safety metric: `citation_validity_rate`
 - Latency metrics: `total_latency_ms`, `retrieval_latency_ms`, `p50_latency`, `p95_latency`
 
-`llm_latency_ms` is currently `0` in live mode because live benchmarking is retrieval-only in this phase.
+`llm_latency_ms` is currently `0` in live mode because live benchmarking is retrieval-only.
 
 ## Scenario Set
 Source of truth:

@@ -113,7 +113,7 @@ Chronological log of major technical milestones, retrieval optimizations, and ar
 ---
 
 ## 8. Rust Native Offline Build CLI & Query-Time BM25 Search Engine
-* **Category:** High-Performance Native Indexing & Retrieval (Phases 1 & 2)
+* **Category:** High-Performance Native Indexing & Retrieval
 * **Commits:** `ad14cb4`, `4e0a317`, `2acde7e`
 * **Description:** Implements a modular Rust workspace (`biblelm-types`, `biblelm-index`, `biblelm-graph`, `biblelm-build`) providing byte-exact TypeScript-parity BM25 and TSK graph pre-compilation into compact binary formats (`BLM1`, `BLMG`). Ports query-time BM25 scoring with smoothed IDF, k1/b TF saturation, stable float sorting (`f64::total_cmp`), and top-100 phrase boosting. Includes an offline `eval` subcommand with side-by-side metric comparison against TypeScript.
 * **Empirical Impact:**
@@ -124,7 +124,7 @@ Chronological log of major technical milestones, retrieval optimizations, and ar
 
 ---
 
-## 9. Rust WebAssembly (WASM) Engine & Next.js Bridge (Phase 3)
+## 9. Rust WebAssembly (WASM) Engine & Next.js Bridge
 * **Category:** In-Process WASM Acceleration & Safe Fallback
 * **Commits:** `279225c`, `10838ed`, `a5f3018`, `5f2a645`, `659bf5d`
 * **Description:** Packages core retrieval routines into a high-performance WebAssembly module (`biblelm-wasm`) executed directly inside Node.js and Next.js via `wasm-pack`. Integrated into the main pipeline through [`lib/rust-bridge.ts`](file:///home/sanjeev/Downloads/bibleLM/lib/rust-bridge.ts) with zero external network overhead and transparent zero-latency fallback to TypeScript when WASM is absent or disabled (`ENABLE_RUST_ENGINE=0`).
