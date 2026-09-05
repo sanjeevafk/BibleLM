@@ -24,7 +24,7 @@ import {
 } from '@/lib/verse-response';
 
 import { getRateLimitKey } from './lib/ip-utils';
-import { scrubInvalidCitations } from './lib/citation-scrubber';
+import { rustScrubCitations as scrubInvalidCitations } from '@/lib/rust-bridge';
 import {
   normalizeResponseContent,
   buildStructuredResponsePayload,

@@ -8,8 +8,8 @@
  * All functions are pure string transforms — no I/O.
  */
 
-import { buildCitationWhitelist, expandCitationReference } from '@/lib/prompts';
-import type { VerseContext } from '@/lib/bible-fetch';
+import { buildCitationWhitelist, expandCitationReference } from '../../../../lib/prompts';
+import type { VerseContext } from '../../../../lib/bible-fetch';
 
 // ---------------------------------------------------------------------------
 // String utilities

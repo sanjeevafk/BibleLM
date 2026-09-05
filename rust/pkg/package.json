@@ -1,0 +1,11 @@
+{
+  "name": "biblelm-wasm",
+  "version": "0.1.0",
+  "files": [
+    "biblelm_wasm_bg.wasm",
+    "biblelm_wasm.js",
+    "biblelm_wasm.d.ts"
+  ],
+  "main": "biblelm_wasm.js",
+  "types": "biblelm_wasm.d.ts"
+}

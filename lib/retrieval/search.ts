@@ -22,6 +22,7 @@ import { expandTheologicalQuery } from './synonyms';
 import { embedQuery, rankSemanticFromQueryEmbedding, rankWithLLMReranker } from './semantic';
 import { tokenizeFallbackQuery } from './verse-utils';
 import { getTranslationVerse } from '../translations';
+import { rustSearch } from '../rust-bridge';
 
 let bm25Engine: BM25Engine | null = null;
 let bm25EnginePromise: Promise<BM25Engine> | null = null;
@@ -268,7 +269,6 @@ export async function hybridSearch(
 ): Promise<VerseResult[]> {
   const topK = clampTopK(options?.topK);
   const translation = options?.translation || 'BSB';
-  const engine = await getBM25Engine();
 
   // Phase 2: Theological Query Expansion
   const expandedQuery = expandTheologicalQuery(query, {
@@ -279,9 +279,12 @@ export async function hybridSearch(
   const WORD_COUNT_GATE = 4;
   const semanticEligible = ENABLE_SEMANTIC_RERANKER && queryWordCount >= WORD_COUNT_GATE;
 
-  const bm25Promise = Promise.resolve(engine.search(expandedQuery, RETRIEVAL_CONFIG.bm25.candidateLimit));
+  const bm25Promise = rustSearch(expandedQuery, RETRIEVAL_CONFIG.bm25.candidateLimit).then((hits) =>
+    hits.map((h) => ({ doc: { id: h.verseId, text: '' }, score: h.score }))
+  );
   const queryEmbeddingPromise = semanticEligible ? embedQuery(query) : Promise.resolve(null);
   const [bm25Hits, queryEmbedding] = await Promise.all([bm25Promise, queryEmbeddingPromise]);
+
 
 
 
@@ -294,13 +297,13 @@ export async function hybridSearch(
   }
 
   // Min-Max Normalization for BM25 scores
-  const maxScore = bm25Hits[0].score;
-  const minScore = bm25Hits[bm25Hits.length - 1].score;
+  const maxScore = bm25Hits[0]?.score ?? 0;
+  const minScore = bm25Hits[bm25Hits.length - 1]?.score ?? maxScore;
   const scoreDiff = maxScore - minScore;
 
   const scored: RankedVerse[] = bm25Hits.map((hit, index) => ({
     verseId: hit.doc.id,
-    score: scoreDiff > 0 ? (hit.score - minScore) / scoreDiff : 1,
+    score: scoreDiff > 0 ? ((hit.score ?? 0) - minScore) / scoreDiff : 1,
     rankLexical: index + 1,
   }));
 
