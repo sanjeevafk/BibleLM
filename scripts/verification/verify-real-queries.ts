@@ -6,8 +6,8 @@
  */
 
 import { performance } from 'perf_hooks';
-import { hybridSearch } from '../lib/retrieval/search';
-import { retrieveContextForQuery } from '../lib/retrieval/pipeline';
+import { hybridSearch } from '../../lib/retrieval/search';
+import { retrieveContextForQuery } from '../../lib/retrieval/pipeline';
 import {
   initRustEngine,
   isRustEngineAvailable,
@@ -17,7 +17,7 @@ import {
   rustLookupStrongs,
   rustEnrichVerse,
   resetRustEngineForTesting,
-} from '../lib/rust-bridge';
+} from '../../lib/rust-bridge';
 
 const REAL_QUERIES = [
   {

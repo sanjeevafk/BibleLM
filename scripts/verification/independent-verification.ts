@@ -10,11 +10,11 @@ import {
   rustFuseRrf,
   rustLookupStrongs,
   isRustEngineActive,
-} from '../lib/rust-bridge';
-import { getBM25Engine } from '../lib/retrieval/search';
-import { graphRagExpand as tsGraphRagExpand } from '../lib/retrieval/graph-rag';
-import { scrubInvalidCitations as tsScrubInvalidCitations } from '../app/api/chat/lib/citation-scrubber';
-import { retrieveContextForQuery } from '../lib/retrieval';
+} from '../../lib/rust-bridge';
+import { getBM25Engine } from '../../lib/retrieval/search';
+import { graphRagExpand as tsGraphRagExpand } from '../../lib/retrieval/graph-rag';
+import { scrubInvalidCitations as tsScrubInvalidCitations } from '../../app/api/chat/lib/citation-scrubber';
+import { retrieveContextForQuery } from '../../lib/retrieval';
 
 interface VerificationResult {
   suite: string;
