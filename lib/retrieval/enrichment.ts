@@ -144,8 +144,12 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
       verse.original.map(async (orig) => {
         const dictEntry = await getStrongsEntry(orig.strongs);
         if (dictEntry) {
-          orig.gloss = dictEntry.short_definition || dictEntry.definition;
-          orig.transliteration = dictEntry.transliteration;
+          if (!orig.gloss || orig.gloss.trim() === '') {
+            orig.gloss = dictEntry.short_definition || dictEntry.definition;
+          }
+          if (dictEntry.transliteration) {
+            orig.transliteration = dictEntry.transliteration;
+          }
         }
       })
     );
@@ -159,7 +163,26 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
       const verseNum = Number.parseInt(verseRaw, 10);
 
       let hasOriginals = Array.isArray(verse.original) && verse.original.length > 0;
-      if (hasOriginals) {
+      if (hasOriginals && bookRaw && NT_BOOKS.has(bookRaw)) {
+        // For NT verses that already have original[] from the DB, backfill
+        // contextual interlinear glosses first so we don't blindly show
+        // root-form Strong's tags (e.g. "her" for αὐτῷ which means "to him").
+        const gntLayers = await getOpenGNTLayers(verse.reference);
+        if (gntLayers?.morphology && gntLayers.interlinear && gntLayers.interlinear.length > 0) {
+          const interlinearWords = gntLayers.interlinear;
+          verse.original = verse.original.map((orig) => {
+            const match = interlinearWords.find((iw) => iw.w === orig.word);
+            const cleanInterlinear = match?.i && match.i.trim() !== '-'
+              ? match.i.trim().replace(/^[,.;:!?]+|[,.;:!?]+$/g, '').trim()
+              : undefined;
+            return {
+              ...orig,
+              gloss: cleanInterlinear || orig.gloss,
+            };
+          });
+        }
+        await hydrateOriginals(verse);
+      } else if (hasOriginals) {
         await hydrateOriginals(verse);
       } else if (bookRaw && cvRaw && OT_BOOKS.has(bookRaw) && !Number.isNaN(chapterNum) && !Number.isNaN(verseNum)) {
         const morphWords = await getMorphhbWords(bookRaw, chapterNum, verseNum);
@@ -171,13 +194,23 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
       } else if (bookRaw && NT_BOOKS.has(bookRaw)) {
         const gntLayers = await getOpenGNTLayers(verse.reference);
         if (gntLayers?.morphology && gntLayers.morphology.length > 0) {
-          verse.original = gntLayers.morphology.map((w) => ({
-            word: w.w,
-            strongs: w.s ? (w.s.startsWith('G') ? w.s : `G${w.s}`) : '',
-            morph: w.r,
-            gloss: w.d || w.l,
-            transliteration: w.l,
-          }));
+          const interlinearWords = gntLayers.interlinear || [];
+          verse.original = gntLayers.morphology.map((w, idx) => {
+            const matchingInterlinear = interlinearWords[idx]?.w === w.w
+              ? interlinearWords[idx]?.i
+              : interlinearWords.find((item) => item.w === w.w)?.i;
+            const cleanInterlinear = matchingInterlinear && matchingInterlinear.trim() !== '-'
+              ? matchingInterlinear.trim().replace(/^[,.;:!?]+|[,.;:!?]+$/g, '').trim()
+              : undefined;
+
+            return {
+              word: w.w,
+              strongs: w.s ? (w.s.startsWith('G') ? w.s : `G${w.s}`) : '',
+              morph: w.r,
+              gloss: cleanInterlinear,
+              transliteration: w.l,
+            };
+          });
           await hydrateOriginals(verse);
           hasOriginals = true;
         }
