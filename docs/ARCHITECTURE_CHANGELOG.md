@@ -137,7 +137,25 @@ Chronological log of major technical milestones, retrieval optimizations, and ar
 * **Empirical Impact & Benchmarks:**
   - **Search Acceleration:** **13x to 98x faster** than pure TypeScript BM25 across real biblical queries (e.g., *Melchizedek* in 15.4 ms vs 1,509 ms).
   - **Citation Sanitization:** Linear-time execution in **<0.03 ms**.
-  - **Zero Regression:** 100/100 scenario eval verified (100% Top-5 agreement, 0% MRR drop).
+  - **Zero Regression:** 53/53 scenario eval verified (100% Top-5 agreement, 0% MRR drop).
   - **Serverless Ready:** Binary artifacts bundled for Vercel deployment with dynamic module resolution and isolated panic hooks.
 * **Key Artifacts:** [`rust/crates/biblelm-wasm/src/lib.rs`](file:///home/sanjeev/Downloads/bibleLM/rust/crates/biblelm-wasm/src/lib.rs), [`lib/rust-bridge.ts`](file:///home/sanjeev/Downloads/bibleLM/lib/rust-bridge.ts), [`scripts/verification/independent-verification.ts`](file:///home/sanjeev/Downloads/bibleLM/scripts/verification/independent-verification.ts), [`scripts/verification/verify-real-queries.ts`](file:///home/sanjeev/Downloads/bibleLM/scripts/verification/verify-real-queries.ts).
+
+---
+
+## 10. Rust Full-Graph Port, Strong's v2 & Parity Hardening
+* **Category:** Retrieval Parity Completion & Binary Format v2
+* **Description:** Closes the gaps found in the post-merge review of §§8–9:
+  - **Full multi-source graph in Rust** (`FullGraphBuilder`): ports §2–§4 of `scripts/build-graph-index.ts` (cluster hubs, verse topics, topic-verse index) alongside TSK edges, with first-wins node kinds, keep-max edge semantics, round-before-sort top-20 pruning across all kinds, and `parseInt`-exact vote parsing. New `BLMG v2` binary stores node/edge kinds; `decode_graph_bytes` still loads legacy v1 TSK-only binaries. `biblelm-build verify` now asserts **exact** adjacency equality (ids, order, weights, kinds) over all 30,730 nodes plus node-kind agreement.
+  - **Strong's `BLMS v2`:** preserves all dictionary fields (`lexeme`, `transliteration`, `pronunciation`, `short_definition`) instead of transliteration-only; single shared encoder between CLI and library; trailing-byte rejection on all decoders.
+  - **Calibration contract:** GraphRAG score calibration is now integer round-half-up on both sides (`Math.round(x*10000)/10000` in TS, `(x*10000).round()/10000` in Rust) — `toFixed(4)` is banned because it disagrees by 1ulp on 4th-decimal halfway cases.
+  - **BM25 `BLM1 v2`:** drops the duplicated posting-count field; enables `serde_json preserve_order` so Rust doc numbering follows file order exactly like TS `Object.entries`.
+* **Decisions:**
+  - **WASM phrase-text hydration (keep):** `initRustEngine` still parses `bible-full-index.json` (~11.6 MB) on cold start for phrase-boost quality, accepting the cold-start cost the lean `bm25-state.json` path avoids. Guarded by `tests/unit/rust-lean-parity.test.ts` (WASM-vs-lean-fallback agreement in CI). Revisit by baking texts into the binary if cold starts regress.
+  - **Morph parsers (deferred):** Hebrew/Greek parsers marked experimental subset; full parity port deferred until a production caller exists.
+* **Empirical Impact:**
+  - **Graph verify:** 30,730 nodes, 0 neighbor mismatches, 0 kind disagreements vs `data/graph-index.json`.
+  - **GraphRAG live parity:** 6/6 seed sets bit-exact (ids, order, scores) vs TypeScript at production defaults.
+  - **BM25 eval:** still 53/53 zero-diff top-5 after the v2/doc-order changes.
+* **Key Artifacts:** [`rust/crates/biblelm-graph/src/lib.rs`](file:///home/sanjeev/Downloads/bibleLM/rust/crates/biblelm-graph/src/lib.rs), [`rust/crates/biblelm-morph/src/lib.rs`](file:///home/sanjeev/Downloads/bibleLM/rust/crates/biblelm-morph/src/lib.rs), [`tests/unit/rust-lean-parity.test.ts`](file:///home/sanjeev/Downloads/bibleLM/tests/unit/rust-lean-parity.test.ts).
 

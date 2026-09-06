@@ -21,6 +21,25 @@ function wasm_enrich_verse(ref_id) {
 exports.wasm_enrich_verse = wasm_enrich_verse;
 
 /**
+ * Returns the invalid citations that `wasm_scrub_citations` would remove
+ * (deduplicated). Lets hosts emit whitelist-enforcement telemetry that
+ * matches the TypeScript scrubber's `citation_whitelist_enforced` event.
+ * @param {string} content
+ * @param {any} allowed_refs
+ * @returns {any}
+ */
+function wasm_find_invalid_citations(content, allowed_refs) {
+    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.wasm_find_invalid_citations(ptr0, len0, allowed_refs);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+exports.wasm_find_invalid_citations = wasm_find_invalid_citations;
+
+/**
  * @param {any} lexical_ids
  * @param {any} semantic_ids
  * @param {number} rrf_k

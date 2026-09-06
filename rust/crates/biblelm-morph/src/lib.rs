@@ -4,6 +4,14 @@
 //! - Strong's Concordance (Hebrew H1..H8674, Greek G1..G5624)
 //! - MorphHB / Westminster Leningrad Codex (Hebrew Old Testament)
 //! - OpenGNT Robinson Morphological Analysis (Greek New Testament)
+//!
+//! EXPERIMENTAL (deferred full port): the `HebrewMorphAnalysis` and
+//! `RobinsonMorphAnalysis` parsers below cover a useful SUBSET of their TS
+//! counterparts (`lib/morph-utils.ts`, OpenGNT layers) — several stems,
+//! aspects, and all person/gender/number/state decoding are not yet ported,
+//! and there are no differential tests against TS. They have no production
+//! callers (`lib/retrieval/enrichment.ts` still uses the TS datasets).
+//! Treat their output as best-effort until the full port lands.
 
 use anyhow::{bail, Context, Result};
 use biblelm_types::normalize_book;
@@ -18,11 +26,18 @@ use std::collections::{BTreeMap, HashMap};
 pub struct StrongsEntry {
     pub id: String,
     pub transliteration: String,
+    /// Original-language headword (Hebrew/Aramaic/Greek script).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lexeme: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pronunciation: Option<String>,
-    pub definition: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub short_definition: Option<String>,
+    /// Gloss text. NOTE: `data/strongs-dict.json` carries no long-form
+    /// `definition` field, so this is `None` for dictionary-built entries
+    /// (kept for API compatibility with hand-built entries).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<String>,
 }
 
 /// Normalizes Strong's IDs like "h1234" or " g3056 " to "H1234" or "G3056".
@@ -60,50 +75,43 @@ impl StrongsDictionary {
         self.entries.get(&key)
     }
 
-    /// Loads dictionary from JSON string (e.g. `data/strongs-dict.json`).
+    /// Loads dictionary from JSON string (e.g. `data/strongs-dict.json`,
+    /// shaped `{H1|G1: {lexeme, transliteration, pronunciation,
+    /// short_definition}}`). All four fields are preserved through the
+    /// binary encoding — v1 binaries that kept only transliteration are
+    /// rejected on decode (rebuild with `biblelm-build strongs`).
     pub fn from_json_str(json_str: &str) -> Result<Self> {
         let raw_map: HashMap<String, serde_json::Value> = serde_json::from_str(json_str)
             .context("parsing strongs-dict JSON")?;
 
         let mut dict = StrongsDictionary::new();
         for (id, val) in raw_map {
-            let transliteration = val
-                .get("transliteration")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let pronunciation = val
-                .get("pronunciation")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let definition = val
-                .get("definition")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let short_definition = val
-                .get("short_definition")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-
+            let get = |key: &str| {
+                val.get(key)
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            };
             dict.insert(StrongsEntry {
                 id,
-                transliteration,
-                pronunciation,
-                definition,
-                short_definition,
+                transliteration: get("transliteration").unwrap_or_default(),
+                lexeme: get("lexeme"),
+                pronunciation: get("pronunciation"),
+                short_definition: get("short_definition"),
+                definition: get("definition"),
             });
         }
         Ok(dict)
     }
 
-    // Binary format: magic "BLMS" | u32 version=1 | u64 n
-    // per entry: u16 len+id, u16 len+translit, u32 len+def
+    // Binary format v2: magic "BLMS" | u32 version=2 | u64 n
+    // per entry (sorted by id): u16 len+id, u16 len+transliteration,
+    // u16 len+lexeme, u16 len+pronunciation, u16 len+short_definition,
+    // u16 len+definition (absent fields encode as empty).
 
     pub fn encode_binary(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(b"BLMS");
-        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&2u32.to_le_bytes());
         buf.extend_from_slice(&(self.entries.len() as u64).to_le_bytes());
 
         // Deterministic iteration order by key
@@ -113,9 +121,10 @@ impl StrongsDictionary {
         for entry in sorted_entries {
             push_str16(&mut buf, &entry.id);
             push_str16(&mut buf, &entry.transliteration);
-            let def_bytes = entry.definition.as_bytes();
-            buf.extend_from_slice(&(def_bytes.len() as u32).to_le_bytes());
-            buf.extend_from_slice(def_bytes);
+            push_str16(&mut buf, entry.lexeme.as_deref().unwrap_or(""));
+            push_str16(&mut buf, entry.pronunciation.as_deref().unwrap_or(""));
+            push_str16(&mut buf, entry.short_definition.as_deref().unwrap_or(""));
+            push_str16(&mut buf, entry.definition.as_deref().unwrap_or(""));
         }
         buf
     }
@@ -128,61 +137,49 @@ impl StrongsDictionary {
             bail!("invalid BLMS magic header");
         }
         let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-        if version != 1 {
-            bail!("unsupported BLMS version: {version}");
+        if version != 2 {
+            bail!("unsupported BLMS version: {version} (rebuild with `biblelm-build strongs`)");
         }
         let n = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
 
         let mut offset = 16;
         let mut dict = StrongsDictionary::new();
+        let read_field = |offset: &mut usize, what: &str| -> Result<String> {
+            if *offset + 2 > bytes.len() {
+                bail!("unexpected EOF reading {what} len");
+            }
+            let len = u16::from_le_bytes(bytes[*offset..*offset + 2].try_into().unwrap()) as usize;
+            *offset += 2;
+            if *offset + len > bytes.len() {
+                bail!("unexpected EOF reading {what} string");
+            }
+            let s = std::str::from_utf8(&bytes[*offset..*offset + len])
+                .with_context(|| format!("invalid utf8 in strongs {what}"))?
+                .to_string();
+            *offset += len;
+            Ok(s)
+        };
 
         for _ in 0..n {
-            if offset + 2 > bytes.len() {
-                bail!("unexpected EOF reading id len");
-            }
-            let id_len = u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
-            if offset + id_len > bytes.len() {
-                bail!("unexpected EOF reading id string");
-            }
-            let id = std::str::from_utf8(&bytes[offset..offset + id_len])
-                .context("invalid utf8 in strongs id")?
-                .to_string();
-            offset += id_len;
+            let id = read_field(&mut offset, "id")?;
+            let transliteration = read_field(&mut offset, "transliteration")?;
+            let lexeme = read_field(&mut offset, "lexeme")?;
+            let pronunciation = read_field(&mut offset, "pronunciation")?;
+            let short_definition = read_field(&mut offset, "short definition")?;
+            let definition = read_field(&mut offset, "definition")?;
 
-            if offset + 2 > bytes.len() {
-                bail!("unexpected EOF reading transliteration len");
-            }
-            let trans_len = u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
-            if offset + trans_len > bytes.len() {
-                bail!("unexpected EOF reading transliteration string");
-            }
-            let transliteration = std::str::from_utf8(&bytes[offset..offset + trans_len])
-                .context("invalid utf8 in strongs transliteration")?
-                .to_string();
-            offset += trans_len;
-
-            if offset + 4 > bytes.len() {
-                bail!("unexpected EOF reading definition len");
-            }
-            let def_len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
-            offset += 4;
-            if offset + def_len > bytes.len() {
-                bail!("unexpected EOF reading definition string");
-            }
-            let definition = std::str::from_utf8(&bytes[offset..offset + def_len])
-                .context("invalid utf8 in strongs definition")?
-                .to_string();
-            offset += def_len;
-
+            let none_if_empty = |s: String| if s.is_empty() { None } else { Some(s) };
             dict.insert(StrongsEntry {
                 id,
                 transliteration,
-                pronunciation: None,
-                definition,
-                short_definition: None,
+                lexeme: none_if_empty(lexeme),
+                pronunciation: none_if_empty(pronunciation),
+                short_definition: none_if_empty(short_definition),
+                definition: none_if_empty(definition),
             });
+        }
+        if offset != bytes.len() {
+            bail!("trailing bytes in BLMS index");
         }
 
         Ok(dict)
@@ -221,6 +218,10 @@ pub struct HebrewMorphAnalysis {
 
 impl HebrewMorphAnalysis {
     /// Parses a MorphHB code like "HR/Ncfsa" or "HVqp3ms".
+    ///
+    /// EXPERIMENTAL subset: POS + Qal..Hithpael stems + a reduced aspect
+    /// set. Person/gender/number/state suffixes and `/`-separated
+    /// multi-segments (handled by TS `decodeMorph`) are not decoded yet.
     pub fn parse(code: &str) -> Self {
         let clean = code.trim();
         let is_aramaic = clean.starts_with('A');
@@ -387,6 +388,9 @@ pub struct RobinsonMorphAnalysis {
 
 impl RobinsonMorphAnalysis {
     /// Parses Robinson's Morphological Analysis code like "V-AAI-3S" or "N-NSM".
+    ///
+    /// EXPERIMENTAL subset: core verb/nominal slots only. Extended tags
+    /// and edge-case codes beyond the common patterns are best-effort.
     pub fn parse(code: &str) -> Self {
         let clean = code.trim();
         let parts: Vec<&str> = clean.split('-').collect();
@@ -654,28 +658,54 @@ mod tests {
         dict.insert(StrongsEntry {
             id: "H7225".to_string(),
             transliteration: "re'shith".to_string(),
+            lexeme: Some("ראשית".to_string()),
             pronunciation: Some("ray-sheeth'".to_string()),
-            definition: "first, beginning, best".to_string(),
             short_definition: Some("beginning".to_string()),
+            definition: None,
         });
         dict.insert(StrongsEntry {
             id: "G3056".to_string(),
             transliteration: "logos".to_string(),
+            lexeme: Some("λογος".to_string()),
             pronunciation: None,
-            definition: "a word, speech, divine utterance".to_string(),
             short_definition: None,
+            definition: Some("a word, speech, divine utterance".to_string()),
         });
 
         assert_eq!(dict.len(), 2);
         assert_eq!(dict.lookup("h7225").unwrap().transliteration, "re'shith");
-        assert_eq!(dict.lookup("G3056").unwrap().definition, "a word, speech, divine utterance");
+        assert_eq!(dict.lookup("G3056").unwrap().definition.as_deref(), Some("a word, speech, divine utterance"));
 
         let encoded = dict.encode_binary();
         let decoded = StrongsDictionary::decode_binary(&encoded).expect("decode failed");
 
         assert_eq!(decoded.len(), 2);
-        assert_eq!(decoded.lookup("H7225").unwrap().transliteration, "re'shith");
-        assert_eq!(decoded.lookup("G3056").unwrap().definition, "a word, speech, divine utterance");
+        // Every field survives the binary roundtrip (v1 dropped all but two).
+        assert_eq!(decoded.lookup("H7225").unwrap(), dict.lookup("H7225").unwrap());
+        assert_eq!(decoded.lookup("G3056").unwrap(), dict.lookup("G3056").unwrap());
+        // Legacy v1 binaries are rejected with a rebuild hint.
+        let mut v1 = encoded.clone();
+        v1[4..8].copy_from_slice(&1u32.to_le_bytes());
+        assert!(StrongsDictionary::decode_binary(&v1).is_err());
+    }
+
+    #[test]
+    fn strongs_json_shape_preserves_all_fields() {
+        // Real `data/strongs-dict.json` shape: no long `definition` field.
+        let json = r#"{
+            "H7225": {"lexeme": "ראשית", "transliteration": "rêʼshîyth", "pronunciation": "ray-sheeth'", "short_definition": "beginning"},
+            "G3056": {"lexeme": "λογος", "transliteration": "lógos", "pronunciation": "log'-os", "short_definition": "account"}
+        }"#;
+        let dict = StrongsDictionary::from_json_str(json).unwrap();
+        let h = dict.lookup("H7225").unwrap();
+        assert_eq!(h.transliteration, "rêʼshîyth");
+        assert_eq!(h.lexeme.as_deref(), Some("ראשית"));
+        assert_eq!(h.pronunciation.as_deref(), Some("ray-sheeth'"));
+        assert_eq!(h.short_definition.as_deref(), Some("beginning"));
+
+        let back = StrongsDictionary::decode_binary(&dict.encode_binary()).unwrap();
+        assert_eq!(back.lookup("H7225").unwrap(), h);
+        assert_eq!(back.lookup("G3056").unwrap().lexeme.as_deref(), Some("λογος"));
     }
 
     #[test]

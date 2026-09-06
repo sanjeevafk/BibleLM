@@ -279,6 +279,29 @@ fn remove_space_before_citation_punctuation(value: &str) -> String {
     result
 }
 
+/// Returns the invalid citations that `scrub_invalid_citations` would remove,
+/// deduplicated and sorted. Used by hosts to emit whitelist-enforcement
+/// telemetry without reimplementing extraction.
+pub fn find_invalid_citations(content: &str, allowed_references: &[&str]) -> Vec<String> {
+    let whitelist = build_citation_whitelist_set(allowed_references);
+    let citations = extract_citations(content);
+    if citations.is_empty() {
+        return Vec::new();
+    }
+    if whitelist.is_empty() {
+        let mut all = citations;
+        all.sort();
+        all.dedup();
+        return all;
+    }
+    let mut invalid: Vec<String> = citations
+        .into_iter()
+        .filter(|c| !is_allowed_citation(c, &whitelist))
+        .collect();
+    invalid.sort();
+    invalid.dedup();
+    invalid
+}
 /// Removes any biblical citations from `content` that are not present in `allowed_references`.
 ///
 /// Preserves valid citations (both abbreviated e.g. `JHN 3:16` and expanded e.g. `John 3:16`),
@@ -401,5 +424,14 @@ mod tests {
         assert_eq!(scrub_invalid_citations("No citations here at all.", &["JHN 3:16"]), "No citations here at all.");
         assert_eq!(scrub_invalid_citations("", &["JHN 3:16"]), "");
         assert_eq!(scrub_invalid_citations("Some text with (parens) and {braces}.", &[]), "Some text with (parens) and {braces}.");
+    }
+
+    #[test]
+    fn find_invalid_lists_what_scrub_removes() {
+        let input = "Valid [JHN 3:16] and phantom [MAT 5:3] and again [MAT 5:3].";
+        let invalid = find_invalid_citations(input, &["JHN 3:16"]);
+        assert_eq!(invalid, vec!["MAT 5:3".to_string()]);
+        assert!(find_invalid_citations(input, &["JHN 3:16", "MAT 5:3"]).is_empty());
+        assert!(find_invalid_citations("No citations.", &[]).is_empty());
     }
 }
