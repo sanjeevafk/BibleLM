@@ -5,6 +5,13 @@ export function init_panic_hook(): void;
 
 export function wasm_enrich_verse(ref_id: string): any;
 
+/**
+ * Returns the invalid citations that `wasm_scrub_citations` would remove
+ * (deduplicated). Lets hosts emit whitelist-enforcement telemetry that
+ * matches the TypeScript scrubber's `citation_whitelist_enforced` event.
+ */
+export function wasm_find_invalid_citations(content: string, allowed_refs: any): any;
+
 export function wasm_fuse_rrf(lexical_ids: any, semantic_ids: any, rrf_k: number): any;
 
 export function wasm_graph_expand(seed_ids: any, query_topics: any, opts: any): any;

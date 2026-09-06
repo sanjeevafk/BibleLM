@@ -12,8 +12,11 @@
 //! - `verify`: compares Rust exports against TS-built `data/*.json`
 
 use anyhow::{Context, Result};
-use biblelm_graph::{parse_xref_line, TskGraph};
+use biblelm_graph::{
+    decode_graph_bytes, parse_xref_line, ClusterItem, FullGraphBuilder, GraphIndex, VerseTopicItem,
+};
 use biblelm_index::{Bm25Doc, Bm25Index, FullIndexRow, IndexStats};
+use biblelm_morph::StrongsDictionary;
 use clap::{Args, Parser, Subcommand};
 use std::collections::BTreeMap;
 use std::fs;
@@ -60,9 +63,15 @@ struct Bm25Args {
 struct GraphArgs {
     #[arg(long, default_value = "datasets/cross_references.txt")]
     xrefs: PathBuf,
+    #[arg(long, default_value = "data/tsk-clusters.json")]
+    clusters: PathBuf,
+    #[arg(long, default_value = "data/verse-topics.json")]
+    verse_topics: PathBuf,
+    #[arg(long, default_value = "data/topic-verse-index.json")]
+    topic_verse: PathBuf,
     #[arg(long, default_value = "data/rust/tsk-graph.bin")]
     out: PathBuf,
-    #[arg(long, default_value = "data/rust/tsk-adjacency.json")]
+    #[arg(long, default_value = "data/rust/graph-adjacency.json")]
     export_json: PathBuf,
 }
 
@@ -171,7 +180,21 @@ fn build_bm25(index_path: &Path, out: &Path, export_json: &Path) -> Result<Index
     Ok(stats)
 }
 
-fn build_graph(xrefs_path: &Path, out: &Path, export_json: &Path) -> Result<(u64, usize)> {
+/// Builds the FULL multi-source graph (§1–§4 of scripts/build-graph-index.ts):
+/// TSK edges + cluster hubs + verse topics + topic-verse index, pruned to
+/// top-20 neighbors per node across all kinds. Missing optional inputs are
+/// skipped with a warning, mirroring the TS script.
+fn build_graph(
+    xrefs_path: &Path,
+    clusters_path: &Path,
+    verse_topics_path: &Path,
+    topic_verse_path: &Path,
+    out: &Path,
+    export_json: &Path,
+) -> Result<(u64, usize)> {
+    let mut builder = FullGraphBuilder::new();
+
+    // §1 TSK
     let raw = fs::read_to_string(xrefs_path)
         .with_context(|| format!("reading {}", xrefs_path.display()))?;
     let mut edges = Vec::new();
@@ -185,56 +208,92 @@ fn build_graph(xrefs_path: &Path, out: &Path, export_json: &Path) -> Result<(u64
             None => skipped += 1,
         }
     }
-    println!("parsed {} edges ({} skipped/header)…", edges.len(), skipped);
+    println!("parsed {} TSK edges ({} skipped/header)…", edges.len(), skipped);
     let owned: Vec<(String, String, f64)> = edges;
-    let graph = TskGraph::build(&owned);
-    let bytes = graph.encode();
+    builder.add_tsk_edges(&owned);
+
+    // §2 clusters
+    if clusters_path.exists() {
+        let raw = fs::read_to_string(clusters_path)?;
+        let file: serde_json::Value = serde_json::from_str(&raw)?;
+        let items: Vec<ClusterItem> =
+            serde_json::from_value(file.get("items").cloned().unwrap_or_default())?;
+        let mut n = 0;
+        for item in &items {
+            builder.add_cluster(item);
+            n += 1;
+        }
+        println!("parsed {n} clusters (hub-and-spoke)…");
+    } else {
+        println!("warning: {} not found, skipping clusters", clusters_path.display());
+    }
+
+    // §3 verse topics
+    if verse_topics_path.exists() {
+        let raw = fs::read_to_string(verse_topics_path)?;
+        let file: serde_json::Value = serde_json::from_str(&raw)?;
+        let items: Vec<VerseTopicItem> =
+            serde_json::from_value(file.get("items").cloned().unwrap_or_default())?;
+        let mut n = 0;
+        for item in &items {
+            builder.add_verse_topics(item);
+            n += 1;
+        }
+        println!("parsed {n} verse-topic mappings…");
+    } else {
+        println!("warning: {} not found, skipping verse topics", verse_topics_path.display());
+    }
+
+    // §4 topic-verse index (file order matters for tie order; serde_json
+    // `preserve_order` keeps it).
+    if topic_verse_path.exists() {
+        let raw = fs::read_to_string(topic_verse_path)?;
+        let file: serde_json::Value = serde_json::from_str(&raw)?;
+        let items = file
+            .get("items")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let mut n = 0;
+        for (topic_id, verses_val) in &items {
+            let verses: Vec<String> = serde_json::from_value(verses_val.clone()).unwrap_or_default();
+            builder.add_topic_verses(topic_id, &verses);
+            n += 1;
+        }
+        println!("parsed {n} topic-verse mappings…");
+    } else {
+        println!("warning: {} not found, skipping topic-verse index", topic_verse_path.display());
+    }
+
+    let raw_tsk = builder.raw_tsk_edges;
+    let graph: GraphIndex = builder.build();
+    let bytes = graph.encode_blmg_v2(raw_tsk)?;
+    let total_edges: usize = graph.adjacency.values().map(|v| v.len()).sum();
     ensure_parent(out)?;
     fs::write(out, &bytes).with_context(|| format!("writing {}", out.display()))?;
     ensure_parent(export_json)?;
-    fs::write(export_json, serde_json::to_string(&graph.export_adjacency_json())?)?;
+    fs::write(export_json, serde_json::to_string(&graph.export_full_adjacency_json())?)?;
     println!(
-        "graph: {} raw edges → {} nodes, {} pruned edges, {:.2} MB binary → {}",
-        graph.raw_edges,
-        graph.adjacency.len(),
-        graph.total_edges(),
+        "graph: {} raw TSK edges → {} nodes, {} pruned edges, {:.2} MB binary → {}",
+        raw_tsk,
+        graph.nodes.len(),
+        total_edges,
         bytes.len() as f64 / 1e6,
         out.display()
     );
-    Ok((graph.raw_edges, graph.total_edges()))
+    Ok((raw_tsk, total_edges))
 }
 
 fn build_strongs(dict_path: &Path, out: &Path) -> Result<usize> {
     let raw = fs::read_to_string(dict_path)
         .with_context(|| format!("reading {}", dict_path.display()))?;
-    let map: BTreeMap<String, serde_json::Value> = serde_json::from_str(&raw)
-        .context("parsing strongs-dict.json (expected {H1|G1: {...}})")?;
-    // Binary: magic "BLMS" | u32 version=1 | u64 n | per entry: u16 len+id,
-    // u16 len+transliteration, u32 len+definition(json string, may be long).
-    let mut buf = Vec::new();
-    buf.extend_from_slice(b"BLMS");
-    buf.extend_from_slice(&1u32.to_le_bytes());
-    buf.extend_from_slice(&(map.len() as u64).to_le_bytes());
-    for (id, entry) in &map {
-        let translit = entry.get("transliteration").and_then(|v| v.as_str()).unwrap_or("");
-        let def = entry.get("definition").and_then(|v| v.as_str()).unwrap_or("");
-        push_str16(&mut buf, id);
-        push_str16(&mut buf, translit);
-        let db = def.as_bytes();
-        buf.extend_from_slice(&(db.len() as u32).to_le_bytes());
-        buf.extend_from_slice(db);
-    }
+    // Single encoder shared with the library (no duplicated layout logic).
+    let dict = StrongsDictionary::from_json_str(&raw)?;
+    let buf = dict.encode_binary();
     ensure_parent(out)?;
     fs::write(out, &buf).with_context(|| format!("writing {}", out.display()))?;
-    println!("strongs: {} entries, {:.2} MB → {}", map.len(), buf.len() as f64 / 1e6, out.display());
-    Ok(map.len())
-}
-
-fn push_str16(buf: &mut Vec<u8>, s: &str) {
-    let b = s.as_bytes();
-    assert!(b.len() <= u16::MAX as usize);
-    buf.extend_from_slice(&(b.len() as u16).to_le_bytes());
-    buf.extend_from_slice(b);
+    println!("strongs: {} entries, {:.2} MB → {}", dict.len(), buf.len() as f64 / 1e6, out.display());
+    Ok(dict.len())
 }
 
 fn cmd_verify(root: &Path, sample_terms: usize) -> Result<()> {
@@ -283,69 +342,81 @@ fn cmd_verify(root: &Path, sample_terms: usize) -> Result<()> {
     println!("bm25: totalDocs={ts_docs} avgDocLength={ts_avg:.4} terms={} sampled_df={checked} mismatches={mismatches}", ts_df.len());
     assert_eq!(mismatches, 0, "df mismatches found");
 
-    // -- Graph (TSK edges only) ----------------------------------------------
-    // TS graph-index.json merges TSK + topic + cluster edges then prunes to
-    // top-20 per node ACROSS kinds (Phase 2 scope). So:
-    // - pure-tsk nodes (TS list all tsk): exact set+weight equality, both directions.
-    // - mixed nodes: weights must agree on the intersection; membership may
-    //   differ due to cross-kind slot competition (resolved in Phase 2).
+    // -- Graph (FULL multi-source index) -------------------------------------
+    // The Rust builder now ports §1–§4 of scripts/build-graph-index.ts, so
+    // the export must equal TS `graph-index.json` adjacency EXACTLY:
+    // same node set, same neighbor order, same weights, same kinds.
     let ts_graph: serde_json::Value = serde_json::from_str(&fs::read_to_string(repo_path(
         root,
         "data/graph-index.json",
     ))?)?;
     let rs_adj: serde_json::Value = serde_json::from_str(&fs::read_to_string(repo_path(
         root,
-        "data/rust/tsk-adjacency.json",
+        "data/rust/graph-adjacency.json",
     ))?)?;
     let ts_adj = ts_graph["adjacency"].as_object().context("ts adjacency")?;
     let rs_map = rs_adj.as_object().context("rs adjacency")?;
-    let mut pure_nodes = 0;
-    let mut pure_mismatch = 0;
-    let mut mixed_nodes = 0;
-    let mut weight_disagreement = 0;
-    for (node, rs_list) in rs_map {
-        let ts_list = ts_adj.get(node).context(format!("node {node} missing in TS graph"))?;
-        let ts_arr = ts_list.as_array().context("ts neighbors array")?;
-        let rs_arr = rs_list.as_array().context("rs neighbors array")?;
-        let rs_by_id: std::collections::HashMap<&str, f64> = rs_arr
-            .iter()
-            .map(|n| (n["id"].as_str().unwrap_or(""), n["weight"].as_f64().unwrap_or(-1.0)))
-            .collect();
-        if ts_arr.iter().all(|n| n["kind"] == "tsk") {
-            pure_nodes += 1;
-            let ts_ids: Vec<(&str, f64)> = ts_arr
-                .iter()
-                .map(|n| (n["id"].as_str().unwrap_or(""), n["weight"].as_f64().unwrap_or(-1.0)))
-                .collect();
-            let rs_ids: Vec<(&str, f64)> = rs_arr
-                .iter()
-                .map(|n| (n["id"].as_str().unwrap_or(""), n["weight"].as_f64().unwrap_or(-1.0)))
-                .collect();
-            if ts_ids != rs_ids {
-                pure_mismatch += 1;
-                if pure_mismatch <= 5 {
-                    println!("  pure-node mismatch {node}: ts={} rs={}", ts_ids.len(), rs_ids.len());
+    assert_eq!(
+        ts_adj.len(),
+        rs_map.len(),
+        "adjacency node count mismatch: ts={} rs={}",
+        ts_adj.len(),
+        rs_map.len()
+    );
+    let mut node_mismatch = 0;
+    let mut order_mismatch = 0;
+    for (node, ts_list) in ts_adj {
+        match rs_map.get(node) {
+            Some(rs_list) if rs_list == ts_list => {}
+            Some(rs_list) => {
+                order_mismatch += 1;
+                if order_mismatch <= 5 {
+                    println!("  neighbor mismatch {node}: ts={ts_list} rs={rs_list}");
                 }
             }
-        } else {
-            mixed_nodes += 1;
-            for n in ts_arr.iter().filter(|n| n["kind"] == "tsk") {
-                let id = n["id"].as_str().unwrap_or("");
-                let ts_w = n["weight"].as_f64().unwrap_or(-1.0);
-                if let Some(rs_w) = rs_by_id.get(id) {
-                    if (ts_w - rs_w).abs() >= 1e-9 {
-                        weight_disagreement += 1;
-                        if weight_disagreement <= 5 {
-                            println!("  weight disagreement {node} → {id}: ts={ts_w} rs={rs_w}");
-                        }
-                    }
+            None => {
+                node_mismatch += 1;
+                if node_mismatch <= 5 {
+                    println!("  node {node} missing in Rust export");
                 }
             }
         }
     }
-    println!("graph: pure_tsk_nodes={pure_nodes} pure_mismatches={pure_mismatch} mixed_nodes={mixed_nodes} weight_disagreements={weight_disagreement}");
-    assert_eq!(pure_mismatch, 0, "pure-TSK node mismatches found");
-    assert_eq!(weight_disagreement, 0, "weight disagreements found");
+    // Node-kind agreement on the shared node table.
+    let ts_nodes = ts_graph["nodes"].as_array().context("ts nodes")?;
+    let rs_graph_bytes = fs::read(repo_path(root, "data/rust/tsk-graph.bin"))?;
+    let (rs_graph, _) = decode_graph_bytes(&rs_graph_bytes)?;
+    let rs_kinds: std::collections::HashMap<&str, &str> = rs_graph
+        .nodes
+        .iter()
+        .map(|n| {
+            (
+                n.id.as_str(),
+                match n.kind {
+                    biblelm_graph::NodeKind::Verse => "verse",
+                    biblelm_graph::NodeKind::Topic => "topic",
+                },
+            )
+        })
+        .collect();
+    let mut kind_disagreement = 0;
+    for n in ts_nodes {
+        let id = n["id"].as_str().unwrap_or("");
+        let ts_kind = n["kind"].as_str().unwrap_or("");
+        match rs_kinds.get(id) {
+            Some(rs_kind) if *rs_kind == ts_kind => {}
+            other => {
+                kind_disagreement += 1;
+                if kind_disagreement <= 5 {
+                    println!("  kind disagreement {id}: ts={ts_kind} rs={other:?}");
+                }
+            }
+        }
+    }
+    println!("graph: nodes={} neighbor_mismatches={order_mismatch} missing_nodes={node_mismatch} kind_disagreements={kind_disagreement}", ts_adj.len());
+    assert_eq!(node_mismatch, 0, "nodes missing in Rust export");
+    assert_eq!(order_mismatch, 0, "neighbor list mismatches found");
+    assert_eq!(kind_disagreement, 0, "node kind disagreements found");
     println!("verify: OK");
     Ok(())
 }
@@ -357,7 +428,7 @@ fn main() -> Result<()> {
             build_bm25(&a.index, &a.out, &a.export_json)?;
         }
         Command::Graph(a) => {
-            build_graph(&a.xrefs, &a.out, &a.export_json)?;
+            build_graph(&a.xrefs, &a.clusters, &a.verse_topics, &a.topic_verse, &a.out, &a.export_json)?;
         }
         Command::Strongs(a) => {
             build_strongs(&a.dict, &a.out)?;
@@ -370,8 +441,11 @@ fn main() -> Result<()> {
             )?;
             build_graph(
                 &repo_path(&a.root, "datasets/cross_references.txt"),
+                &repo_path(&a.root, "data/tsk-clusters.json"),
+                &repo_path(&a.root, "data/verse-topics.json"),
+                &repo_path(&a.root, "data/topic-verse-index.json"),
                 &repo_path(&a.root, "data/rust/tsk-graph.bin"),
-                &repo_path(&a.root, "data/rust/tsk-adjacency.json"),
+                &repo_path(&a.root, "data/rust/graph-adjacency.json"),
             )?;
             build_strongs(
                 &repo_path(&a.root, "data/strongs-dict.json"),
@@ -436,7 +510,7 @@ fn cmd_query(a: &QueryArgs) -> Result<()> {
 
     if graph_path.exists() {
         let graph_bytes = fs::read(&graph_path)?;
-        if let Ok(graph) = TskGraph::decode(&graph_bytes) {
+        if let Ok((graph, _)) = decode_graph_bytes(&graph_bytes) {
             let seed_ids: Vec<&str> = bm25_hits
                 .iter()
                 .map(|h| bm25_index.doc_ids[h.doc as usize].as_str())

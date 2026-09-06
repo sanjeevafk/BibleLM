@@ -257,18 +257,21 @@ impl Bm25Index {
             .map(|i| self.terms[i].postings.len())
     }
 
-    // -- Binary format (v1, little-endian) ---------------------------------
+    // -- Binary format (v2, little-endian) ---------------------------------
     //
-    // magic "BLM1" | u32 version=1 | u64 total_docs | f64 avg_doc_length
+    // magic "BLM1" | u32 version=2 | u64 total_docs | f64 avg_doc_length
     // u64 ndocs | docs: u16 len + bytes (utf-8)
     // u64 ndoc_lengths (= ndocs) | u32 each
-    // u64 nterms | per term: u16 len + bytes, u64 df, u64 npostings,
+    // u64 nterms | per term: u16 len + bytes, u64 npostings,
     //   per posting: u32 doc_id, u32 tf
+    //
+    // (v1 wrote the posting count twice per term; v2 stores it once. v1
+    // binaries are rejected — rebuild with `biblelm-build bm25`.)
 
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(b"BLM1");
-        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&2u32.to_le_bytes());
         buf.extend_from_slice(&self.total_docs.to_le_bytes());
         buf.extend_from_slice(&self.avg_doc_length.to_le_bytes());
         buf.extend_from_slice(&(self.doc_ids.len() as u64).to_le_bytes());
@@ -281,7 +284,6 @@ impl Bm25Index {
         buf.extend_from_slice(&(self.terms.len() as u64).to_le_bytes());
         for term in &self.terms {
             push_str(&mut buf, &term.term);
-            buf.extend_from_slice(&(term.postings.len() as u64).to_le_bytes());
             buf.extend_from_slice(&(term.postings.len() as u64).to_le_bytes());
             for (doc, tf) in &term.postings {
                 buf.extend_from_slice(&doc.to_le_bytes());
@@ -297,8 +299,8 @@ impl Bm25Index {
             anyhow::bail!("bad BM25 magic");
         }
         let version = r.u32()?;
-        if version != 1 {
-            anyhow::bail!("unsupported BM25 version {version}");
+        if version != 2 {
+            anyhow::bail!("unsupported BM25 version {version} (rebuild with `biblelm-build bm25`)");
         }
         let total_docs = r.u64()?;
         let avg_doc_length = r.f64()?;
@@ -315,13 +317,11 @@ impl Bm25Index {
         let mut terms = Vec::with_capacity(nterms);
         for _ in 0..nterms {
             let term = r.str()?.to_string();
-            let df = r.u64()? as usize;
             let npostings = r.u64()? as usize;
             let mut postings = Vec::with_capacity(npostings);
             for _ in 0..npostings {
                 postings.push((r.u32()?, r.u32()?));
             }
-            debug_assert_eq!(df, npostings);
             terms.push(TermEntry { term, postings });
         }
         if !r.eof() {

@@ -83,10 +83,36 @@ fn parse_space_form(s: &str) -> Option<String> {
     Some(VerseRef { book, chapter: ch, verse: v }.id())
 }
 
-/// Mirrors TS vote→weight: `min(0.95, max(0.2, votes / 150))`.
-/// NaN votes → default 50 (TS `Number.isNaN(votes) ? 50 : votes`).
+/// Mirrors TS `Number.parseInt(s, 10)`: skip leading whitespace, optional
+/// sign, then take the longest ASCII-digit prefix. Returns `None` when
+/// there are no digits (TS yields `NaN`, which callers map to a default).
+/// NOTE: a plain `str::parse::<f64>()` is NOT equivalent (`"3.9"` → TS
+/// gives 3, float parse gives 3.9; `"60abc"` → TS gives 60, float parse
+/// fails).
+pub fn ts_parse_int(s: &str) -> Option<i64> {
+    let t = s.trim_start();
+    let (neg, rest) = match t.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, t.strip_prefix('+').unwrap_or(t)),
+    };
+    let digits: Vec<u8> = rest.bytes().take_while(u8::is_ascii_digit).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let mut v: i64 = 0;
+    for d in digits {
+        v = v
+            .saturating_mul(10)
+            .saturating_add((d - b'0') as i64);
+    }
+    Some(if neg { -v } else { v })
+}
+
+/// Mirrors TS vote→weight: `min(0.95, max(0.2, (NaN ? 50 : parseInt(votes)) / 150))`.
+/// Missing/blank/malformed vote fields default to 50, exactly like TS
+/// (`parts.length >= 3 ? parseInt(parts[2], 10) : 50` + the `NaN ? 50` guard).
 pub fn vote_weight(votes_raw: &str) -> f64 {
-    let votes: f64 = votes_raw.trim().parse().unwrap_or(50.0);
+    let votes = ts_parse_int(votes_raw).map(|v| v as f64).unwrap_or(50.0);
     (votes / 150.0).clamp(0.2, 0.95)
 }
 
@@ -129,14 +155,18 @@ impl TskGraph {
             }
         }
         let mut adjacency = BTreeMap::new();
-        for (node, mut neighbors) in adj {
-            // Stable sort, weight desc only — ties keep file order like TS.
-            neighbors.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            let list: Vec<(String, f64)> = neighbors
+        for (node, neighbors) in adj {
+            // Round BEFORE sorting, exactly like TS (`neighborsList` maps
+            // `Math.round(w * 1000) / 1000` first, then stable-sorts desc).
+            // Sorting raw weights first would order pairs that round equal
+            // by their unrounded values instead of keeping file order.
+            let mut rounded: Vec<(String, f64)> = neighbors
                 .into_iter()
-                .take(MAX_NEIGHBORS)
                 .map(|(id, w)| (id.to_string(), round3(w)))
                 .collect();
+            // Stable sort, weight desc only — ties keep file order like TS.
+            rounded.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            let list: Vec<(String, f64)> = rounded.into_iter().take(MAX_NEIGHBORS).collect();
             adjacency.insert(node.to_string(), list);
         }
         TskGraph { adjacency, raw_edges }
@@ -323,7 +353,7 @@ pub struct GraphNode {
     pub kind: NodeKind,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GraphEdge {
     pub id: String,
     pub weight: f64,
@@ -585,7 +615,10 @@ impl GraphIndex {
             sb.total_cmp(&sa)
         });
 
-        // Calibrate raw graph scores: clamp(round4(raw_score * 0.65), 0.40, 0.85)
+        // Calibrate raw graph scores: clamp(round4(raw_score * 0.65), 0.40, 0.85).
+        // Rounding MUST be integer round-half-up (`(x*10000).round()/10000`),
+        // matching TS `Math.round(x*10000)/10000` op-for-op: `toFixed(4)`
+        // disagrees by 1ulp on halfway cases, so it is banned on both sides.
         let candidates = expanded_ids
             .iter()
             .map(|id| {
@@ -612,130 +645,6 @@ impl GraphIndex {
                 graph_contribution_top_k: expanded_count,
             },
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// CSR (Compressed Sparse Row) Graph Representation
-// ---------------------------------------------------------------------------
-
-/// Compact linear memory graph for instant slice-based traversal.
-#[derive(Debug, Clone)]
-pub struct CsrGraph {
-    pub node_names: Vec<String>,
-    pub node_kinds: Vec<NodeKind>,
-    pub offsets: Vec<u32>,
-    pub target_indices: Vec<u32>,
-    pub weights: Vec<f64>,
-    pub edge_kinds: Vec<String>,
-    pub name_to_index: HashMap<String, u32>,
-}
-
-impl CsrGraph {
-    pub fn from_graph_index(index: &GraphIndex) -> Self {
-        let mut node_names = Vec::with_capacity(index.nodes.len());
-        let mut node_kinds = Vec::with_capacity(index.nodes.len());
-        let mut name_to_index = HashMap::with_capacity(index.nodes.len());
-
-        for (i, node) in index.nodes.iter().enumerate() {
-            node_names.push(node.id.clone());
-            node_kinds.push(node.kind);
-            name_to_index.insert(node.id.clone(), i as u32);
-        }
-
-        // Add any missing nodes present in adjacency
-        for (src, edges) in &index.adjacency {
-            if !name_to_index.contains_key(src) {
-                let idx = node_names.len() as u32;
-                node_names.push(src.clone());
-                node_kinds.push(NodeKind::Verse);
-                name_to_index.insert(src.clone(), idx);
-            }
-            for edge in edges {
-                if !name_to_index.contains_key(&edge.id) {
-                    let idx = node_names.len() as u32;
-                    node_names.push(edge.id.clone());
-                    node_kinds.push(if edge.kind == "topic" { NodeKind::Topic } else { NodeKind::Verse });
-                    name_to_index.insert(edge.id.clone(), idx);
-                }
-            }
-        }
-
-        let n = node_names.len();
-        let mut offsets = Vec::with_capacity(n + 1);
-        let mut target_indices = Vec::new();
-        let mut weights = Vec::new();
-        let mut edge_kinds = Vec::new();
-
-        for name in &node_names {
-            offsets.push(target_indices.len() as u32);
-            if let Some(neighbors) = index.adjacency.get(name) {
-                for edge in neighbors {
-                    if let Some(&t_idx) = name_to_index.get(&edge.id) {
-                        target_indices.push(t_idx);
-                        weights.push(edge.weight);
-                        edge_kinds.push(edge.kind.clone());
-                    }
-                }
-            }
-        }
-        offsets.push(target_indices.len() as u32);
-
-        CsrGraph {
-            node_names,
-            node_kinds,
-            offsets,
-            target_indices,
-            weights,
-            edge_kinds,
-            name_to_index,
-        }
-    }
-
-    pub fn to_graph_index(&self) -> GraphIndex {
-        let nodes: Vec<GraphNode> = self
-            .node_names
-            .iter()
-            .zip(&self.node_kinds)
-            .map(|(name, &kind)| GraphNode {
-                id: name.clone(),
-                kind,
-            })
-            .collect();
-
-        let mut adjacency = HashMap::new();
-        for (i, name) in self.node_names.iter().enumerate() {
-            let start = self.offsets[i] as usize;
-            let end = self.offsets[i + 1] as usize;
-            let mut edges = Vec::with_capacity(end - start);
-            for e in start..end {
-                let target_idx = self.target_indices[e] as usize;
-                edges.push(GraphEdge {
-                    id: self.node_names[target_idx].clone(),
-                    weight: self.weights[e],
-                    kind: self.edge_kinds[e].clone(),
-                });
-            }
-            adjacency.insert(name.clone(), edges);
-        }
-
-        GraphIndex {
-            version: "1.0-csr".to_string(),
-            nodes,
-            adjacency,
-            metadata: None,
-        }
-    }
-
-    pub fn graph_rag_expand(
-        &self,
-        seed_verse_ids: &[&str],
-        query_topic_ids: &std::collections::HashSet<&str>,
-        opts: &GraphRagOptions,
-    ) -> GraphRagResult {
-        // Traversal is equivalent to GraphIndex traversal
-        let index = self.to_graph_index();
-        index.graph_rag_expand(seed_verse_ids, query_topic_ids, opts)
     }
 }
 
@@ -766,6 +675,417 @@ pub fn parse_xref_line(line: &str) -> Option<(String, String, f64)> {
     Some((from_id, to_id, vote_weight(votes_raw)))
 }
 
+// ---------------------------------------------------------------------------
+// Full multi-source graph builder (§1–§4 of scripts/build-graph-index.ts)
+// ---------------------------------------------------------------------------
+//
+// Builds the complete `GraphIndex` from all four TS inputs, in TS order:
+//   §1 `datasets/cross_references.txt` (TSK verse↔verse edges)
+//   §2 `data/tsk-clusters.json` (hub-and-spoke: `cluster:<id>` topic-kind
+//      hubs ↔ member verses, weight `min(1, 1/sqrt(n))`, kind `cluster`)
+//   §3 `data/verse-topics.json` (verse ↔ topic edges, weight = confidence,
+//      kind `topic`)
+//   §4 `data/topic-verse-index.json` (topic ↔ verse edges weight 0.5, kind
+//      `topic`, added only when no topic→verse edge exists yet)
+//
+// Parity notes (all mirrored exactly):
+// - `nodes` is first-wins insertion-ordered (TS `Map`); cluster hubs are
+//   kind `topic`, exactly like TS `addNode(hubId, 'topic')`.
+// - `addEdge` skips self-loops and keeps the max weight, overwriting `kind`
+//   only when the new weight is strictly greater.
+// - §5 pruning rounds each weight to 3dp FIRST, then stable-sorts desc and
+//   keeps the top 20 — across all kinds, so topic/cluster edges compete
+//   with TSK edges for slots (this is why the old TSK-only binary diverged
+//   on mixed nodes).
+// - Topic/cluster IDs are used verbatim (no normalization); verse IDs go
+//   through `normalize_verse_id`. §4 topic iteration follows file order,
+//   so `serde_json`'s `preserve_order` feature (workspace-wide) is required.
+
+/// One `tsk-clusters.json` item.
+#[derive(Debug, serde::Deserialize)]
+pub struct ClusterItem {
+    #[serde(rename = "clusterId", default)]
+    pub cluster_id: String,
+    #[serde(rename = "memberVerseIds", default)]
+    pub member_verse_ids: Vec<String>,
+}
+
+/// One `verse-topics.json` item.
+#[derive(Debug, serde::Deserialize)]
+pub struct VerseTopicItem {
+    #[serde(rename = "verseId", default)]
+    pub verse_id: String,
+    #[serde(default)]
+    pub topics: Vec<TopicAssignment>,
+}
+
+/// One topic assignment: explicit `null`/missing confidence means 1.0,
+/// mirroring TS `t.confidence ?? 1.0`.
+#[derive(Debug, serde::Deserialize)]
+pub struct TopicAssignment {
+    pub id: String,
+    pub confidence: Option<f64>,
+}
+
+/// Ordered accumulator replicating TS `nodes` + `adj` maps.
+#[derive(Debug, Default)]
+pub struct FullGraphBuilder {
+    node_order: Vec<String>,
+    node_kinds: HashMap<String, NodeKind>,
+    /// node → neighbor ids in first-seen order (drives stable tie order).
+    neigh_order: HashMap<String, Vec<String>>,
+    /// (node, neighbor) → (weight, kind).
+    edge_data: HashMap<(String, String), (f64, String)>,
+    pub raw_tsk_edges: u64,
+}
+
+impl FullGraphBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn add_node(&mut self, id: &str, kind: NodeKind) {
+        if !self.node_kinds.contains_key(id) {
+            self.node_kinds.insert(id.to_string(), kind);
+            self.node_order.push(id.to_string());
+        }
+    }
+
+    /// Mirrors TS `addEdge` (skip self-loops, keep max, kind follows max).
+    fn add_edge(&mut self, from: &str, to: &str, weight: f64, kind: &str) {
+        if from == to {
+            return;
+        }
+        let key = (from.to_string(), to.to_string());
+        match self.edge_data.get(&key) {
+            Some((existing, _)) if *existing >= weight => {}
+            _ => {
+                self.edge_data
+                    .insert(key, (weight, kind.to_string()));
+                let list = self.neigh_order.entry(from.to_string()).or_default();
+                if !list.iter().any(|id| id == to) {
+                    list.push(to.to_string());
+                }
+            }
+        }
+    }
+
+    /// §1: TSK edges (already normalized + weighted by the caller).
+    pub fn add_tsk_edges(&mut self, edges: &[(String, String, f64)]) {
+        for (from, to, weight) in edges {
+            self.add_node(from, NodeKind::Verse);
+            self.add_node(to, NodeKind::Verse);
+            self.add_edge(from, to, *weight, "tsk");
+            self.add_edge(to, from, *weight, "tsk");
+            if from != to {
+                self.raw_tsk_edges += 1;
+            }
+        }
+    }
+
+    /// §2: one cluster item (hub-and-spoke). Weight uses the NORMALIZED
+    /// member count, mirroring TS (`verses` after filtering).
+    pub fn add_cluster(&mut self, item: &ClusterItem) {
+        if item.cluster_id.is_empty() {
+            return;
+        }
+        let verses: Vec<String> = item
+            .member_verse_ids
+            .iter()
+            .filter_map(|raw| normalize_verse_id(raw))
+            .collect();
+        if verses.is_empty() {
+            return;
+        }
+        let hub = format!("cluster:{}", item.cluster_id);
+        self.add_node(&hub, NodeKind::Topic);
+        let weight = (1.0 / (verses.len() as f64).sqrt()).min(1.0);
+        for v in &verses {
+            self.add_node(v, NodeKind::Verse);
+            self.add_edge(v, &hub, weight, "cluster");
+            self.add_edge(&hub, v, weight, "cluster");
+        }
+    }
+
+    /// §3: one verse-topics item.
+    pub fn add_verse_topics(&mut self, item: &VerseTopicItem) {
+        let verse_id = match normalize_verse_id(&item.verse_id) {
+            Some(id) => id,
+            None => return,
+        };
+        self.add_node(&verse_id, NodeKind::Verse);
+        for t in &item.topics {
+            if t.id.is_empty() {
+                continue;
+            }
+            let weight = t.confidence.unwrap_or(1.0);
+            self.add_node(&t.id, NodeKind::Topic);
+            self.add_edge(&verse_id, &t.id, weight, "topic");
+            self.add_edge(&t.id, &verse_id, weight, "topic");
+        }
+    }
+
+    /// §4: one topic-verse-index entry. Mirrors the TS guard exactly: the
+    /// 0.5 edge is added only when no topic→verse edge exists yet (the
+    /// reverse direction is NOT consulted).
+    pub fn add_topic_verses(&mut self, topic_id: &str, verses: &[String]) {
+        if topic_id.is_empty() {
+            return;
+        }
+        self.add_node(topic_id, NodeKind::Topic);
+        for v in verses {
+            let verse_id = match normalize_verse_id(v) {
+                Some(id) => id,
+                None => continue,
+            };
+            self.add_node(&verse_id, NodeKind::Verse);
+            let exists = self
+                .edge_data
+                .contains_key(&(topic_id.to_string(), verse_id.clone()));
+            if !exists {
+                self.add_edge(topic_id, &verse_id, 0.5, "topic");
+                self.add_edge(&verse_id, topic_id, 0.5, "topic");
+            }
+        }
+    }
+
+    /// §5: round → stable-sort desc → top-20 per node, then materialize.
+    pub fn build(self) -> GraphIndex {
+        let mut adjacency: HashMap<String, Vec<GraphEdge>> = HashMap::new();
+        // Iterate insertion-ordered nodes for deterministic output.
+        let mut ordered_nodes: Vec<&String> = self.neigh_order.keys().collect();
+        ordered_nodes.sort_by_key(|id| {
+            self.node_order
+                .iter()
+                .position(|n| n == *id)
+                .unwrap_or(usize::MAX)
+        });
+        for node in ordered_nodes {
+            let order = &self.neigh_order[node];
+            let mut neighbors: Vec<GraphEdge> = order
+                .iter()
+                .map(|id| {
+                    let (w, kind) = &self.edge_data[&(node.clone(), id.clone())];
+                    GraphEdge {
+                        id: id.clone(),
+                        weight: round3(*w),
+                        kind: kind.clone(),
+                    }
+                })
+                .collect();
+            neighbors.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+            neighbors.truncate(MAX_NEIGHBORS);
+            adjacency.insert(node.clone(), neighbors);
+        }
+        let nodes: Vec<GraphNode> = self
+            .node_order
+            .into_iter()
+            .map(|id| GraphNode {
+                kind: self.node_kinds[&id],
+                id,
+            })
+            .collect();
+        GraphIndex {
+            version: "2.0".to_string(),
+            nodes,
+            adjacency,
+            metadata: None,
+        }
+    }
+}
+
+/// Bounds-checked slice reader shared by the BLMG v2 decoder.
+fn take_bytes<'a>(bytes: &'a [u8], off: &mut usize, n: usize) -> anyhow::Result<&'a [u8]> {
+    let end = off
+        .checked_add(n)
+        .ok_or_else(|| anyhow::anyhow!("BLMG v2 truncated"))?;
+    if end > bytes.len() {
+        anyhow::bail!("BLMG v2 truncated");
+    }
+    let s = &bytes[*off..end];
+    *off = end;
+    Ok(s)
+}
+
+fn encode_edge_kind(kind: &str) -> anyhow::Result<u8> {
+    match kind {
+        "tsk" => Ok(0),
+        "topic" => Ok(1),
+        "cluster" => Ok(2),
+        other => anyhow::bail!("unsupported edge kind in BLMG v2: {other}"),
+    }
+}
+
+fn decode_edge_kind(code: u8) -> anyhow::Result<&'static str> {
+    match code {
+        0 => Ok("tsk"),
+        1 => Ok("topic"),
+        2 => Ok("cluster"),
+        other => anyhow::bail!("unsupported edge kind code in BLMG v2: {other}"),
+    }
+}
+
+impl GraphIndex {
+    /// Adjacency JSON shaped like TS `graph-index.json` (`{id: [{id,
+    /// weight, kind}]}`), keys sorted for deterministic output.
+    pub fn export_full_adjacency_json(&self) -> serde_json::Value {
+        let mut ids: Vec<&String> = self.adjacency.keys().collect();
+        ids.sort();
+        let mut map = serde_json::Map::new();
+        for id in ids {
+            let list: Vec<serde_json::Value> = self.adjacency[id]
+                .iter()
+                .map(|e| {
+                    serde_json::json!({"id": e.id, "weight": e.weight, "kind": e.kind})
+                })
+                .collect();
+            map.insert(id.clone(), serde_json::Value::Array(list));
+        }
+        serde_json::Value::Object(map)
+    }
+
+    // -- BLMG v2 binary format (little-endian) -------------------------------
+    //
+    // magic "BLMG" | u32 version=2 | u64 raw_tsk_edges
+    // u64 nnodes | per node (sorted by id): u16 len + id bytes, u8 node kind
+    //   (0 = verse, 1 = topic)
+    // then per node in the same order: u64 nneighbors |
+    //   per neighbor: u32 node_idx, f64 weight, u8 edge kind
+    //   (0 = tsk, 1 = topic, 2 = cluster)
+
+    pub fn encode_blmg_v2(&self, raw_tsk_edges: u64) -> anyhow::Result<Vec<u8>> {
+        let mut node_ids: Vec<&String> =
+            self.nodes.iter().map(|n| &n.id).collect();
+        node_ids.sort();
+        node_ids.dedup();
+        let index: HashMap<&str, u32> = node_ids
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.as_str(), i as u32))
+            .collect();
+        let kind_of: HashMap<&str, NodeKind> = self
+            .nodes
+            .iter()
+            .map(|n| (n.id.as_str(), n.kind))
+            .collect();
+
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"BLMG");
+        buf.extend_from_slice(&2u32.to_le_bytes());
+        buf.extend_from_slice(&raw_tsk_edges.to_le_bytes());
+        buf.extend_from_slice(&(node_ids.len() as u64).to_le_bytes());
+        for id in &node_ids {
+            push_str(&mut buf, id);
+            let code: u8 = match kind_of.get(id.as_str()) {
+                Some(NodeKind::Topic) => 1,
+                _ => 0,
+            };
+            buf.push(code);
+        }
+        for id in &node_ids {
+            let neighbors = self.adjacency.get(*id);
+            // Neighbors referencing unknown nodes indicate a corrupt index.
+            if let Some(list) = neighbors {
+                for e in list {
+                    if !index.contains_key(e.id.as_str()) {
+                        anyhow::bail!("neighbor {} of {} missing from node table", e.id, id);
+                    }
+                }
+            }
+            let list = neighbors.map(Vec::as_slice).unwrap_or(&[]);
+            buf.extend_from_slice(&(list.len() as u64).to_le_bytes());
+            for e in list {
+                buf.extend_from_slice(&index[e.id.as_str()].to_le_bytes());
+                buf.extend_from_slice(&e.weight.to_le_bytes());
+                buf.push(encode_edge_kind(&e.kind)?);
+            }
+        }
+        Ok(buf)
+    }
+
+    pub fn decode_blmg_v2(bytes: &[u8]) -> anyhow::Result<(Self, u64)> {
+        let mut off = 0usize;
+        if take_bytes(bytes, &mut off, 4)? != b"BLMG" {
+            anyhow::bail!("invalid magic: expected BLMG");
+        }
+        let version = u32::from_le_bytes(take_bytes(bytes, &mut off, 4)?.try_into().unwrap());
+        if version != 2 {
+            anyhow::bail!("not a BLMG v2 payload (version {version})");
+        }
+        let raw_tsk_edges = u64::from_le_bytes(take_bytes(bytes, &mut off, 8)?.try_into().unwrap());
+        let nnodes = u64::from_le_bytes(take_bytes(bytes, &mut off, 8)?.try_into().unwrap()) as usize;
+
+        let mut node_ids = Vec::with_capacity(nnodes);
+        let mut node_kinds = Vec::with_capacity(nnodes);
+        for _ in 0..nnodes {
+            let slen = u16::from_le_bytes(take_bytes(bytes, &mut off, 2)?.try_into().unwrap()) as usize;
+            let name = std::str::from_utf8(take_bytes(bytes, &mut off, slen)?)
+                .map_err(|e| anyhow::anyhow!("invalid utf8 in node id: {e}"))?
+                .to_string();
+            let kind_code = take_bytes(bytes, &mut off, 1)?[0];
+            let kind = match kind_code {
+                0 => NodeKind::Verse,
+                1 => NodeKind::Topic,
+                other => anyhow::bail!("invalid node kind code: {other}"),
+            };
+            node_ids.push(name);
+            node_kinds.push(kind);
+        }
+
+        let mut adjacency = HashMap::new();
+        for node in &node_ids {
+            let n = u64::from_le_bytes(take_bytes(bytes, &mut off, 8)?.try_into().unwrap()) as usize;
+            let mut edges = Vec::with_capacity(n);
+            for _ in 0..n {
+                let idx = u32::from_le_bytes(take_bytes(bytes, &mut off, 4)?.try_into().unwrap()) as usize;
+                let weight = f64::from_le_bytes(take_bytes(bytes, &mut off, 8)?.try_into().unwrap());
+                let kind = decode_edge_kind(take_bytes(bytes, &mut off, 1)?[0])?.to_string();
+                if idx >= node_ids.len() {
+                    anyhow::bail!("invalid node index {idx} >= {}", node_ids.len());
+                }
+                edges.push(GraphEdge {
+                    id: node_ids[idx].clone(),
+                    weight,
+                    kind,
+                });
+            }
+            adjacency.insert(node.clone(), edges);
+        }
+        if off != bytes.len() {
+            anyhow::bail!("trailing bytes in BLMG v2 index");
+        }
+
+        let nodes: Vec<GraphNode> = node_ids
+            .into_iter()
+            .zip(node_kinds)
+            .map(|(id, kind)| GraphNode { id, kind })
+            .collect();
+        Ok((
+            GraphIndex {
+                version: "2.0".to_string(),
+                nodes,
+                adjacency,
+                metadata: None,
+            },
+            raw_tsk_edges,
+        ))
+    }
+}
+
+/// Decodes any supported graph binary: BLMG v2 (full multi-source graph)
+/// or v1 (legacy TSK-only, upgraded in memory with `kind = "tsk"`).
+pub fn decode_graph_bytes(bytes: &[u8]) -> anyhow::Result<(GraphIndex, u64)> {
+    if bytes.len() >= 8 && &bytes[0..4] == b"BLMG" {
+        let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        if version == 2 {
+            return GraphIndex::decode_blmg_v2(bytes);
+        }
+    }
+    let tsk = TskGraph::decode(bytes)?;
+    let raw = tsk.raw_edges;
+    Ok((tsk.to_graph_index(), raw))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -791,6 +1111,22 @@ mod tests {
         assert_eq!(vote_weight("-87"), 0.2);
         assert!((vote_weight("abc") - 50.0 / 150.0).abs() < 1e-12);
         assert_eq!(round3(0.4066666667), 0.407);
+    }
+
+    #[test]
+    fn ts_parse_int_matches_js_parseint() {
+        assert_eq!(ts_parse_int("60"), Some(60));
+        assert_eq!(ts_parse_int("  60xyz"), Some(60));
+        assert_eq!(ts_parse_int("3.9"), Some(3));
+        assert_eq!(ts_parse_int("-87"), Some(-87));
+        assert_eq!(ts_parse_int("+12"), Some(12));
+        assert_eq!(ts_parse_int("0x10"), Some(0));
+        assert_eq!(ts_parse_int(""), None);
+        assert_eq!(ts_parse_int("   "), None);
+        assert_eq!(ts_parse_int("abc"), None);
+        // Float-looking vote strings follow parseInt, not float parse.
+        assert!((vote_weight("3.9") - 0.2).abs() < 1e-12); // 3/150 clamps to floor
+        assert!((vote_weight("60abc") - 0.4).abs() < 1e-12);
     }
 
     #[test]
@@ -964,24 +1300,117 @@ mod tests {
         assert!(with_topic.diagnostics.expanded_count >= without_topic.diagnostics.expanded_count);
     }
 
+    fn full_graph_fixture() -> GraphIndex {
+        let mut b = FullGraphBuilder::new();
+        // §1 TSK
+        b.add_tsk_edges(&[
+            ("GEN 1:1".to_string(), "PSA 104:24".to_string(), 0.8),
+            ("GEN 1:1".to_string(), "JHN 1:1".to_string(), 0.6),
+        ]);
+        // §2 cluster: hub is topic-kind, weight = 1/sqrt(2).
+        b.add_cluster(&ClusterItem {
+            cluster_id: "c1".to_string(),
+            member_verse_ids: vec!["Gen.1.1".to_string(), "Ps.104.24".to_string()],
+        });
+        // §3 verse-topics (explicit null confidence → 1.0).
+        let vt: VerseTopicItem = serde_json::from_str(
+            r#"{"verseId": "GEN 1:1", "topics": [{"id": "creation", "confidence": 0.9}, {"id": "origins", "confidence": null}]}"#,
+        )
+        .unwrap();
+        b.add_verse_topics(&vt);
+        // §4 topic-verse-index: 0.5 edges, must NOT overwrite the 0.9 above.
+        b.add_topic_verses("creation", &["GEN 1:1".to_string(), "GEN 1:2".to_string()]);
+        b.build()
+    }
+
     #[test]
-    fn csr_graph_matches_graph_index_expansion() {
-        let index = fixture_graph_index();
-        let csr = CsrGraph::from_graph_index(&index);
-        let mut topics = std::collections::HashSet::new();
-        topics.insert("creation");
+    fn full_builder_matches_ts_semantics() {
+        let g = full_graph_fixture();
 
-        let opts = GraphRagOptions {
-            max_depth: 2,
-            max_expansions: 30,
-            max_neighbors_per_seed: 10,
-            edge_min_weight: 0.01,
-        };
+        // Hub node exists, kind topic (TS addNode(hubId, 'topic')).
+        let hub = g.nodes.iter().find(|n| n.id == "cluster:c1").unwrap();
+        assert_eq!(hub.kind, NodeKind::Topic);
 
-        let res_index = index.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
-        let res_csr = csr.graph_rag_expand(&["GEN 1:1"], &topics, &opts);
+        // Cluster weight = min(1, 1/sqrt(2)) rounded to 3dp.
+        let gen1 = &g.adjacency["GEN 1:1"];
+        let hub_edge = gen1.iter().find(|e| e.id == "cluster:c1").unwrap();
+        assert_eq!(hub_edge.kind, "cluster");
+        assert!((hub_edge.weight - 0.707).abs() < 1e-12);
 
-        assert_eq!(res_index.expanded_ids, res_csr.expanded_ids);
-        assert_eq!(res_index.candidates, res_csr.candidates);
+        // §3 confidence preserved; §4 guard did not overwrite 0.9 with 0.5.
+        let creation_edge = gen1.iter().find(|e| e.id == "creation").unwrap();
+        assert_eq!(creation_edge.kind, "topic");
+        assert!((creation_edge.weight - 0.9).abs() < 1e-12);
+
+        // Null confidence → 1.0.
+        let origins_edge = gen1.iter().find(|e| e.id == "origins").unwrap();
+        assert!((origins_edge.weight - 1.0).abs() < 1e-12);
+
+        // §4 added the genuinely-new verse, both directions.
+        assert!(g.adjacency["creation"].iter().any(|e| e.id == "GEN 1:2"));
+        assert!(g.adjacency["GEN 1:2"].iter().any(|e| e.id == "creation"));
+
+        // Neighbor order: weight desc; equal weights keep first-seen order.
+        let ids: Vec<&str> = gen1.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids[0], "origins"); // 1.0
+        assert_eq!(ids[1], "creation"); // 0.9
+        // 0.8 TSK PSA 104:24 before 0.707 cluster hub before 0.6 JHN 1:1.
+        assert_eq!(&ids[2..], &["PSA 104:24", "cluster:c1", "JHN 1:1"]);
+    }
+
+    #[test]
+    fn full_builder_prunes_across_kinds_top20() {
+        let mut b = FullGraphBuilder::new();
+        // 25 topic edges at ascending weights + 1 strong TSK edge.
+        for i in 0..25 {
+            b.add_verse_topics(&VerseTopicItem {
+                verse_id: "GEN 1:1".to_string(),
+                topics: vec![TopicAssignment {
+                    id: format!("topic-{i:02}"),
+                    confidence: Some(0.30 + i as f64 * 0.01),
+                }],
+            });
+        }
+        b.add_tsk_edges(&[("GEN 1:1".to_string(), "PSA 104:24".to_string(), 0.95)]);
+        let g = b.build();
+        let list = &g.adjacency["GEN 1:1"];
+        assert_eq!(list.len(), 20);
+        assert_eq!(list[0].id, "PSA 104:24"); // strongest survives
+        assert_eq!(list[0].kind, "tsk");
+        // Weakest topics evicted; survivors sorted desc.
+        assert!(list.iter().all(|e| e.weight >= 0.35));
+        for w in list.windows(2) {
+            assert!(w[0].weight >= w[1].weight);
+        }
+    }
+
+    #[test]
+    fn blmg_v2_roundtrip_preserves_kinds() {
+        let g = full_graph_fixture();
+        let bytes = g.encode_blmg_v2(42).unwrap();
+        let (back, raw) = GraphIndex::decode_blmg_v2(&bytes).unwrap();
+        assert_eq!(raw, 42);
+        assert_eq!(back.adjacency, g.adjacency);
+        let mut a: Vec<(&str, NodeKind)> =
+            g.nodes.iter().map(|n| (n.id.as_str(), n.kind)).collect();
+        let mut c: Vec<(&str, NodeKind)> =
+            back.nodes.iter().map(|n| (n.id.as_str(), n.kind)).collect();
+        a.sort_by_key(|(id, _)| *id);
+        c.sort_by_key(|(id, _)| *id);
+        assert_eq!(a, c);
+        // Trailing garbage is rejected.
+        let mut bad = bytes.clone();
+        bad.push(0);
+        assert!(GraphIndex::decode_blmg_v2(&bad).is_err());
+    }
+
+    #[test]
+    fn decode_graph_bytes_accepts_legacy_v1() {
+        let edges = vec![("GEN 1:1".to_string(), "PSA 104:24".to_string(), 0.8)];
+        let tsk = TskGraph::build(&edges);
+        let v1 = tsk.encode();
+        let (g, _) = decode_graph_bytes(&v1).unwrap();
+        assert!(g.adjacency["GEN 1:1"].iter().all(|e| e.kind == "tsk"));
+        assert!(g.nodes.iter().all(|n| n.kind == NodeKind::Verse));
     }
 }

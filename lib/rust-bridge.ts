@@ -15,7 +15,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { createRequire } from 'module';
-import { ENABLE_RUST_ENGINE } from './feature-flags';
 
 const nodeRequire = typeof __filename !== 'undefined' ? createRequire(__filename) : null;
 import type { VerseContext } from './bible-fetch';
@@ -37,6 +36,7 @@ export interface BiblelmWasmModule {
   wasm_is_graph_initialized(): boolean;
   wasm_is_strongs_initialized(): boolean;
   wasm_lookup_strongs(strongs_id: string): any;
+  wasm_find_invalid_citations(content: string, allowed_refs: any): any;
   wasm_parse_greek_morph(code: string): any;
   wasm_parse_hebrew_morph(code: string): any;
   wasm_scrub_citations(content: string, allowed_refs: any): string;
@@ -45,7 +45,9 @@ export interface BiblelmWasmModule {
 }
 
 export function isRustEngineActive(): boolean {
-  return process.env.ENABLE_RUST_ENGINE !== '0' && ENABLE_RUST_ENGINE;
+  // Live env read (not the import-time `ENABLE_RUST_ENGINE` const) so tests
+  // and operators can toggle without a restart.
+  return process.env.ENABLE_RUST_ENGINE !== '0';
 }
 
 let wasmInstance: BiblelmWasmModule | null = null;
@@ -105,7 +107,16 @@ export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
         wasm.wasm_init_bm25(new Uint8Array(bm25Bytes));
       }
 
-      // Hydrate BM25 verse texts for phrase boost parity if available
+      // Hydrate BM25 verse texts for phrase boost parity if available.
+      // TRADEOFF (deliberate, documented): this parses the full
+      // `bible-full-index.json` (~11.6 MB) on cold start — the cost the
+      // lean `bm25-state.json` path in `lib/retrieval/search.ts` was built
+      // to avoid. It is kept because phrase-boost quality (exact-phrase
+      // queries) was judged worth it, and `tests/unit/rust-lean-parity`
+      // guards WASM-vs-lean-fallback agreement in CI. If cold starts
+      // regress, the alternative is dropping this block (WASM then behaves
+      // exactly like the lean fallback: no phrase boost) — see decision
+      // log in docs/ARCHITECTURE_CHANGELOG.md.
       const bibleIndexPath = path.resolve(process.cwd(), 'data', 'bible-full-index.json');
       if (typeof wasm.wasm_set_bm25_texts === 'function' && fs.existsSync(bibleIndexPath)) {
         try {
@@ -231,7 +242,22 @@ export function rustScrubCitations(
   if (wasm && isRustEngineActive()) {
     try {
       const allowedRefs = allowed.map((a) => (typeof a === 'string' ? a : a.reference));
-      return wasm.wasm_scrub_citations(content, allowedRefs);
+      const scrubbed = wasm.wasm_scrub_citations(content, allowedRefs);
+      // Restore the `citation_whitelist_enforced` telemetry the TypeScript
+      // implementation emits (removed/allowed lists).
+      try {
+        const removed = wasm.wasm_find_invalid_citations(content, allowedRefs);
+        if (Array.isArray(removed) && removed.length > 0) {
+          console.info(JSON.stringify({
+            event: 'citation_whitelist_enforced',
+            removedCitations: removed,
+            allowedCitations: allowedRefs,
+          }));
+        }
+      } catch {
+        // Telemetry is best-effort; scrubbing already succeeded.
+      }
+      return scrubbed;
     } catch (err) {
       console.warn('[rust-bridge] wasm_scrub_citations error, using TS fallback:', err);
     }
@@ -247,10 +273,15 @@ export function rustScrubCitations(
 
 /**
  * Looks up a Strong's dictionary entry via Rust WASM.
+ *
+ * Shape mirrors `data/strongs-dict.json`: `{ id, transliteration, lexeme?,
+ * pronunciation?, short_definition?, definition? }`. Note the source data
+ * carries no long-form `definition`, so `definition` is usually absent —
+ * prefer `short_definition`.
  */
 export async function rustLookupStrongs(
   strongsId: string
-): Promise<{ id: string; transliteration: string; definition: string; pronunciation?: string; short_definition?: string } | null> {
+): Promise<{ id: string; transliteration: string; lexeme?: string; definition?: string; pronunciation?: string; short_definition?: string } | null> {
   const wasm = await initRustEngine();
   if (wasm && wasm.wasm_is_strongs_initialized()) {
     try {
