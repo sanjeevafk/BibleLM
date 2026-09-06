@@ -47,7 +47,7 @@ describe('Rust WebAssembly Bridge (lib/rust-bridge.ts)', () => {
   });
 
   describe('rustSearch (BM25)', () => {
-    it('executes BM25 search over 31,102 verses in sub-millisecond time', async () => {
+    it('executes BM25 search over 31,086 verses in milliseconds', async () => {
       const results = await rustSearch('faith without works', 5);
       expect(results).toHaveLength(5);
       expect(results[0].verseId).toBeDefined();
@@ -100,11 +100,15 @@ describe('Rust WebAssembly Bridge (lib/rust-bridge.ts)', () => {
       expect(hebrewEntry).not.toBeNull();
       expect(hebrewEntry?.id).toBe('H7225');
       expect(hebrewEntry?.transliteration).toContain('rêʼshîyth');
+      // Full dictionary fields survive the binary encoding (v1 dropped these).
+      expect(hebrewEntry?.lexeme).toBe('ראשית');
+      expect(hebrewEntry?.short_definition).toBe('beginning');
 
       const greekEntry = await rustLookupStrongs('G3056');
       expect(greekEntry).not.toBeNull();
       expect(greekEntry?.id).toBe('G3056');
       expect(greekEntry?.transliteration).toContain('lógos');
+      expect(greekEntry?.short_definition).toBe('account');
     });
   });
 

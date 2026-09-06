@@ -136,6 +136,12 @@ impl BookCode {
     pub fn from_code(code: &str) -> Option<BookCode> {
         BookCode::all().into_iter().find(|b| b.code() == code)
     }
+
+    /// Old Testament = the first 39 books in canonical order. Implemented
+    /// positionally so it stays correct even if the enum is reordered.
+    pub fn is_old_testament(self) -> bool {
+        BookCode::all()[..39].contains(&self)
+    }
 }
 
 /// Mirrors TS `normalizeBook`: strip non-alphanumeric, lowercase, exact lookup.

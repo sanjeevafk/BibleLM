@@ -15,7 +15,7 @@
 import { validateDataIntegrity } from '@/lib/validate-data';
 import { retrieveContextForQuery } from '@/lib/retrieval';
 import { generateWithFallback } from '@/lib/llm-fallback';
-import { scrubInvalidCitations } from '../chat/lib/citation-scrubber';
+import { rustScrubCitations as scrubInvalidCitations } from '@/lib/rust-bridge';
 import { normalizeResponseContent } from '../chat/lib/response-normalizer';
 import { buildRetrievalPrompt, appendConversationHistory } from '../chat/lib/prompt-builder';
 import { parseChatRequest } from '../chat/lib/validation';

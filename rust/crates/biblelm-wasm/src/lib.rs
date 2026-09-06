@@ -12,14 +12,16 @@ use std::collections::HashSet;
 use std::sync::RwLock;
 use wasm_bindgen::prelude::*;
 
-use biblelm_graph::{GraphRagOptions, TskGraph};
+use biblelm_graph::{decode_graph_bytes, GraphIndex, GraphRagOptions};
 use biblelm_index::Bm25Index;
 use biblelm_morph::{HebrewMorphAnalysis, RobinsonMorphAnalysis, StrongsDictionary, StrongsEntry};
 use biblelm_types::{normalize_book, VerseRef};
 
 static BM25_ENGINE: RwLock<Option<Bm25Index>> = RwLock::new(None);
 static BM25_TEXTS: RwLock<Vec<String>> = RwLock::new(Vec::new());
-static GRAPH_ENGINE: RwLock<Option<TskGraph>> = RwLock::new(None);
+/// Full multi-source graph (BLMG v2). Legacy v1 TSK-only binaries are
+/// upgraded in memory on load with `kind = "tsk"`.
+static GRAPH_ENGINE: RwLock<Option<GraphIndex>> = RwLock::new(None);
 static STRONGS_ENGINE: RwLock<Option<StrongsDictionary>> = RwLock::new(None);
 
 #[wasm_bindgen(start)]
@@ -95,7 +97,8 @@ pub struct WasmGraphOpts {
 
 #[wasm_bindgen]
 pub fn wasm_init_graph(bytes: &[u8]) -> Result<bool, JsValue> {
-    let graph = TskGraph::decode(bytes).map_err(|e| JsValue::from_str(&format!("Graph decode error: {e}")))?;
+    let (graph, _) = decode_graph_bytes(bytes)
+        .map_err(|e| JsValue::from_str(&format!("Graph decode error: {e}")))?;
     let mut guard = GRAPH_ENGINE.write().map_err(|e| JsValue::from_str(&e.to_string()))?;
     *guard = Some(graph);
     Ok(true)
@@ -219,17 +222,14 @@ pub fn wasm_enrich_verse(ref_id: &str) -> Result<JsValue, JsValue> {
     }
 
     if let Some(vref) = parse_flexible_ref(trimmed) {
-        let is_ot = (vref.book as usize) < 39;
-        let is_nt = !is_ot;
-
         let info = WasmVerseEnrichment {
             reference: vref.to_string(),
             book: vref.book.code().to_string(),
             book_name: vref.book.name().to_string(),
             chapter: vref.chapter,
             verse: vref.verse,
-            is_ot,
-            is_nt,
+            is_ot: vref.book.is_old_testament(),
+            is_nt: !vref.book.is_old_testament(),
             strongs: None,
         };
         serde_wasm_bindgen::to_value(&info).map_err(|e| JsValue::from_str(&e.to_string()))
@@ -240,6 +240,7 @@ pub fn wasm_enrich_verse(ref_id: &str) -> Result<JsValue, JsValue> {
 
 #[wasm_bindgen]
 pub fn wasm_parse_hebrew_morph(code: &str) -> Result<JsValue, JsValue> {
+    // EXPERIMENTAL subset parser (see biblelm-morph docs): best-effort output.
     #[derive(serde::Serialize)]
     struct HebrewMorphDto {
         language: &'static str,
@@ -264,6 +265,7 @@ pub fn wasm_parse_hebrew_morph(code: &str) -> Result<JsValue, JsValue> {
 
 #[wasm_bindgen]
 pub fn wasm_parse_greek_morph(code: &str) -> Result<JsValue, JsValue> {
+    // EXPERIMENTAL subset parser (see biblelm-morph docs): best-effort output.
     #[derive(serde::Serialize)]
     struct GreekMorphDto {
         pos: &'static str,
@@ -314,6 +316,30 @@ pub fn wasm_scrub_citations(content: &str, allowed_refs: JsValue) -> Result<Stri
 
     let slice: Vec<&str> = ref_strings.iter().map(|s| s.as_str()).collect();
     Ok(biblelm_pipeline::scrub_invalid_citations(content, &slice))
+}
+
+/// Returns the invalid citations that `wasm_scrub_citations` would remove
+/// (deduplicated). Lets hosts emit whitelist-enforcement telemetry that
+/// matches the TypeScript scrubber's `citation_whitelist_enforced` event.
+#[wasm_bindgen]
+pub fn wasm_find_invalid_citations(content: &str, allowed_refs: JsValue) -> Result<JsValue, JsValue> {
+    let mut ref_strings: Vec<String> = Vec::new();
+
+    if let Ok(strings) = serde_wasm_bindgen::from_value::<Vec<String>>(allowed_refs.clone()) {
+        ref_strings = strings;
+    } else if let Ok(objects) = serde_wasm_bindgen::from_value::<Vec<serde_json::Value>>(allowed_refs) {
+        for obj in objects {
+            if let Some(s) = obj.as_str() {
+                ref_strings.push(s.to_string());
+            } else if let Some(r) = obj.get("reference").and_then(|v| v.as_str()) {
+                ref_strings.push(r.to_string());
+            }
+        }
+    }
+
+    let slice: Vec<&str> = ref_strings.iter().map(|s| s.as_str()).collect();
+    let invalid = biblelm_pipeline::find_invalid_citations(content, &slice);
+    serde_wasm_bindgen::to_value(&invalid).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 // ---------------------------------------------------------------------------

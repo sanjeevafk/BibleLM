@@ -3,6 +3,7 @@
 export const memory: WebAssembly.Memory;
 export const init_panic_hook: () => void;
 export const wasm_enrich_verse: (a: number, b: number) => [number, number, number];
+export const wasm_find_invalid_citations: (a: number, b: number, c: any) => [number, number, number];
 export const wasm_fuse_rrf: (a: any, b: any, c: number) => [number, number, number];
 export const wasm_graph_expand: (a: any, b: any, c: any) => [number, number, number];
 export const wasm_init_bm25: (a: number, b: number) => [number, number, number];
