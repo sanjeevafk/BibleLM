@@ -195,8 +195,13 @@ export async function graphRagExpand(
   // Calibrate raw graph scores to fusedScore scale [0.45, 0.85]
   const candidates = expandedIds.map((id) => {
     const rawScore = nodeScores.get(id) || 0.5;
-    // Map rawScore (typically 0.3 - 1.5) to a fair base score that can compete in reranker
-    const calibratedScore = Math.min(0.85, Math.max(0.40, Number((rawScore * 0.65).toFixed(4))));
+    // Map rawScore (typically 0.3 - 1.5) to a fair base score that can compete in reranker.
+    // Round-half-up via integer math — NOT Number.toFixed(4): toFixed rounds
+    // the exact binary value while Rust rounds (x*10000), which disagree by
+    // 1ulp on 4th-decimal halfway cases (e.g. 0.53755 → 0.5375 vs 0.5376).
+    // This form is bit-identical to the Rust port by construction (same
+    // IEEE754 doubles, same op order).
+    const calibratedScore = Math.min(0.85, Math.max(0.40, Math.round(rawScore * 0.65 * 10000) / 10000));
     return { verseId: id, score: calibratedScore };
   });
 

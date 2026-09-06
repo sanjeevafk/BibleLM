@@ -177,6 +177,10 @@ async function runIndependentVerification() {
   // -------------------------------------------------------------------------
   // SUITE 3: GraphRAG Adjacency Expansion Differential Parity
   // -------------------------------------------------------------------------
+  // Post full-port (§1–§4 in Rust), the WASM graph binary is byte-exact
+  // against `data/graph-index.json` (see `biblelm-build verify`), and both
+  // sides run the same BFS — so candidate lists must be EXACTLY equal,
+  // not merely overlapping.
   {
     const suite = '3. GraphRAG Parity';
     const testSeeds = [
@@ -201,18 +205,26 @@ async function runIndependentVerification() {
       const rustCandidates = rustRes.candidates.map((c) => c.verseId);
       const tsCandidates = tsRes.candidates.map((c) => c.verseId);
 
-      // Verify candidates set overlap
-      const shared = rustCandidates.filter((r) => tsCandidates.includes(r)).length;
-      if (shared >= Math.min(rustCandidates.length, tsCandidates.length) * 0.8) {
+      // Exact ordered equality (ids and scores).
+      const idsEqual = JSON.stringify(rustCandidates) === JSON.stringify(tsCandidates);
+      const scoresEqual = rustRes.candidates.every((c, idx) => {
+        const tsScore = tsRes.candidates[idx]?.score;
+        return typeof tsScore === 'number' && Math.abs(c.score - tsScore) < 1e-9;
+      });
+      if (idsEqual && scoresEqual) {
         graphMatches++;
+      } else {
+        console.log(`       Mismatch for seeds ${item.seed.join(',')}:`);
+        console.log(`       rust: ${rustCandidates.join(' | ')}`);
+        console.log(`       ts:   ${tsCandidates.join(' | ')}`);
       }
     }
 
     record(
       suite,
-      'Candidate expansion agreement >= 75%',
+      'Candidate expansion bit-exact vs TypeScript',
       graphMatches === testSeeds.length,
-      `Matched ${graphMatches}/${testSeeds.length} seed expansion sets`,
+      `Exactly matched ${graphMatches}/${testSeeds.length} seed expansion sets`,
       totalGraphTimeRust
     );
   }
