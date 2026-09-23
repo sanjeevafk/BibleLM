@@ -6,13 +6,14 @@
  * the sibling lib/ modules.
  */
 
+import type { Context } from 'hono';
 import { streamText } from 'ai';
 import { createHash, randomUUID } from 'crypto';
 import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache';
 import { generateWithFallback } from '@/lib/llm-fallback';
 import { validateDataIntegrity } from '@/lib/validate-data';
 import type { VerseContext } from '@/lib/bible-fetch';
-import { redis } from '@/lib/redis';
+import { getRedis } from '@/lib/redis';
 import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
 import { inMemoryRateLimit } from '@/lib/rate-limit-memory';
 import { retrieveContextForQuery } from '@/lib/retrieval';
@@ -23,7 +24,7 @@ import {
   type StructuredChatResponse,
 } from '@/lib/verse-response';
 
-import { getRateLimitKey } from './lib/ip-utils';
+import { getRateLimitKey } from '../lib/ip-utils';
 import { rustScrubCitations as scrubInvalidCitations } from '@/lib/rust-bridge';
 import {
   normalizeResponseContent,
@@ -31,24 +32,30 @@ import {
   ensureFallbackBanner,
   logContextUtilizationDiagnostics,
   streamTextFromContent,
-} from './lib/response-normalizer';
-import { parseChatRequest, normalizeTranslation } from './lib/validation';
-import { buildRetrievalPrompt, appendConversationHistory } from './lib/prompt-builder';
-import { classifyAndRewriteQuery } from './lib/query-classifier';
-
-// export const runtime = 'edge';
+} from '../lib/response-normalizer';
+import { parseChatRequest } from '../lib/validation';
+import { buildRetrievalPrompt, appendConversationHistory } from '../lib/prompt-builder';
+import { classifyAndRewriteQuery } from '../lib/query-classifier';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Model and Rate Limit Utilities
 // ---------------------------------------------------------------------------
 
-const GROQ_PRIMARY_MODEL = process.env.GROQ_PRIMARY_MODEL || 'openai/gpt-oss-20b';
-const GROQ_SECONDARY_MODEL = process.env.GROQ_SECONDARY_MODEL || 'openai/gpt-oss-120b';
-const CACHE_MODEL_CANDIDATES = [
-  `groq:${GROQ_PRIMARY_MODEL}`,
-  `groq:${GROQ_SECONDARY_MODEL}`,
-  'context-only',
-];
+function getPrimaryModel(): string {
+  return process.env.GROQ_PRIMARY_MODEL || 'openai/gpt-oss-20b';
+}
+
+function getSecondaryModel(): string {
+  return process.env.GROQ_SECONDARY_MODEL || 'openai/gpt-oss-120b';
+}
+
+function getCacheModelCandidates(): string[] {
+  return [
+    `groq:${getPrimaryModel()}`,
+    `groq:${getSecondaryModel()}`,
+    'context-only',
+  ];
+}
 
 const DEBUG_LLM = ENABLE_RETRIEVAL_DEBUG;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
@@ -174,9 +181,11 @@ function buildInflightRequestKeyWithHistory(
 // ---------------------------------------------------------------------------
 
 function normalizeModelId(modelUsed: string | undefined): string {
-  if (!modelUsed) return `groq:${GROQ_PRIMARY_MODEL}`;
+  const primary = getPrimaryModel();
+  const secondary = getSecondaryModel();
+  if (!modelUsed) return `groq:${primary}`;
   if (modelUsed.includes(':') || modelUsed === 'context-only') return modelUsed;
-  if (modelUsed === GROQ_PRIMARY_MODEL || modelUsed === GROQ_SECONDARY_MODEL) return `groq:${modelUsed}`;
+  if (modelUsed === primary || modelUsed === secondary) return `groq:${modelUsed}`;
   return modelUsed;
 }
 
@@ -191,7 +200,7 @@ async function findPreferredCachedResponse(
   translation: string,
   historyHash?: string
 ): Promise<CacheLookupResult | null> {
-  const cacheCandidates = CACHE_MODEL_CANDIDATES.map((modelKey) => ({
+  const cacheCandidates = getCacheModelCandidates().map((modelKey) => ({
     modelKey,
     cacheKey: buildCacheKey({ query, translation, model: modelKey, historyHash }),
   }));
@@ -212,18 +221,20 @@ async function findPreferredCachedResponse(
 // ---------------------------------------------------------------------------
 
 async function incrementRateLimitCounter(rateLimitKey: string): Promise<number | null> {
-  if (!redis) return null;
+  const redisClient = getRedis();
+  if (!redisClient) return null;
   try {
-    const rawCount = await redis.eval<[string], number>(RATE_LIMIT_SCRIPT, [rateLimitKey], [
+    const rawCount = await redisClient.eval<[string], number>(RATE_LIMIT_SCRIPT, [rateLimitKey], [
       String(RATE_LIMIT_WINDOW_SECONDS),
     ]);
     const count = Number(rawCount);
     return Number.isFinite(count) ? count : null;
   } catch (error) {
     console.warn('[rate-limit] Atomic counter failed; falling back to non-atomic INCR/EXPIRE.', error);
-    if (!redis) return null;
+    const fallbackClient = getRedis();
+    if (!fallbackClient) return null;
     try {
-      const multi = redis.multi();
+      const multi = fallbackClient.multi();
       multi.incr(rateLimitKey);
       multi.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
       const results = await multi.exec();
@@ -425,7 +436,8 @@ export async function POST(req: Request) {
     // threshold) instead of skipping limiting entirely.
     const UNKNOWN_IP_MAX_REQUESTS = 30;
 
-    if (redis) {
+    const redisClient = getRedis();
+    if (redisClient) {
       const rateLimitKey = getRateLimitKey(req);
       const isUnknown = rateLimitKey.endsWith(':unknown');
       const maxForKey = isUnknown ? UNKNOWN_IP_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS;
@@ -536,10 +548,11 @@ export async function POST(req: Request) {
       return response;
     }
 
-    const missKey = buildCacheKey({ query, translation: requestedTranslation, model: `groq:${GROQ_PRIMARY_MODEL}` });
+    const primaryModel = getPrimaryModel();
+    const missKey = buildCacheKey({ query, translation: requestedTranslation, model: `groq:${primaryModel}` });
     debugLog('Cache MISS – proceeding to LLM', missKey);
 
-    const inflightKey = buildInflightRequestKeyWithHistory(query, requestedTranslation, `groq:${GROQ_PRIMARY_MODEL}`, modelHistory);
+    const inflightKey = buildInflightRequestKeyWithHistory(query, requestedTranslation, `groq:${primaryModel}`, modelHistory);
     let pipelinePromise = inflightRequests.get(inflightKey);
     if (pipelinePromise) {
       debugLog('In-flight dedup HIT – awaiting active pipeline', inflightKey);
@@ -636,3 +649,8 @@ export async function POST(req: Request) {
     }));
   }
 }
+
+export async function handleChat(c: Context) {
+  return POST(c.req.raw);
+}
+
