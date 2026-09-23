@@ -283,6 +283,15 @@ const BOOK_ALIASES: Record<string, string> = {
 
 function loadIndexSync(): void {
   try {
+    const parsed = require('../data/translations-index.json') as Record<string, Record<string, string>>;
+    for (const [translation, books] of Object.entries(parsed)) {
+      indexCache[translation.toUpperCase()] = books;
+    }
+    return;
+  } catch {
+    // fallback to fs
+  }
+  try {
     const raw = fs.readFileSync(INDEX_PATH, 'utf8');
     const parsed = JSON.parse(raw) as Record<string, Record<string, string>>;
     for (const [translation, books] of Object.entries(parsed)) {

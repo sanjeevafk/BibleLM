@@ -20,7 +20,7 @@ const nodeRequire = typeof __filename !== 'undefined' ? createRequire(__filename
 import type { VerseContext } from './bible-fetch';
 import type { VerseResult } from './retrieval/types';
 import type { GraphRagResult } from './retrieval/graph-rag';
-import { scrubInvalidCitations as tsScrubInvalidCitations } from '../app/api/chat/lib/citation-scrubber';
+import { scrubInvalidCitations as tsScrubInvalidCitations } from '../worker/lib/citation-scrubber';
 import { graphRagExpand as tsGraphRagExpand } from './retrieval/graph-rag';
 import { getBM25Engine } from './retrieval/search';
 
@@ -32,9 +32,14 @@ export interface BiblelmWasmModule {
   wasm_init_bm25(bytes: Uint8Array): boolean;
   wasm_init_graph(bytes: Uint8Array): boolean;
   wasm_init_strongs(bytes: Uint8Array): boolean;
+  wasm_init_vectors(bytes: Uint8Array): boolean;
   wasm_is_bm25_initialized(): boolean;
   wasm_is_graph_initialized(): boolean;
   wasm_is_strongs_initialized(): boolean;
+  wasm_is_vectors_initialized(): boolean;
+  wasm_set_vector_ids?(ids: string[]): boolean;
+  wasm_vector_row?(row: number): any;
+  wasm_vector_search?(query_embedding: Float32Array, top_k: number): any;
   wasm_lookup_strongs(strongs_id: string): any;
   wasm_find_invalid_citations(content: string, allowed_refs: any): any;
   wasm_parse_greek_morph(code: string): any;
@@ -145,6 +150,34 @@ export async function initRustEngine(): Promise<BiblelmWasmModule | null> {
         wasm.wasm_init_strongs(new Uint8Array(strongsBytes));
       }
 
+      // Hydrate dense vector index (BLMV v1) + row order if present.
+      // Missing files are fine — vector search then falls back to [] and the
+      // lexical pipeline is unaffected (ENABLE_DENSE_VECTOR stays off).
+      const vectorsBinPath = path.resolve(process.cwd(), 'data', 'rust', 'embeddings.bin');
+      if (fs.existsSync(vectorsBinPath)) {
+        try {
+          const vectorBytes = fs.readFileSync(vectorsBinPath);
+          wasm.wasm_init_vectors(new Uint8Array(vectorBytes));
+          const orderPath = path.resolve(process.cwd(), 'data', 'rust', 'embeddings-order.json');
+          if (typeof wasm.wasm_set_vector_ids === 'function' && fs.existsSync(orderPath)) {
+            const order: unknown = JSON.parse(fs.readFileSync(orderPath, 'utf8'));
+            if (Array.isArray(order)) wasm.wasm_set_vector_ids(order as string[]);
+          }
+          // Tier-up: one throwaway scan so WASM JIT optimizes the hot loop at
+          // init, not on the first real query (measured first-call outlier
+          // ~70-100ms vs ~30ms steady scalar). Any nonzero vector works.
+          try {
+            if (typeof wasm.wasm_vector_search === 'function' && wasm.wasm_is_vectors_initialized()) {
+              wasm.wasm_vector_search(new Float32Array(768).fill(0.1), 1);
+            }
+          } catch {
+            // Best-effort only; real queries will tier up on their own.
+          }
+        } catch (err) {
+          console.warn('[rust-bridge] vector index hydration warning:', err);
+        }
+      }
+
       wasmInstance = wasm;
       return wasm;
     } catch (err) {
@@ -199,6 +232,30 @@ export async function rustSearch(query: string, topK: number): Promise<VerseResu
     verseId: h.doc.id,
     score: h.score,
   }));
+}
+
+/**
+ * Performs dense vector search via Rust WebAssembly.
+ * Returns [] when the engine or index is unavailable — the lexical pipeline
+ * is unaffected, so this is safe to call with the flag off.
+ */
+export async function rustVectorSearch(queryEmbedding: number[], topK: number): Promise<VerseResult[]> {
+  const wasm = await initRustEngine();
+  if (wasm && typeof wasm.wasm_vector_search === 'function' && wasm.wasm_is_vectors_initialized()) {
+    try {
+      const hits = wasm.wasm_vector_search(new Float32Array(queryEmbedding), topK);
+      if (Array.isArray(hits)) {
+        return hits.map((h: { verseId: string; score: number }) => ({
+          verseId: h.verseId,
+          score: Number(h.score),
+        }));
+      }
+    } catch (err) {
+      console.warn('[rust-bridge] wasm_vector_search error, falling back to empty:', err);
+    }
+  }
+
+  return [];
 }
 
 /**

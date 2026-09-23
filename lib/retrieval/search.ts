@@ -3,6 +3,8 @@
  * all retrieval debug/diagnostics infrastructure.
  */
 
+import fs from 'fs';
+import path from 'path';
 import { BM25Engine } from './bm25';
 import { ENABLE_RETRIEVAL_DEBUG, ENABLE_SEMANTIC_RERANKER, ENABLE_TSK_EXPANSION_GATING } from '../feature-flags';
 import type { VerseContext } from '../bible-fetch';
@@ -64,9 +66,10 @@ export async function getBM25Engine(): Promise<BM25Engine> {
         console.log('[retrieval] BM25 engine hydrated from pre-computed state (lean cold-start path).');
       } catch (e) {
         console.warn('[retrieval] No BM25 state found, falling back to full in-memory index...');
-        // Full-index fallback: only executed when bm25-state.json is missing.
-        // We lazy-import bible-full-index.json here — NOT on the hot path.
-        const bibleIndexData = (await import('../../data/bible-full-index.json')).default;
+        // Full-index fallback: only executed when bm25-state.json is missing in Node/local dev.
+        const fullIndexPath = path.join(process.cwd(), 'data', 'bible-full-index.json');
+        const raw = await fs.promises.readFile(fullIndexPath, 'utf8');
+        const bibleIndexData = JSON.parse(raw);
         const BIBLE_INDEX = bibleIndexData as Record<string, { text: string }>;
         engine = await BM25Engine.createFromIndex(BIBLE_INDEX, {
           k1: RETRIEVAL_CONFIG.bm25.k1,

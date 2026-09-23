@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { VerseContext } from './bible-fetch';
-import { redis } from './redis';
+import { getRedis } from './redis';
 
 const DEFAULT_RESPONSE_CACHE_TTL_SECONDS = 259200; // 72 hours
 const DEFAULT_RETRIEVAL_CACHE_TTL_SECONDS = 3600; // 1 hour
@@ -80,14 +80,15 @@ function buildEmbeddingCacheKey({ normalizedQuery, embeddingModel }: EmbeddingCa
 export { buildCacheKey, buildRetrievalContextCacheKey, buildEmbeddingCacheKey };
 
 export async function getCachedResponse(input: CacheKeyInput): Promise<CachedChatResponse | null> {
-  if (!redis) {
+  const client = getRedis();
+  if (!client) {
     return null;
   }
 
   const cacheKey = buildCacheKey(input);
 
   try {
-    const cached = await redis.get<CachedChatResponse | string>(cacheKey);
+    const cached = await client.get<CachedChatResponse | string>(cacheKey);
     if (!cached) return null;
     if (typeof cached === 'string') {
       return JSON.parse(cached) as CachedChatResponse;
@@ -103,14 +104,15 @@ export async function setCachedResponse(
   input: CacheKeyInput,
   value: CachedChatResponse
 ): Promise<void> {
-  if (!redis) {
+  const client = getRedis();
+  if (!client) {
     return;
   }
 
   const cacheKey = buildCacheKey(input);
 
   try {
-    await redis.set(cacheKey, JSON.stringify(value), { ex: RESPONSE_CACHE_TTL_SECONDS });
+    await client.set(cacheKey, JSON.stringify(value), { ex: RESPONSE_CACHE_TTL_SECONDS });
   } catch (error) {
     console.warn('[cache] Redis set failed; continuing without cache.', error);
   }
@@ -119,14 +121,15 @@ export async function setCachedResponse(
 export async function getCachedRetrievalContext(
   input: RetrievalContextCacheKeyInput
 ): Promise<VerseContext[] | null> {
-  if (!redis) {
+  const client = getRedis();
+  if (!client) {
     return null;
   }
 
   const cacheKey = buildRetrievalContextCacheKey(input);
 
   try {
-    const cached = await redis.get<VerseContext[] | string>(cacheKey);
+    const cached = await client.get<VerseContext[] | string>(cacheKey);
     if (!cached) return null;
     if (typeof cached === 'string') {
       return JSON.parse(cached) as VerseContext[];
@@ -142,28 +145,30 @@ export async function setCachedRetrievalContext(
   input: RetrievalContextCacheKeyInput,
   value: VerseContext[]
 ): Promise<void> {
-  if (!redis) {
+  const client = getRedis();
+  if (!client) {
     return;
   }
 
   const cacheKey = buildRetrievalContextCacheKey(input);
 
   try {
-    await redis.set(cacheKey, JSON.stringify(value), { ex: RETRIEVAL_CACHE_TTL_SECONDS });
+    await client.set(cacheKey, JSON.stringify(value), { ex: RETRIEVAL_CACHE_TTL_SECONDS });
   } catch (error) {
     console.warn('[cache] Retrieval context set failed; continuing without retrieval cache.', error);
   }
 }
 
 export async function getCachedEmbedding(input: EmbeddingCacheKeyInput): Promise<number[] | null> {
-  if (!redis) {
+  const client = getRedis();
+  if (!client) {
     return null;
   }
 
   const cacheKey = buildEmbeddingCacheKey(input);
 
   try {
-    const cached = await redis.get<number[] | string>(cacheKey);
+    const cached = await client.get<number[] | string>(cacheKey);
     if (!cached) return null;
     if (typeof cached === 'string') {
       return JSON.parse(cached) as number[];
@@ -179,14 +184,15 @@ export async function setCachedEmbedding(
   input: EmbeddingCacheKeyInput,
   embedding: number[]
 ): Promise<void> {
-  if (!redis) {
+  const client = getRedis();
+  if (!client) {
     return;
   }
 
   const cacheKey = buildEmbeddingCacheKey(input);
 
   try {
-    await redis.set(cacheKey, JSON.stringify(embedding), { ex: EMBEDDING_CACHE_TTL_SECONDS });
+    await client.set(cacheKey, JSON.stringify(embedding), { ex: EMBEDDING_CACHE_TTL_SECONDS });
   } catch (error) {
     console.warn('[cache] Embedding cache set failed; continuing without embedding cache.', error);
   }
