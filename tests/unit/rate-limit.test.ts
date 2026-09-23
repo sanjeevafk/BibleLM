@@ -4,7 +4,7 @@
  * Cache keys must stay bounded for oversized queries.
  */
 import { describe, it, expect } from 'vitest';
-import { getRateLimitKey } from '@/app/api/chat/lib/ip-utils';
+import { getRateLimitKey } from '@/worker/lib/ip-utils';
 import { escapeLikePattern } from '@/lib/retrieval/verse-utils';
 import { buildRetrievalContextCacheKey, buildEmbeddingCacheKey } from '@/lib/cache';
 import { inMemoryRateLimit } from '@/lib/rate-limit-memory';

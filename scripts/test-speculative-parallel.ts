@@ -1,5 +1,5 @@
 import { retrieveContextForQuery } from '../lib/retrieval';
-import { classifyAndRewriteQuery } from '../app/api/chat/lib/query-classifier';
+import { classifyAndRewriteQuery } from '../worker/lib/query-classifier';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 

@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { normalizeTranslation, parseChatRequest } from '@/app/api/chat/lib/validation';
-import { buildRetrievalPrompt, appendConversationHistory } from '@/app/api/chat/lib/prompt-builder';
+import { normalizeTranslation, parseChatRequest } from '@/worker/lib/validation';
+import { appendConversationHistory } from '@/worker/lib/prompt-builder';
 
 // ---------------------------------------------------------------------------
 // normalizeTranslation

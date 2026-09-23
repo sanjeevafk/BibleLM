@@ -41,6 +41,16 @@ const bookCache = new Map<
   { morph?: MorphBook | null; interlinear?: InterlinearBook | null; clause?: OpenGntClauseBook | null }
 >();
 const inFlight = new Map<string, Promise<unknown>>();
+const verseLayersCache = new Map<string, OpenGntVerseLayers | null>();
+const verseInFlight = new Map<string, Promise<OpenGntVerseLayers | null>>();
+const MAX_CACHED_VERSE_LAYERS = 2000;
+
+export function clearOpenGntCache(): void {
+  bookCache.clear();
+  verseLayersCache.clear();
+  inFlight.clear();
+  verseInFlight.clear();
+}
 
 const brotliDecompress = promisify(zlib.brotliDecompress);
 const gunzip = promisify(zlib.gunzip);
@@ -115,6 +125,15 @@ const BOOK_ALIASES: Record<string, string> = {
 };
 
 function loadIndexSync(): void {
+  try {
+    const parsed = require('../data/opengnt-index.json') as Record<string, IndexEntry>;
+    for (const [book, entry] of Object.entries(parsed)) {
+      indexCache[book.toUpperCase()] = entry;
+    }
+    return;
+  } catch {
+    // fallback to fs
+  }
   try {
     const raw = fs.readFileSync(INDEX_PATH, 'utf8');
     const parsed = JSON.parse(raw) as Record<string, IndexEntry>;
@@ -200,34 +219,59 @@ export async function getOpenGNTLayers(reference: string): Promise<OpenGntVerseL
   const parsed = parseReference(reference);
   if (!parsed) return null;
   const { book, chapter, verse } = parsed;
+  const cacheKey = `${book} ${chapter}:${verse}`;
 
-  const [morph, interlinear, clause] = await Promise.all([
-    loadLayer<MorphBook>(book, 'morph'),
-    loadLayer<InterlinearBook>(book, 'interlinear'),
-    loadLayer<OpenGntClauseBook>(book, 'clause')
-  ]);
-
-  const chapterKey = String(chapter);
-  const verseKey = String(verse);
-  const result: OpenGntVerseLayers = {};
-
-  const morphVerse = morph?.[chapterKey]?.[verseKey];
-  if (morphVerse && morphVerse.length > 0) {
-    result.morphology = morphVerse;
+  if (verseLayersCache.has(cacheKey)) {
+    return verseLayersCache.get(cacheKey) ?? null;
   }
 
-  const interlinearVerse = interlinear?.[chapterKey]?.[verseKey];
-  if (interlinearVerse && interlinearVerse.length > 0) {
-    result.interlinear = interlinearVerse;
+  const existingInFlight = verseInFlight.get(cacheKey);
+  if (existingInFlight) {
+    return existingInFlight;
   }
 
-  const clauseVerse = clause?.verses?.[chapterKey]?.[verseKey];
-  if (clause && clauseVerse?.ids?.length) {
-    result.clauses = {
-      ids: clauseVerse.ids,
-      meta: clause.clauses
-    };
-  }
+  const fetcher = (async () => {
+    try {
+      const [morph, interlinear, clause] = await Promise.all([
+        loadLayer<MorphBook>(book, 'morph'),
+        loadLayer<InterlinearBook>(book, 'interlinear'),
+        loadLayer<OpenGntClauseBook>(book, 'clause')
+      ]);
 
-  return Object.keys(result).length > 0 ? result : null;
+      const chapterKey = String(chapter);
+      const verseKey = String(verse);
+      const result: OpenGntVerseLayers = {};
+
+      const morphVerse = morph?.[chapterKey]?.[verseKey];
+      if (morphVerse && morphVerse.length > 0) {
+        result.morphology = morphVerse;
+      }
+
+      const interlinearVerse = interlinear?.[chapterKey]?.[verseKey];
+      if (interlinearVerse && interlinearVerse.length > 0) {
+        result.interlinear = interlinearVerse;
+      }
+
+      const clauseVerse = clause?.verses?.[chapterKey]?.[verseKey];
+      if (clause && clauseVerse?.ids?.length) {
+        result.clauses = {
+          ids: clauseVerse.ids,
+          meta: clause.clauses
+        };
+      }
+
+      const finalResult = Object.keys(result).length > 0 ? result : null;
+      if (verseLayersCache.size >= MAX_CACHED_VERSE_LAYERS) {
+        const firstKey = verseLayersCache.keys().next().value;
+        if (firstKey !== undefined) verseLayersCache.delete(firstKey);
+      }
+      verseLayersCache.set(cacheKey, finalResult);
+      return finalResult;
+    } finally {
+      verseInFlight.delete(cacheKey);
+    }
+  })();
+
+  verseInFlight.set(cacheKey, fetcher);
+  return fetcher;
 }
