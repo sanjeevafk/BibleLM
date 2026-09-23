@@ -1,6 +1,6 @@
 import { retrieveContextForQuery } from '../lib/retrieval';
 import { buildContextPrompt } from '../lib/prompts';
-import { classifyAndRewriteQuery } from '../app/api/chat/lib/query-classifier';
+import { classifyAndRewriteQuery } from '../worker/lib/query-classifier';
 import { generateText } from 'ai';
 import { createGroq } from '@ai-sdk/groq';
 import * as dotenv from 'dotenv';

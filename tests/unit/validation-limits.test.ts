@@ -9,7 +9,7 @@ import {
   MAX_MESSAGE_CHARS,
   MAX_HISTORY_MESSAGES,
   MAX_HISTORY_CHARS,
-} from '@/app/api/chat/lib/validation';
+} from '@/worker/lib/validation';
 
 function req(url = 'http://localhost/api/chat'): Request {
   return new Request(url, { method: 'POST' });

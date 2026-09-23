@@ -39,7 +39,7 @@ function assertHasKey(payload: StructuredRouteResponse, key: keyof StructuredRou
 
 async function main(): Promise<void> {
   registerAliasResolver();
-  const mod = require('../../app/api/chat/lib/response-normalizer') as {
+  const mod = require('../../worker/lib/response-normalizer') as {
     buildStructuredResponsePayload: BuildStructuredResponsePayload;
   };
 

@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import type { VerseContext } from '../../lib/bible-fetch';
 
-import { scrubInvalidCitations } from '../../app/api/chat/lib/citation-scrubber';
+import { scrubInvalidCitations } from '../../worker/lib/citation-scrubber';
 
 // ---------------------------------------------------------------------------
 // Fixtures

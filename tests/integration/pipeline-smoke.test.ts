@@ -3,9 +3,9 @@
  * No network, no LLM calls.
  */
 import { describe, it, expect } from 'vitest';
-import { parseChatRequest } from '@/app/api/chat/lib/validation';
-import { buildRetrievalPrompt, appendConversationHistory } from '@/app/api/chat/lib/prompt-builder';
-import { scrubInvalidCitations } from '@/app/api/chat/lib/citation-scrubber';
+import { parseChatRequest } from '@/worker/lib/validation';
+import { buildRetrievalPrompt, appendConversationHistory } from '@/worker/lib/prompt-builder';
+import { scrubInvalidCitations } from '@/worker/lib/citation-scrubber';
 
 describe('chat pipeline integration (offline)', () => {
   it('end-to-end: capped history → grounded prompt → whitelist scrub', () => {

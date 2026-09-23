@@ -4,7 +4,7 @@
  * SYSTEM INSTRUCTION directives into the prompt.
  */
 import { describe, it, expect } from 'vitest';
-import { appendConversationHistory, sanitizeHistoryContent } from '@/app/api/chat/lib/prompt-builder';
+import { appendConversationHistory, sanitizeHistoryContent } from '@/worker/lib/prompt-builder';
 
 describe('sanitizeHistoryContent', () => {
   it('strips tag closings that would break out of the history block', () => {
