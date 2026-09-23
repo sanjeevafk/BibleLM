@@ -1,6 +1,5 @@
-"use client";
-
 import { useEffect, useSyncExternalStore } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   BookOpen,
@@ -23,7 +22,7 @@ function getInitialDarkMode(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-export default function Home() {
+export default function HomePage() {
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -104,13 +103,13 @@ export default function Home() {
             asChild
             className="rounded-full px-6 sm:px-10 h-12 sm:h-14 text-sm sm:text-base md:text-lg font-semibold group relative overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
           >
-            <a href="/chat">
+            <Link to="/chat">
               <span className="relative z-10 flex items-center gap-2">
                 Try it now → Start Chatting
                 <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </span>
               <div className="absolute inset-0 bg-linear-to-r from-primary to-primary/80 group-hover:opacity-90 transition-opacity"></div>
-            </a>
+            </Link>
           </Button>
         </div>
       </div>
