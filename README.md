@@ -19,8 +19,8 @@ Built to eliminate LLM "hallucination" and theological drift, BibleLM functions 
 
 ```text
 ┌──────────────┐      ┌──────────────────────────┐      ┌────────────────────┐
-│  Client App  │      │    Next.js Edge Route    │      │    Primary LLM     │
-│ (React / TS) ├─────►│ (proxy.ts + Rate Limit)  ├─────►│ (Groq: Llama 3.1)  │
+│  Client App  │      │ Cloudflare Worker (Hono) │      │    Primary LLM     │
+│ (React / TS) ├─────►│  (worker/ + Rate Limit)  ├─────►│ (Groq: Llama 3.1)  │
 └──────────────┘      └────────────┬─────────────┘      └──────────┬─────────┘
                                    │                               │
                                    ▼                               ▼

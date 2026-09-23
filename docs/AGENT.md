@@ -1,7 +1,7 @@
 # BibleLM — Agent Instructions
 
-**Stack:** Next.js 15 App Router, TypeScript, React, Tailwind, Supabase, Python  
-**Core:** Full-stack biblical research LLM with RAG (semantic search + LLM chat)
+**Stack:** Vite SPA, Cloudflare Workers (Hono), React 19, TypeScript, Rust WASM, Tailwind CSS v4  
+**Core:** Full-stack biblical research LLM with RAG (lexical/semantic hybrid search + GraphRAG + LLM chat)
 
 ---
 
@@ -9,12 +9,14 @@
 
 | Dir | Purpose |
 |-----|---------|
-| `app/` | Next.js routes + API handlers |
-| `components/` | UI — Chat, Message, TranslationSelect |
-| `lib/` | Retrieval, morphology, translations |
-| `scripts/` | Build, security checks |
-| `data/` | Indexes + morphology data |
-| `local-docs/` | Sprint-specific context (check here first) |
+| `src/` | Vite React SPA frontend |
+| `worker/` | Cloudflare Workers edge routes + Hono API handlers |
+| `components/` | Shared UI — Chat, Message, TranslationSelect |
+| `lib/` | Retrieval, morphology, translations, Rust bridge |
+| `rust/` | Rust crates & WebAssembly acceleration engine |
+| `scripts/` | Data build scripts, security audits |
+| `data/` | Indexes, binary graphs, morphology datasets |
+| `docs/` | Architecture specs and benchmark documentation |
 
 ---
 
