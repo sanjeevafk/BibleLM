@@ -60,26 +60,31 @@ async function copyFile(src: string, dest: string): Promise<void> {
 async function buildTranslations(): Promise<number> {
   const indexRaw = await fs.promises.readFile(path.join(DATA_DIR, 'translations-index.json'), 'utf8');
   const index = JSON.parse(indexRaw) as Record<string, Record<string, string>>;
-  await copyFile(
-    path.join(DATA_DIR, 'translations-index.json'),
-    path.join(OUT_DIR, 'translations-index.json')
-  );
+  const outIndex: Record<string, Record<string, string>> = {};
   let count = 0;
   const seen = new Set<string>();
-  for (const books of Object.values(index)) {
-    for (const file of Object.values(books)) {
-      if (seen.has(file) || file.includes('..') || path.isAbsolute(file)) continue;
-      seen.add(file);
-      const plain = path.join(DATA_DIR, 'translations', file);
-      try {
-        await fs.promises.access(plain);
-      } catch {
-        continue; // compressed-only variants are skipped; plain JSON is the contract
-      }
-      await copyFile(plain, path.join(OUT_DIR, 'translations', file));
+  for (const [translation, books] of Object.entries(index)) {
+    outIndex[translation] = {};
+    for (const [book, file] of Object.entries(books)) {
+      if (file.includes('..') || path.isAbsolute(file)) continue;
+      // Normalize to a plain-JSON asset name: `bsb-GEN.json.br` -> `bsb-GEN.json`.
+      const base = path.basename(file).replace(/\.(br|gz)$/, '');
+      const outFile = base.endsWith('.json') ? base : `${base}.json`;
+      outIndex[translation][book] = outFile;
+      if (seen.has(outFile)) continue;
+      seen.add(outFile);
+      const src = await resolveDataFile(path.join(DATA_DIR, 'translations', file.replace(/\.(br|gz)$/, '')));
+      // Fall back to the literal indexed path (handles already-plain names).
+      const resolved = src ?? (await resolveDataFile(path.join(DATA_DIR, 'translations', file)));
+      if (!resolved) continue;
+      const dest = path.join(OUT_DIR, 'translations', outFile);
+      await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+      await fs.promises.writeFile(dest, await readMaybeCompressed(resolved));
       count += 1;
     }
   }
+  await fs.promises.mkdir(OUT_DIR, { recursive: true });
+  await fs.promises.writeFile(path.join(OUT_DIR, 'translations-index.json'), JSON.stringify(outIndex));
   return count;
 }
 
@@ -146,6 +151,8 @@ async function buildInterlinear(): Promise<number> {
 
 async function main(): Promise<void> {
   const started = Date.now();
+  // Clean previous output so renamed/stale assets never ship.
+  await fs.promises.rm(OUT_DIR, { recursive: true, force: true });
   const translations = await buildTranslations();
   const chapters = await buildInterlinear();
   await copyFile(path.join(DATA_DIR, 'strongs-dict.json'), path.join(OUT_DIR, 'strongs-dict.json'));
