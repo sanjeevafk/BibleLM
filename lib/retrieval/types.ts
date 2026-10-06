@@ -63,7 +63,12 @@ export const TSK_CONFIG = {
 // Core domain types
 // ---------------------------------------------------------------------------
 
-export type VerseResult = { verseId: string; score?: number };
+export type VerseResult = {
+  verseId: string;
+  score?: number;
+  /** Cosine similarity to the query embedding, when the semantic path ran. */
+  semanticSimilarity?: number;
+};
 
 export type LexicalDoc = {
   verseId: string;
@@ -74,6 +79,9 @@ export type RankedVerse = {
   verseId: string;
   score: number;
   rankLexical: number;
+  semanticSimilarity?: number;
+  /** Neural re-ranker probability (softmax over Workers AI logits). */
+  relevanceScore?: number;
 };
 
 // ---------------------------------------------------------------------------

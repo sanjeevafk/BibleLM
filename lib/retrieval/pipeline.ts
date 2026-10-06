@@ -10,6 +10,7 @@ import { getCrossReferences } from '../datasets/tsk';
 import {
   ENABLE_DETERMINISTIC_RERANKER,
   ENABLE_GRAPH_RAG,
+  ENABLE_NEURAL_RERANK,
   ENABLE_PASSAGE_RETRIEVAL,
   ENABLE_RETRIEVAL_DEBUG,
   ENABLE_TSK_CLUSTER_BOOST,
@@ -22,7 +23,9 @@ import {
   RETRIEVAL_ENRICHMENT_LIMITS,
   RETRIEVAL_SCORE_WEIGHTS,
 } from './types';
-import type { RetrievalInstrumentation } from './types';
+import type { RankedVerse, RetrievalInstrumentation } from './types';
+import { shouldRerank, rerankCandidates, RERANK_MAX_CANDIDATES } from './reranker';
+import type { WorkersAiBinding } from './reranker';
 import { cloneVerses, normalizeVerses, dedupeByVerseId, escapeLikePattern } from './verse-utils';
 import { applyTopicGuards, applyCuratedTopicalLists } from './topic-guards';
 import { rustGraphExpand as graphRagExpand } from '../rust-bridge';
@@ -238,15 +241,17 @@ async function detectMatchedTopicsWithDataset(normalizedQuery: string): Promise<
   return detectMatchedTopics(normalizedQuery, topics);
 }
 
-async function applyDeterministicReranker(
-  candidates: Array<{ verseId: string; score?: number }>,
+// Exported for offline quality audits (lets harnesses replay the fused
+// ranking without running the full fetch/enrich pipeline).
+export async function applyDeterministicReranker(
+  candidates: Array<{ verseId: string; score?: number; semanticSimilarity?: number }>,
   directRefIds: string[],
   topK: number,
   debugState: ReturnType<typeof createRetrievalDebugState> | undefined,
   matchedTopics?: Set<string>,
   clusterScores?: Map<string, number>,
   passageScores?: Map<string, number>
-): Promise<string[]> {
+): Promise<Array<{ verseId: string; finalScore: number; semanticSimilarity?: number }>> {
   if (candidates.length === 0) return [];
 
   const metadataConfidence = await getVerseMetadataConfidenceMap();
@@ -270,8 +275,8 @@ async function applyDeterministicReranker(
   const reranked = candidates
     .map((candidate, index) => {
       const verseId = candidate.verseId.trim().toUpperCase();
-      const fusedScore = typeof candidate.score === 'number' ? candidate.score : fallbackBaseScore(index);
-      const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
+            const fusedScore = typeof candidate.score === 'number' ? candidate.score : fallbackBaseScore(index);
+            const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
       const metadataSignal = clamp01(metadataConfidence.get(verseId) ?? 0.5);
       const crossReferenceSignal = crossReferenceSet.has(verseId) ? 1 : 0;
       const clusterSignal = clamp01(clusterScores?.get(verseId) ?? 0);
@@ -310,11 +315,17 @@ async function applyDeterministicReranker(
         );
       }
 
-      return { verseId, finalScore };
+      return {
+        verseId,
+        finalScore,
+        ...(typeof candidate.semanticSimilarity === 'number'
+          ? { semanticSimilarity: candidate.semanticSimilarity }
+          : {}),
+      };
     })
     .sort((a, b) => b.finalScore - a.finalScore);
 
-  return reranked.map((entry) => entry.verseId);
+  return reranked;
 }
 // ---------------------------------------------------------------------------
 // TSK cross-reference expansion logic
@@ -370,9 +381,15 @@ export async function retrieveContextForQuery(
   query: string,
   translation: string,
   apiKey?: string,
-  instrumentation?: RetrievalInstrumentation
+  instrumentation?: RetrievalInstrumentation,
+  options?: { aiBinding?: unknown }
 ): Promise<VerseContext[]> {
   const debugState = ENABLE_RETRIEVAL_DEBUG ? createRetrievalDebugState() : undefined;
+  // Cloudflare env.AI binding, when the edge route provides one. Absent in
+  // local dev/tests, where neural stages gracefully fall back.
+  const rawBinding = options?.aiBinding as WorkersAiBinding | null | undefined;
+  const aiBinding =
+    rawBinding && typeof rawBinding.run === 'function' ? rawBinding : null;
 
   // Cache hit
   const cached = await getCachedRetrievalContext({ query, translation, version: CONTEXT_CACHE_VERSION });
@@ -494,8 +511,9 @@ export async function retrieveContextForQuery(
       });
     }
     // Merge graph-expanded candidates with calibrated graph scores
-    const graphCandidates = (graphResult.candidates ?? graphResult.expandedIds.map(id => ({ verseId: id, score: 0.5 })))
-      .filter((c) => !hybridResults.some((r) => r.verseId.toUpperCase() === c.verseId.toUpperCase()));
+    const graphCandidates: Array<{ verseId: string; score?: number; semanticSimilarity?: number }> =
+      (graphResult.candidates ?? graphResult.expandedIds.map(id => ({ verseId: id, score: 0.5 })))
+        .filter((c) => !hybridResults.some((r) => r.verseId.toUpperCase() === c.verseId.toUpperCase()));
     allCandidates = [...hybridResults, ...graphCandidates];
   }
 
@@ -509,7 +527,81 @@ export async function retrieveContextForQuery(
       clusterScores,
       passageScores
     )
-    : allCandidates.map((result) => result.verseId.trim().toUpperCase());
+    : allCandidates.map((result, index) => ({
+      verseId: result.verseId.trim().toUpperCase(),
+      finalScore:
+        typeof result.score === 'number'
+          ? result.score
+          : (allCandidates.length - index) / allCandidates.length,
+      ...(typeof result.semanticSimilarity === 'number'
+        ? { semanticSimilarity: result.semanticSimilarity }
+        : {}),
+    }));
+
+  // Conditional neural re-ranking (Workers AI bge-reranker-base). Gates on
+  // the fused ordering above, refines at most the top-12 head, and keeps
+  // the fused order on every fallback path (no binding, gate miss, error).
+  let finalCandidateOrder = candidateOrder.map((entry) => entry.verseId);
+  const rankedForGate: RankedVerse[] = candidateOrder.map((entry, index) => ({
+    verseId: entry.verseId,
+    score: entry.finalScore,
+    rankLexical: index + 1,
+    ...(typeof entry.semanticSimilarity === 'number'
+      ? { semanticSimilarity: entry.semanticSimilarity }
+      : {}),
+  }));
+  const gatePassed = ENABLE_NEURAL_RERANK && shouldRerank(normalizedQuery, rankedForGate, intent);
+  const rerankStartedAt = performance.now();
+  if (gatePassed && aiBinding) {
+    try {
+      const headIds = finalCandidateOrder.slice(0, RERANK_MAX_CANDIDATES);
+      const hydrated = await fetchVersesByIds(headIds, translation);
+      const verseTexts = new Map(
+        hydrated.map((verse) => [verse.reference.trim().toUpperCase(), verse.text])
+      );
+      const { ranked: reranked, applied } = await rerankCandidates(
+        normalizedQuery,
+        rankedForGate,
+        verseTexts,
+        aiBinding
+      );
+      finalCandidateOrder = reranked.map((candidate) => candidate.verseId.trim().toUpperCase());
+      console.info(JSON.stringify({
+        event: 'neural_rerank',
+        action: applied ? 'applied' : 'fallback',
+        headCount: headIds.length,
+        topRef: finalCandidateOrder[0] ?? null,
+        latencyMs: Number((performance.now() - rerankStartedAt).toFixed(2)),
+      }));
+      if (debugState) {
+        addRetrievalStageTrace(debugState, {
+          stage: 'neural_rerank',
+          action: applied ? 'applied' : 'fallback',
+          headCount: headIds.length,
+          topRef: finalCandidateOrder[0] ?? null,
+        });
+      }
+    } catch (error) {
+      console.warn('[retrieval] neural rerank stage failed; keeping fused order', error);
+      if (debugState) {
+        addRetrievalStageTrace(debugState, { stage: 'neural_rerank', action: 'error_fallback' });
+      }
+    }
+  } else {
+    if (debugState) {
+      addRetrievalStageTrace(debugState, {
+        stage: 'neural_rerank',
+        action: 'skipped',
+        reason: !ENABLE_NEURAL_RERANK
+          ? 'flag_off'
+          : !aiBinding
+            ? 'no_binding'
+            : 'gate_miss',
+      });
+    }
+  }
+
+  const candidateOrderIds = finalCandidateOrder;
 
   const pericopeRefIds: string[] = [];
   if (matchedPericopes.length > 0) {
@@ -524,7 +616,7 @@ export async function retrieveContextForQuery(
 
   const orderedIds: string[] = [];
   const seenIds = new Set<string>();
-  for (const verseId of [...pericopeRefIds, ...directRefIds, ...candidateOrder]) {
+  for (const verseId of [...pericopeRefIds, ...directRefIds, ...candidateOrderIds]) {
     const key = verseId.trim().toUpperCase();
     if (seenIds.has(key)) continue;
     seenIds.add(key);

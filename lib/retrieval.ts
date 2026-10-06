@@ -6,4 +6,6 @@
  */
 
 export { retrieveContextForQuery } from './retrieval/pipeline';
+export { shouldRerank, rerankCandidates, RERANK_MODEL, RERANK_MAX_CANDIDATES } from './retrieval/reranker';
+export type { WorkersAiBinding } from './retrieval/reranker';
 export type { RetrievalInstrumentation } from './retrieval/types';

@@ -11,7 +11,11 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
+  "ai": {
+    "binding": "AI"
+  },
   "vars": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "ENABLE_NEURAL_RERANK": "1"
   }
 }
