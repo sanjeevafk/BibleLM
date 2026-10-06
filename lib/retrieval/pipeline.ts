@@ -241,15 +241,17 @@ async function detectMatchedTopicsWithDataset(normalizedQuery: string): Promise<
   return detectMatchedTopics(normalizedQuery, topics);
 }
 
-async function applyDeterministicReranker(
-  candidates: Array<{ verseId: string; score?: number }>,
+// Exported for offline quality audits (lets harnesses replay the fused
+// ranking without running the full fetch/enrich pipeline).
+export async function applyDeterministicReranker(
+  candidates: Array<{ verseId: string; score?: number; semanticSimilarity?: number }>,
   directRefIds: string[],
   topK: number,
   debugState: ReturnType<typeof createRetrievalDebugState> | undefined,
   matchedTopics?: Set<string>,
   clusterScores?: Map<string, number>,
   passageScores?: Map<string, number>
-): Promise<Array<{ verseId: string; finalScore: number }>> {
+): Promise<Array<{ verseId: string; finalScore: number; semanticSimilarity?: number }>> {
   if (candidates.length === 0) return [];
 
   const metadataConfidence = await getVerseMetadataConfidenceMap();
@@ -273,8 +275,8 @@ async function applyDeterministicReranker(
   const reranked = candidates
     .map((candidate, index) => {
       const verseId = candidate.verseId.trim().toUpperCase();
-      const fusedScore = typeof candidate.score === 'number' ? candidate.score : fallbackBaseScore(index);
-      const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
+            const fusedScore = typeof candidate.score === 'number' ? candidate.score : fallbackBaseScore(index);
+            const directReferenceSignal = directRefs.has(verseId) ? 1 : 0;
       const metadataSignal = clamp01(metadataConfidence.get(verseId) ?? 0.5);
       const crossReferenceSignal = crossReferenceSet.has(verseId) ? 1 : 0;
       const clusterSignal = clamp01(clusterScores?.get(verseId) ?? 0);
@@ -313,7 +315,13 @@ async function applyDeterministicReranker(
         );
       }
 
-      return { verseId, finalScore };
+      return {
+        verseId,
+        finalScore,
+        ...(typeof candidate.semanticSimilarity === 'number'
+          ? { semanticSimilarity: candidate.semanticSimilarity }
+          : {}),
+      };
     })
     .sort((a, b) => b.finalScore - a.finalScore);
 
@@ -503,8 +511,9 @@ export async function retrieveContextForQuery(
       });
     }
     // Merge graph-expanded candidates with calibrated graph scores
-    const graphCandidates = (graphResult.candidates ?? graphResult.expandedIds.map(id => ({ verseId: id, score: 0.5 })))
-      .filter((c) => !hybridResults.some((r) => r.verseId.toUpperCase() === c.verseId.toUpperCase()));
+    const graphCandidates: Array<{ verseId: string; score?: number; semanticSimilarity?: number }> =
+      (graphResult.candidates ?? graphResult.expandedIds.map(id => ({ verseId: id, score: 0.5 })))
+        .filter((c) => !hybridResults.some((r) => r.verseId.toUpperCase() === c.verseId.toUpperCase()));
     allCandidates = [...hybridResults, ...graphCandidates];
   }
 
@@ -524,6 +533,9 @@ export async function retrieveContextForQuery(
         typeof result.score === 'number'
           ? result.score
           : (allCandidates.length - index) / allCandidates.length,
+      ...(typeof result.semanticSimilarity === 'number'
+        ? { semanticSimilarity: result.semanticSimilarity }
+        : {}),
     }));
 
   // Conditional neural re-ranking (Workers AI bge-reranker-large). Gates on
@@ -534,6 +546,9 @@ export async function retrieveContextForQuery(
     verseId: entry.verseId,
     score: entry.finalScore,
     rankLexical: index + 1,
+    ...(typeof entry.semanticSimilarity === 'number'
+      ? { semanticSimilarity: entry.semanticSimilarity }
+      : {}),
   }));
   if (ENABLE_NEURAL_RERANK && shouldRerank(normalizedQuery, rankedForGate, intent)) {
     try {

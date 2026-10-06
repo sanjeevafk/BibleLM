@@ -63,7 +63,12 @@ export const TSK_CONFIG = {
 // Core domain types
 // ---------------------------------------------------------------------------
 
-export type VerseResult = { verseId: string; score?: number };
+export type VerseResult = {
+  verseId: string;
+  score?: number;
+  /** Cosine similarity to the query embedding, when the semantic path ran. */
+  semanticSimilarity?: number;
+};
 
 export type LexicalDoc = {
   verseId: string;
