@@ -4,8 +4,9 @@
  */
 
 import { getMorphForVerse as getMorphhbWords } from '../datasets/morphhb';
-import { getStrongsEntry } from '../datasets/strongs';
-import { getOpenHebrewBibleLayers, type OpenHebrewVerseLayers } from '../datasets/open-hebrew-bible';
+import { getStrongsEntries } from '../datasets/strongs';
+import { getOpenHebrewText } from '../datasets/open-hebrew-bible';
+import type { OpenHebrewVerseLayers } from '../datasets/open-hebrew-bible';
 import { getOpenGNTLayers, type OpenGntVerseLayers } from '../opengnt';
 import { getTranslationVerse } from '../translations';
 import { fetchExternalWithTimeoutBudget, type VerseContext } from '../bible-fetch';
@@ -68,7 +69,7 @@ function parseOriginalTags(text: string): Array<{ word: string; strongs: string;
 // Layer formatters
 // ---------------------------------------------------------------------------
 
-function formatOpenHebrewLayers(layers: OpenHebrewVerseLayers): string {
+export function formatOpenHebrewLayers(layers: OpenHebrewVerseLayers): string {
   const parts: string[] = [];
   if (layers.clauses?.words?.length) {
     const clauseIds = Array.from(new Set(layers.clauses.words.map((w) => w.c).filter(Boolean)));
@@ -140,19 +141,19 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
 
   const hydrateOriginals = async (verse: VerseContext) => {
     await fillMorphCodes(verse);
-    await Promise.all(
-      verse.original.map(async (orig) => {
-        const dictEntry = await getStrongsEntry(orig.strongs);
-        if (dictEntry) {
-          if (!orig.gloss || orig.gloss.trim() === '') {
-            orig.gloss = dictEntry.short_definition || dictEntry.definition;
-          }
-          if (dictEntry.transliteration) {
-            orig.transliteration = dictEntry.transliteration;
-          }
+    // One batched dictionary lookup per verse instead of N round trips.
+    const dict = await getStrongsEntries(verse.original.map((orig) => orig.strongs));
+    for (const orig of verse.original) {
+      const dictEntry = dict.get(orig.strongs.trim().toUpperCase());
+      if (dictEntry) {
+        if (!orig.gloss || orig.gloss.trim() === '') {
+          orig.gloss = dictEntry.short_definition || dictEntry.definition;
         }
-      })
-    );
+        if (dictEntry.transliteration) {
+          orig.transliteration = dictEntry.transliteration;
+        }
+      }
+    }
   };
 
   await Promise.all(
@@ -244,8 +245,9 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
       const layerTasks: Array<Promise<void>> = [];
       if (bookRaw && cvRaw && OT_BOOKS.has(bookRaw) && !Number.isNaN(chapterNum) && !Number.isNaN(verseNum)) {
         layerTasks.push((async () => {
-          const layers = await getOpenHebrewBibleLayers(bookRaw, chapterNum, verseNum);
-          if (layers) verse.openHebrew = formatOpenHebrewLayers(layers);
+          // Turso-first preformatted string; falls back to local layers.
+          const text = await getOpenHebrewText(bookRaw, chapterNum, verseNum);
+          if (text) verse.openHebrew = text;
         })());
       }
       if (bookRaw && cvRaw && NT_BOOKS.has(bookRaw)) {

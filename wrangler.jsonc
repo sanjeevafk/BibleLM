@@ -7,10 +7,15 @@
     "nodejs_compat"
   ],
   "assets": {
-    "directory": "./dist",
+    "directory": "./dist/client",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
+  "workers_dev": true,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "biblelm.sanjeevkumar.me/*", "zone_name": "sanjeevkumar.me" }
+  ],
   "ai": {
     "binding": "AI"
   },

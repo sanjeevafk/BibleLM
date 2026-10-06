@@ -1,6 +1,11 @@
 # Docker build artifacts
 .next
 out
+dist
+.wrangler
+.dev.vars*
+data/embeddings/*.bin
+data/embeddings/*.jsonl
 
 # Source and dev files (not needed in image)
 node_modules
@@ -21,9 +26,8 @@ datasets/
 coverage/
 tests/
 
-# Docs / scripts not needed at runtime
+# Docs not needed at runtime (scripts/ IS needed: npm run build uses it)
 project-docs/
-scripts/
 *.md
 !README.md
 

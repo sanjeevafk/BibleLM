@@ -38,6 +38,11 @@ async function readJson<T = unknown>(filePath: string, label: string): Promise<T
 }
 
 export async function validateDataIntegrity(): Promise<void> {
+  // Edge runtime guard: do not run blocking filesystem validation in production / Cloudflare Workers
+  if (process.env.NODE_ENV === 'production' || typeof process === 'undefined' || !process.cwd) {
+    return;
+  }
+
   if (validationPromise) {
     return validationPromise;
   }

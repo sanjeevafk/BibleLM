@@ -292,13 +292,15 @@ function loadIndexSync(): void {
     // fallback to fs
   }
   try {
-    const raw = fs.readFileSync(INDEX_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, Record<string, string>>;
-    for (const [translation, books] of Object.entries(parsed)) {
-      indexCache[translation.toUpperCase()] = books;
+    if (typeof fs.existsSync === 'function' && fs.existsSync(INDEX_PATH)) {
+      const raw = fs.readFileSync(INDEX_PATH, 'utf8');
+      const parsed = JSON.parse(raw) as Record<string, Record<string, string>>;
+      for (const [translation, books] of Object.entries(parsed)) {
+        indexCache[translation.toUpperCase()] = books;
+      }
     }
-  } catch (error) {
-    console.warn('Translations index load failed', error);
+  } catch {
+    // Edge environment or file missing
   }
 }
 
@@ -307,12 +309,15 @@ loadIndexSync();
 function getBibleIndex(): Record<string, IndexedVerse> {
   if (bibleIndexCache) return bibleIndexCache;
   try {
-    const raw = fs.readFileSync(BIBLE_INDEX_PATH, 'utf8');
-    bibleIndexCache = JSON.parse(raw) as Record<string, IndexedVerse>;
-  } catch (error) {
-    console.warn('[translations] bible-full-index fallback unavailable.', error);
-    bibleIndexCache = {};
+    if (typeof fs.existsSync === 'function' && fs.existsSync(BIBLE_INDEX_PATH)) {
+      const raw = fs.readFileSync(BIBLE_INDEX_PATH, 'utf8');
+      bibleIndexCache = JSON.parse(raw) as Record<string, IndexedVerse>;
+      return bibleIndexCache;
+    }
+  } catch {
+    // Edge environment or file missing
   }
+  bibleIndexCache = {};
   return bibleIndexCache;
 }
 
@@ -354,6 +359,10 @@ async function loadBook(translationRaw: string, bookRaw: string): Promise<Transl
   const loader = (async () => {
     try {
       const filePath = path.join(DATA_DIR, file);
+      if (typeof fs.existsSync === 'function' && !fs.existsSync(filePath)) {
+        bookCache.set(key, null);
+        return null;
+      }
       const raw = await fs.promises.readFile(filePath);
       let inflated: string;
       if (file.endsWith('.br')) {

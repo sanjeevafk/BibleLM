@@ -15,6 +15,7 @@
     "build:study-assets": "ts-node --project tsconfig.scripts.json scripts/build-study-assets.ts",
     "e2e:study": "node scripts/e2e-study-pane.mjs",
     "e2e:stream": "node scripts/e2e-streaming-ux.mjs",
+    "generate:embeddings": "ts-node --project tsconfig.scripts.json scripts/generate-embeddings.ts",
     "build:graph-index": "ts-node --project tsconfig.scripts.json scripts/build-graph-index.ts",
     "build:hf-dataset": "ts-node --project tsconfig.scripts.json scripts/build-hf-dataset.ts",
     "build:wasm": "RUSTFLAGS='-C target-feature=+simd128' wasm-pack build rust/crates/biblelm-wasm --target nodejs --out-dir ../../pkg && node -e \"require('fs').rmSync('rust/pkg/.gitignore', { force: true })\"",
@@ -43,6 +44,7 @@
   "dependencies": {
     "@ai-sdk/groq": "^3.0.29",
     "@ai-sdk/react": "^3.0.118",
+    "@libsql/client": "^0.18.0",
     "@radix-ui/react-slot": "^1.2.4",
     "@upstash/redis": "^1.37.0",
     "ai": "^6.0.116",

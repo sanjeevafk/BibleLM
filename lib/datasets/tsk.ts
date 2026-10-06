@@ -285,8 +285,32 @@ export async function getCrossReferences(reference: string): Promise<TskCrossRef
     return [];
   }
 
+  // Turso-first (uploaded by scripts/upload-enrichment-to-turso.ts).
+  try {
+    const { getDbPool } = await import('../db');
+    const pool = getDbPool();
+    if (pool) {
+      const res = await pool.query<{ refs?: unknown }>(
+        'SELECT refs FROM tsk_refs WHERE verse_id = ?',
+        [normalized]
+      );
+      const raw = res.rows[0]?.refs;
+      if (typeof raw === 'string') {
+        const { decodeTskRefs } = await import('./turso-schema');
+        const decoded = decodeTskRefs(JSON.parse(raw));
+        if (decoded) return dedupeRefs(decoded);
+      }
+    }
+  } catch {
+    // Fall through to the local dataset below.
+  }
+
   const index = await loadTskIndex();
   const raw = index.get(normalized) || [];
+  return dedupeRefs(raw);
+}
+
+function dedupeRefs(raw: TskCrossReference[]): TskCrossReference[] {
   const deduped = new Map<string, TskCrossReference>();
 
   for (const entry of raw) {
