@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import type { UIMessage } from 'ai';
 import type { VerseContext } from '@/lib/bible-fetch';
 import {
-  hasStructuredOriginalLanguage,
   normalizeOriginalLanguageEntries,
   type StructuredChatResponse,
   type StructuredVerseResponse,

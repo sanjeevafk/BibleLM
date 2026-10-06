@@ -7,7 +7,6 @@
  */
 
 import type { Context } from 'hono';
-import { streamText } from 'ai';
 import { createHash, randomUUID } from 'crypto';
 import { buildCacheKey, getCachedResponse, setCachedResponse } from '@/lib/cache';
 import { generateWithFallback } from '@/lib/llm-fallback';
@@ -18,9 +17,6 @@ import { ENABLE_RETRIEVAL_DEBUG } from '@/lib/feature-flags';
 import { inMemoryRateLimit } from '@/lib/rate-limit-memory';
 import { retrieveContextForQuery } from '@/lib/retrieval';
 import {
-  buildStructuredVerseResponse,
-  compactStructuredChatResponse,
-  normalizeOriginalLanguageEntries,
   type StructuredChatResponse,
 } from '@/lib/verse-response';
 
@@ -653,4 +649,3 @@ export async function POST(req: Request) {
 export async function handleChat(c: Context) {
   return POST(c.req.raw);
 }
-

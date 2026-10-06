@@ -62,7 +62,6 @@ function logExternalFetchWarning(payload: Record<string, unknown>): void {
 
 export async function fetchExternalWithTimeoutBudget(
   url: URL,
-  init: RequestInit = {},
   options: ExternalFetchBudgetOptions
 ): Promise<Response | null> {
   if (!isAllowedExternalUrl(url, options.source)) {
@@ -94,7 +93,7 @@ export async function fetchExternalWithTimeoutBudget(
 
     try {
       const response = await fetch(url, {
-        ...init,
+        method: 'GET',
         signal: controller.signal
       });
 
@@ -169,7 +168,6 @@ export async function fetchVerseHelloAO(
         'helloao',
         `/api/${encodeURIComponent(translation)}/${encodeURIComponent(book)}/${encodeURIComponent(`${chapter}.json`)}`
       ),
-      {},
       {
         source: 'helloao'
       }
@@ -204,7 +202,6 @@ export async function fetchVerseFallback(reference: string, translation: string 
       buildExternalUrl('bibleApi', `/${encodeURIComponent(reference)}`, {
         translation: translation.toLowerCase(),
       }),
-      {},
       {
         source: 'bibleApi'
       }

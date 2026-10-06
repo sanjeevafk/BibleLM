@@ -226,7 +226,7 @@ export async function enrichOriginalLanguages(verses: VerseContext[]): Promise<V
           const bollsRef = bkbToBollsPath(book, parseInt(chapter, 10));
           const bollsUrl = new URL('https://bolls.life');
           bollsUrl.pathname = `/get-chapter/${encodeURIComponent(trans)}/${bollsRef}/`;
-          const res = await fetchExternalWithTimeoutBudget(bollsUrl, {}, { source: 'bolls' });
+          const res = await fetchExternalWithTimeoutBudget(bollsUrl, { source: 'bolls' });
 
           if (res?.ok) {
             const chapterData = await res.json();

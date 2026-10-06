@@ -80,11 +80,6 @@ function checkRefMatch(actualRef: string, expectedRefs: string[]): boolean {
   });
 }
 
-function extractCitations(text: string): string[] {
-  const matches = text.match(/\b([1-3]?\s?[A-Z][a-z]+|\b[1-3]?\s?[A-Z]{3})\s+\d+:\d+(?:-\d+)?\b/g) || [];
-  return Array.from(new Set(matches));
-}
-
 async function runBenchmark() {
   console.log("================================================================================");
   console.log("           BIBLELM END-TO-END QUERY BENCHMARK & EVALUATION                      ");
