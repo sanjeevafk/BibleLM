@@ -1,7 +1,7 @@
 /**
  * Conditional neural re-ranking for retrieval.
  *
- * Uses Cloudflare Workers AI (`@cf/baai/bge-reranker-large`) to reorder the
+ * Uses Cloudflare Workers AI (`@cf/baai/bge-reranker-base`) to reorder the
  * top fused candidates when lexical/RRF signals are ambiguous. Cheap,
  * high-confidence, and citation-style queries skip the model call entirely
  * via shouldRerank. Every failure mode (missing binding, empty texts,
@@ -11,7 +11,7 @@
 import type { RankedVerse } from './types';
 
 /** Workers AI text-ranking model used for neural re-ranking. */
-export const RERANK_MODEL = '@cf/baai/bge-reranker-large';
+export const RERANK_MODEL = '@cf/baai/bge-reranker-base';
 
 /**
  * Maximum candidates sent to the model per call. Bounds edge latency and
@@ -142,13 +142,18 @@ export async function rerankCandidates(
 
   const head = candidates.slice(0, RERANK_MAX_CANDIDATES);
   const tail = candidates.slice(RERANK_MAX_CANDIDATES);
-  const contexts = head.map(
+  const texts = head.map(
     (candidate) => verseTexts.get(normalizeVerseId(candidate.verseId)) || ''
   );
-  if (contexts.every((text) => text.trim().length === 0)) return [...candidates];
+  if (texts.every((text) => text.trim().length === 0)) return [...candidates];
 
   try {
-    const raw = await aiBinding.run(RERANK_MODEL, { query, contexts });
+    // Documented input shape: contexts as [{ text }]; indices in the
+    // response refer to positions in this array.
+    const raw = await aiBinding.run(RERANK_MODEL, {
+      query,
+      contexts: texts.map((text) => ({ text })),
+    });
     const logits = parseRerankResponse(raw, head.length);
     if (!logits) return [...candidates];
 

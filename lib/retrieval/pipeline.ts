@@ -538,7 +538,7 @@ export async function retrieveContextForQuery(
         : {}),
     }));
 
-  // Conditional neural re-ranking (Workers AI bge-reranker-large). Gates on
+  // Conditional neural re-ranking (Workers AI bge-reranker-base). Gates on
   // the fused ordering above, refines at most the top-12 head, and keeps
   // the fused order on every fallback path (no binding, gate miss, error).
   let finalCandidateOrder = candidateOrder.map((entry) => entry.verseId);
@@ -550,7 +550,9 @@ export async function retrieveContextForQuery(
       ? { semanticSimilarity: entry.semanticSimilarity }
       : {}),
   }));
-  if (ENABLE_NEURAL_RERANK && shouldRerank(normalizedQuery, rankedForGate, intent)) {
+  const gatePassed = ENABLE_NEURAL_RERANK && shouldRerank(normalizedQuery, rankedForGate, intent);
+  const rerankStartedAt = performance.now();
+  if (gatePassed && aiBinding) {
     try {
       const headIds = finalCandidateOrder.slice(0, RERANK_MAX_CANDIDATES);
       const hydrated = await fetchVersesByIds(headIds, translation);
@@ -559,6 +561,13 @@ export async function retrieveContextForQuery(
       );
       const reranked = await rerankCandidates(normalizedQuery, rankedForGate, verseTexts, aiBinding);
       finalCandidateOrder = reranked.map((candidate) => candidate.verseId.trim().toUpperCase());
+      console.info(JSON.stringify({
+        event: 'neural_rerank',
+        action: 'applied',
+        headCount: headIds.length,
+        topRef: finalCandidateOrder[0] ?? null,
+        latencyMs: Number((performance.now() - rerankStartedAt).toFixed(2)),
+      }));
       if (debugState) {
         addRetrievalStageTrace(debugState, {
           stage: 'neural_rerank',
@@ -573,8 +582,18 @@ export async function retrieveContextForQuery(
         addRetrievalStageTrace(debugState, { stage: 'neural_rerank', action: 'error_fallback' });
       }
     }
-  } else if (debugState) {
-    addRetrievalStageTrace(debugState, { stage: 'neural_rerank', action: 'skipped' });
+  } else {
+    if (debugState) {
+      addRetrievalStageTrace(debugState, {
+        stage: 'neural_rerank',
+        action: 'skipped',
+        reason: !ENABLE_NEURAL_RERANK
+          ? 'flag_off'
+          : !aiBinding
+            ? 'no_binding'
+            : 'gate_miss',
+      });
+    }
   }
 
   const candidateOrderIds = finalCandidateOrder;
