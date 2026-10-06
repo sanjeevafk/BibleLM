@@ -326,21 +326,24 @@ export async function streamTextFromContent(
   messages: Array<{ role: string; content: string }>,
   preferredChunks?: string[]
 ) {
-  const chunkText = (input: string): string[] => {
-    const chunks: string[] = [];
-    const maxChunkLength = 220;
-    let cursor = 0;
-    while (cursor < input.length) {
-      chunks.push(input.slice(cursor, cursor + maxChunkLength));
-      cursor += maxChunkLength;
+  const hasLiveChunks = Array.isArray(preferredChunks) && preferredChunks.length > 0;
+
+  // Word-level deltas keep client renders small and progressive instead of
+  // dumping 220-character blocks. Pacing is applied only to synthesized
+  // playback (cache/fallback full text); live LLM chunks already arrive at
+  // model pace, so re-chunking them adds no artificial delay.
+  const wordDeltas = (input: string): string[] => {
+    const words = input.split(/(\s+)/).filter((part) => part.length > 0);
+    const deltas: string[] = [];
+    for (let i = 0; i < words.length; i += 2) {
+      deltas.push(words.slice(i, i + 2).join(''));
     }
-    return chunks.length > 0 ? chunks : [input];
+    return deltas.length > 0 ? deltas : [input];
   };
 
-  const chunks =
-    Array.isArray(preferredChunks) && preferredChunks.length > 0
-      ? preferredChunks
-      : chunkText(text);
+  const chunks = hasLiveChunks
+    ? (preferredChunks as string[]).flatMap(wordDeltas)
+    : wordDeltas(text);
   const textDeltas = chunks.map((delta) => ({ type: 'text-delta', id: 'text-1', delta }));
 
   const cachedStreamModel = {
@@ -349,6 +352,11 @@ export async function streamTextFromContent(
     modelId: 'cache',
     doStream: async () => ({
       stream: simulateReadableStream({
+        initialDelayInMs: 0,
+        // Pace synthesized playback at ~15ms per word-pair so the UI can
+        // show active progress before the full text arrives. Live LLM
+        // replay uses no added delay (see above).
+        chunkDelayInMs: hasLiveChunks ? 0 : 15,
         chunks: [
           { type: 'stream-start', warnings: [] },
           { type: 'text-start', id: 'text-1' },

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isVerseStartLine } from '@/components/Message';
+import { isVerseStartLine, partitionStreamingBlocks } from '@/components/Message';
 
 // ---------------------------------------------------------------------------
 // True verse lines — should return true
@@ -105,5 +105,46 @@ describe('isVerseStartLine → false for excluded patterns', () => {
 
   it('- original language details (no bold)', () => {
     expect(isVerseStartLine('- original language details:')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// partitionStreamingBlocks — only terminated (quote + reference) blocks
+// become cards mid-stream; partial tails stay as plain text.
+// ---------------------------------------------------------------------------
+
+describe('partitionStreamingBlocks', () => {
+  it('passes everything through when all blocks are terminated', () => {
+    const blocks = [
+      { reference: 'JHN 3:16', shortQuote: 'For God so loved…' },
+      { reference: 'ROM 8:28', shortQuote: 'And we know…' },
+    ];
+    const { terminated, pending } = partitionStreamingBlocks(blocks);
+    expect(terminated).toHaveLength(2);
+    expect(pending).toHaveLength(0);
+  });
+
+  it('holds back the unterminated tail (no reference yet)', () => {
+    const blocks = [
+      { reference: 'JHN 3:16', shortQuote: 'For God so loved…' },
+      { reference: null, shortQuote: '“And we know that in all thin' },
+    ];
+    const { terminated, pending } = partitionStreamingBlocks(blocks);
+    expect(terminated.map((b) => b.reference)).toEqual(['JHN 3:16']);
+    expect(pending).toHaveLength(1);
+  });
+
+  it('treats reference-less cards and empty quotes as pending', () => {
+    const blocks = [
+      { reference: null, shortQuote: 'Some text without a ref' },
+      { reference: 'GEN 1:1', shortQuote: '   ' },
+    ];
+    const { terminated, pending } = partitionStreamingBlocks(blocks);
+    expect(terminated).toHaveLength(0);
+    expect(pending).toHaveLength(2);
+  });
+
+  it('handles empty input', () => {
+    expect(partitionStreamingBlocks([])).toEqual({ terminated: [], pending: [] });
   });
 });

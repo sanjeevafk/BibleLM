@@ -165,6 +165,27 @@ function parseVerseBlocks(content: string): {
   };
 }
 
+/**
+ * Splits raw-parsed verse blocks for mid-stream rendering. A block counts
+ * as terminated only once its reference line (quote + reference) has fully
+ * arrived; anything still streaming stays as plain text so citation cards
+ * never pop in, reshape, or reorder mid-stream. Exported for unit tests.
+ */
+export function partitionStreamingBlocks<T extends { reference: string | null; shortQuote: string }>(
+  blocks: T[]
+): { terminated: T[]; pending: T[] } {
+  const terminated: T[] = [];
+  const pending: T[] = [];
+  for (const block of blocks) {
+    if (block.reference && block.shortQuote.trim().length > 0) {
+      terminated.push(block);
+    } else {
+      pending.push(block);
+    }
+  }
+  return { terminated, pending };
+}
+
 function buildBlocksFromMetadata(verses: VerseContext[]): VerseBlock[] {
   return verses
     .filter((verse) => Boolean(verse?.text && verse?.reference))
@@ -299,9 +320,12 @@ type MessageMetadata = {
 export const Message = React.memo(function Message({
   message,
   onExploreVerse,
+  isStreaming = false,
 }: {
   message: UIMessage;
   onExploreVerse?: (reference: string) => void;
+  /** True while this assistant message is still streaming in. */
+  isStreaming?: boolean;
 }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
@@ -344,6 +368,19 @@ export const Message = React.memo(function Message({
     return [];
   }, [blocks, metadataVerses, structuredSections]);
 
+  // Mid-stream, only fully terminated raw-markdown blocks become cards.
+  // Structured/metadata blocks arrive complete, so they render immediately.
+  const hasCompleteBlocks = structuredSections.length > 0 || metadataVerses.length > 0;
+  const { terminated: streamedBlocks, pending: pendingBlocks } = React.useMemo(
+    () => partitionStreamingBlocks(blocks),
+    [blocks]
+  );
+  const cardBlocks = isStreaming && !hasCompleteBlocks ? streamedBlocks : verseBlocks;
+  const pendingMarkdown = React.useMemo(() => {
+    if (!isStreaming || hasCompleteBlocks || pendingBlocks.length === 0) return '';
+    return pendingBlocks.map((block) => block.markdown).join('\n\n');
+  }, [isStreaming, hasCompleteBlocks, pendingBlocks]);
+
   const markdownComponents = React.useMemo(() => buildMarkdownComponents(), []);
 
   return (
@@ -360,13 +397,18 @@ export const Message = React.memo(function Message({
             <MessageContent content={preamble || fallbackSummary} components={markdownComponents} />
           )}
 
-          {/* Citation cards */}
+          {/* Citation cards (terminated blocks only while streaming) */}
           <MessageCitations
-            blocks={verseBlocks}
+            blocks={cardBlocks}
             preamble={preamble}
             fallbackSummary={fallbackSummary}
             onExplore={onExploreVerse}
           />
+
+          {/* In-flight partial verse text renders as standard text */}
+          {pendingMarkdown && (
+            <MessageContent content={pendingMarkdown} components={markdownComponents} />
+          )}
 
           {/* Postamble */}
           {postamble && (
@@ -377,15 +419,19 @@ export const Message = React.memo(function Message({
         </div>
 
         {!isUser && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute -right-12 top-0 h-9 w-9 text-muted-foreground/40 hover:text-primary opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-transparent"
-            onClick={handleCopy}
-            title="Copy whole response"
-          >
-            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-          </Button>
+          <div className="flex justify-end px-5 pb-3 sm:px-6">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-2 text-xs text-muted-foreground/70 hover:text-primary sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 focus-visible:opacity-100 transition-opacity"
+              onClick={handleCopy}
+              title="Copy whole response"
+              aria-label="Copy whole response"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
+            </Button>
+          </div>
         )}
       </div>
     </div>

@@ -6,11 +6,10 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Message } from './Message';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { TranslationSelect } from './TranslationSelect';
 import { StudyPane } from './study/StudyPane';
 import { useStudyPane } from './study/useStudyPane';
-import { Moon, Plus, Sun } from 'lucide-react';
+import { ArrowDown, ArrowUp, Moon, Plus, RotateCcw, Sparkles, Sun, Square } from 'lucide-react';
 
 type ChatInnerProps = {
   isDarkMode: boolean;
@@ -21,6 +20,23 @@ type ChatInnerProps = {
 const TRANSLATION_STORAGE_KEY = 'biblelm-translation';
 const DEFAULT_TRANSLATION = 'BSB';
 const VALID_TRANSLATIONS = ['BSB', 'KJV', 'WEB', 'ASV', 'NHEB'];
+
+const STARTER_PROMPTS = [
+  'Good Samaritan in Greek',
+  'Romans 8:28 context',
+  'What does the Bible say about faith?',
+  'Genesis 1:1 original words',
+];
+
+/** Plain-text snapshot of an assistant message (for streaming phase UI). */
+function getAssistantText(message: UIMessage): string {
+  const parts = (message as unknown as { parts?: Array<{ type?: string; text?: string }> }).parts;
+  if (!Array.isArray(parts)) return '';
+  return parts
+    .filter((part) => part?.type === 'text')
+    .map((part) => part.text || '')
+    .join('');
+}
 
 export function Chat() {
   const mounted = useSyncExternalStore(
@@ -122,7 +138,7 @@ function ChatInner({
     [chatFetch]
   );
 
-  const { messages, sendMessage, status, error } = useChat<UIMessage>({
+  const { messages, sendMessage, regenerate, stop, status, error } = useChat<UIMessage>({
     messages: [],
     transport,
   });
@@ -130,6 +146,8 @@ function ChatInner({
   const isLoading = status === 'submitted' || status === 'streaming';
 
   const shouldAutoScroll = useRef(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     localStorage.setItem(TRANSLATION_STORAGE_KEY, selectedTranslation);
@@ -144,11 +162,21 @@ function ChatInner({
     }
   }, []);
 
+  const handleScrollToBottom = useCallback(() => {
+    // Re-pin follow mode so appended stream tokens keep us at the bottom
+    // even though content grows mid-flight.
+    shouldAutoScroll.current = true;
+    setIsAtBottom(true);
+    scrollToBottom(true);
+  }, [scrollToBottom]);
+
   const handleScroll = useCallback(() => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const atBottom = scrollHeight - scrollTop - clientHeight < 100;
+      // Disengage autoscroll as soon as the user scrolls up past 40px.
+      const atBottom = scrollHeight - scrollTop - clientHeight < 40;
       shouldAutoScroll.current = atBottom;
+      setIsAtBottom(atBottom);
     }
   }, []);
 
@@ -166,12 +194,12 @@ function ChatInner({
     setSelectedTranslation(newTranslation);
   }, []);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = input.trim();
+  const submitQuery = useCallback(async (rawText: string) => {
+    const trimmed = rawText.trim();
     if (!trimmed || isLoading) return;
 
     shouldAutoScroll.current = true;
+    setIsAtBottom(true);
 
     try {
       await sendMessage(
@@ -187,12 +215,38 @@ function ChatInner({
     } catch (err) {
       console.error('Failed to send message:', err);
     }
+  }, [isLoading, scrollToBottom, selectedTranslation, sendMessage]);
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void submitQuery(input);
   };
+
+  const handleRetry = useCallback(() => {
+    // Resubmits the previous user prompt without duplicating it.
+    void regenerate({ body: { translation: selectedTranslation } });
+  }, [regenerate, selectedTranslation]);
+
+  // Auto-grow the composer up to its max height.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [input]);
+
+  const lastMessage = messages[messages.length - 1];
+  const lastAssistantText = lastMessage?.role === 'assistant' ? getAssistantText(lastMessage) : '';
+  // Pre-token progress: the worker tags stream-open metadata with
+  // phase: 'synthesizing', and no assistant text yet means no tokens
+  // have arrived — show the active progress bubble below.
+  const showSynthesizing =
+    isLoading && lastMessage?.role === 'assistant' && !lastAssistantText;
 
   return (
     <div className="flex min-h-[100vh] min-h-[100dvh] h-[100dvh] flex-col bg-background">
       <div className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:border-x">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:border-x">
       {/* Header */}
       <header className="shrink-0 border-b bg-card/80 backdrop-blur-md">
         <div className={`${contentContainerClass} grid grid-cols-[auto_1fr_auto] items-center py-2.5 sm:py-3 md:py-4`}>
@@ -245,6 +299,20 @@ function ChatInner({
                 <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
                   Ask me anything, such as <span className="italic">&quot;What does the Bible say about creation?&quot;</span>
                 </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Starter prompts">
+                  {STARTER_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => void submitQuery(prompt)}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground/80 shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Sparkles className="h-3 w-3 text-primary/60" />
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -252,26 +320,61 @@ function ChatInner({
           <div className={`${contentContainerClass} py-3 sm:py-4`}>
             <div className="flex flex-col gap-2 pb-4">
               {messages.map((message) => (
-                <Message key={message.id} message={message} onExploreVerse={study.openStudy} />
+                <Message
+                  key={message.id}
+                  message={message}
+                  onExploreVerse={study.openStudy}
+                  isStreaming={isLoading && message.id === lastMessage?.id && message.role === 'assistant'}
+                />
               ))}
 
-              {isLoading && messages[messages.length - 1]?.role === 'user' && (
-                <div className="flex justify-start my-4">
-                  <div className="bg-muted border rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-muted-foreground">
+              {isLoading && (!lastMessage || lastMessage.role === 'user') && (
+                <div className="flex justify-start my-4" role="status" aria-live="polite">
+                  <div className="bg-muted border rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-muted-foreground animate-pulse">
                     Retrieving verses...
+                  </div>
+                </div>
+              )}
+
+              {showSynthesizing && (
+                <div className="flex justify-start my-4" role="status" aria-live="polite">
+                  <div className="bg-muted border rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-muted-foreground animate-pulse">
+                    Synthesizing response...
                   </div>
                 </div>
               )}
 
               {error && (
                 <div className="mx-auto w-full max-w-md my-4 p-4 border border-destructive bg-destructive/10 text-destructive text-sm rounded-lg text-center">
-                  {error.message || 'An error occurred. Please try again.'}
+                  <p>{error.message || 'An error occurred. Please try again.'}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRetry}
+                    className="mt-3 gap-1.5"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Retry
+                  </Button>
                 </div>
               )}
             </div>
           </div>
         )}
       </section>
+
+      {/* Floating scroll-to-bottom during streaming */}
+      {isLoading && !isAtBottom && messages.length > 0 && (
+        <Button
+          size="icon"
+          onClick={handleScrollToBottom}
+          aria-label="Scroll to bottom"
+          title="Scroll to bottom"
+          className="absolute bottom-24 right-4 z-10 h-10 w-10 rounded-full shadow-lg"
+        >
+          <ArrowDown className="h-4 w-4" />
+        </Button>
+      )}
 
       {/* Input Form */}
       <div className="sticky bottom-0 z-20 shrink-0 border-t bg-background/95 backdrop-blur">
@@ -283,24 +386,46 @@ function ChatInner({
           )}
           <form
             onSubmit={handleSubmit}
-            className="relative flex items-center shadow-sm"
+            className="relative shadow-sm"
           >
-            <Input
+            <textarea
+              ref={textareaRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void submitQuery(input);
+                }
+              }}
               placeholder="Ask a question..."
               disabled={isLoading}
-              className="pr-12 py-3 sm:py-5 rounded-full text-sm sm:text-base"
+              rows={1}
+              aria-label="Ask a question"
+              className="max-h-40 min-h-[48px] w-full resize-none overflow-y-auto rounded-3xl border border-input bg-background py-3 pl-4 pr-12 text-sm shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
             />
-            <Button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              size="icon"
-              aria-label="Send message"
-              className="absolute right-1.5 rounded-full h-9 w-9 sm:h-10 sm:w-10"
-            >
-              ✓
-            </Button>
+            {isLoading ? (
+              <Button
+                type="button"
+                onClick={stop}
+                size="icon"
+                aria-label="Stop generating"
+                title="Stop generating"
+                className="absolute bottom-1.5 right-1.5 rounded-full h-9 w-9 sm:h-10 sm:w-10"
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                disabled={!input.trim()}
+                size="icon"
+                aria-label="Send message"
+                className="absolute bottom-1.5 right-1.5 rounded-full h-9 w-9 sm:h-10 sm:w-10"
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+            )}
           </form>
           <p className="text-center text-[10px] text-muted-foreground/70 mt-1.5">
             Translation: {selectedTranslation} · Exact quotes, no commentary · OpenHebrewBible CC BY-NC 4.0

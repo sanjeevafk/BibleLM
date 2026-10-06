@@ -535,6 +535,9 @@ export async function POST(req: Request) {
               finalFallback,
               verses: cachedResponse.verses,
               metadata: cachedResponse.metadata,
+              // Lets the UI show active "synthesizing" progress as soon as
+              // the stream opens, before the first text deltas arrive.
+              ...(part.type === 'start' ? { phase: 'synthesizing' } : {}),
             } as unknown as Record<string, unknown>;
           }
           return undefined;
@@ -599,6 +602,9 @@ export async function POST(req: Request) {
             finalFallback,
             verses: normalizedResponse.verses,
             metadata: normalizedResponse.metadata,
+            // Lets the UI show active "synthesizing" progress as soon as
+            // the stream opens, before the first text deltas arrive.
+            ...(part.type === 'start' ? { phase: 'synthesizing' } : {}),
           } as unknown as Record<string, unknown>;
         }
         return undefined;
