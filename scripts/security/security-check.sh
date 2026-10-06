@@ -192,21 +192,21 @@ fi
 log_section "5. CODE QUALITY & DANGEROUS PATTERNS"
 
 if command -v rg >/dev/null 2>&1; then
-    EVAL_COUNT=$(rg -n "\\beval\\s*\\(" app lib components scripts config middleware.ts --glob '!**/node_modules/**' --glob '!**/*.test.*' --glob '!**/*.spec.*' 2>/dev/null | wc -l)
+    EVAL_COUNT=$(rg -n "\\beval\\s*\\(" app lib components scripts config middleware.ts src worker --glob '!**/node_modules/**' --glob '!**/*.test.*' --glob '!**/*.spec.*' --glob '!scripts/security/**' 2>/dev/null | wc -l)
     if [ "$EVAL_COUNT" -gt 0 ]; then
         log_fail "Found $EVAL_COUNT eval() calls - security risk"
     else
         log_pass "No eval() usage detected"
     fi
 
-    EXEC_COUNT=$(rg -n "\\b(exec|execSync|spawn|spawnSync|system)\\s*\\(" app lib components scripts config middleware.ts --glob '!**/node_modules/**' 2>/dev/null | wc -l)
+    EXEC_COUNT=$(rg -n "\\b(exec|execSync|spawn|spawnSync|system)\\s*\\(" app lib components scripts config middleware.ts src worker --glob '!**/node_modules/**' --glob '!scripts/security/**' 2>/dev/null | wc -l)
     if [ "$EXEC_COUNT" -gt 0 ]; then
         log_warn "Found $EXEC_COUNT exec/spawn/system calls - verify input sanitization"
     else
         log_pass "No exec/spawn/system calls detected"
     fi
 
-    SQL_PATTERN=$(rg -n "(SELECT|INSERT|UPDATE|DELETE).*(\$\\{|\\+)|\\bquery\\s*\\(.*(\$\\{|\\+)" app lib components scripts config --glob '!**/node_modules/**' 2>/dev/null | wc -l)
+    SQL_PATTERN=$(rg -n "(SELECT|INSERT|UPDATE|DELETE).*(\$\\{|\\+)|\\bquery\\s*\\(.*(\$\\{|\\+)" app lib components scripts config src worker --glob '!**/node_modules/**' --glob '!scripts/security/**' 2>/dev/null | wc -l)
     if [ "$SQL_PATTERN" -gt 0 ]; then
         log_warn "Found $SQL_PATTERN potential dynamic SQL construction patterns"
     else
