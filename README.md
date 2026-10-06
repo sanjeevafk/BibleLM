@@ -10,8 +10,7 @@
 
 Built to eliminate LLM "hallucination" and theological drift, BibleLM functions as a strict "Sola Scriptura" (Scripture Alone) engine. It forces base models to answer complex theological queries using raw, cited text and structural linguistics rather than external commentary or interpretive bias.
 
-**Live Demo**: [https://biblelm.sanjeevkumar.me](https://biblelm.sanjeevkumar.me) (also served at [biblelm.strucker08.workers.dev](https://biblelm.strucker08.workers.dev))  
-**System Architecture Diagram**: [`docs/architecture.html`](docs/architecture.html)
+**Live Demo**: [https://biblelm.sanjeevkumar.me](https://biblelm.sanjeevkumar.me) (also served at [biblelm.strucker08.workers.dev](https://biblelm.strucker08.workers.dev))
 
 ---
 
