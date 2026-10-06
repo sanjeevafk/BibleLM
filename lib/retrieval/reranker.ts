@@ -169,12 +169,15 @@ export async function rerankCandidates(
     const logits = parseRerankResponse(raw, sendable.length);
     if (!logits) {
       // Log only the response SHAPE (never verse text) for operability.
-      const shape =
-        raw !== null && typeof raw === 'object'
-          ? Object.keys(raw as Record<string, unknown>)
-          : typeof raw;
+      const inner = (raw as { response?: unknown } | null)?.response;
       console.warn('[reranker] unparseable model response; keeping fused order', {
-        shape,
+        outer: raw !== null && typeof raw === 'object' ? Object.keys(raw) : typeof raw,
+        innerArray: Array.isArray(inner),
+        innerLength: Array.isArray(inner) ? inner.length : null,
+        firstKeys:
+          Array.isArray(inner) && inner[0] !== null && typeof inner[0] === 'object'
+            ? Object.keys(inner[0] as Record<string, unknown>)
+            : typeof (Array.isArray(inner) ? inner[0] : inner),
         expected: sendable.length,
       });
       return { ranked: [...candidates], applied: false };
