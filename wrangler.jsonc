@@ -12,6 +12,7 @@
     "not_found_handling": "single-page-application"
   },
   "workers_dev": true,
+  "preview_urls": false,
   "routes": [
     { "pattern": "biblelm.sanjeevkumar.me/*", "zone_name": "sanjeevkumar.me" }
   ],
