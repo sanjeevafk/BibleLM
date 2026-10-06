@@ -3,7 +3,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Copy, Check } from 'lucide-react';
+import { BookOpenText, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -82,9 +82,10 @@ interface MessageCitationsProps {
   blocks: VerseBlock[];
   preamble?: string;
   fallbackSummary?: string;
+  onExplore?: (reference: string) => void;
 }
 
-export function MessageCitations({ blocks, preamble, fallbackSummary }: MessageCitationsProps) {
+export function MessageCitations({ blocks, preamble, fallbackSummary, onExplore }: MessageCitationsProps) {
   const [copiedVerseId, setCopiedVerseId] = React.useState<string | null>(null);
   const markdownComponents = React.useMemo(() => buildMarkdownComponents(), []);
 
@@ -119,6 +120,20 @@ export function MessageCitations({ blocks, preamble, fallbackSummary }: MessageC
                   <span className="h-5 w-0.5 bg-primary/40 rounded-full" />
                   {block.reference || 'Verse'}
                 </div>
+              <div className="flex items-center gap-1">
+                {block.reference && onExplore && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2 text-[11px] font-semibold text-primary/80 hover:text-primary"
+                    onClick={() => onExplore(block.reference as string)}
+                    title={`Open ${block.reference} in study pane`}
+                    aria-label={`Explore ${block.reference} in study mode`}
+                  >
+                    <BookOpenText className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Study</span>
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -128,6 +143,7 @@ export function MessageCitations({ blocks, preamble, fallbackSummary }: MessageC
                 >
                   {verseCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground/60" />}
                 </Button>
+              </div>
               </div>
               <p className="bible-verse text-lg leading-relaxed text-foreground/90">
                 &quot;{block.shortQuote}&quot;
