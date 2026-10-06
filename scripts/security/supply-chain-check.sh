@@ -222,11 +222,18 @@ if [ -f "package.json" ]; then
 
     if command -v npm >/dev/null 2>&1; then
         SCRIPTS_WITH_INSTALL=$(npm ls --depth=0 --json 2>/dev/null | jq -r '.dependencies | keys[]?' 2>/dev/null | while read -r pkg; do
-            POSTINSTALL=$(npm view "$pkg" scripts.postinstall --json 2>/dev/null || echo "")
-            INSTALL=$(npm view "$pkg" scripts.install --json 2>/dev/null || echo "")
-            PREINSTALL=$(npm view "$pkg" scripts.preinstall --json 2>/dev/null || echo "")
-            if [ -n "$POSTINSTALL$INSTALL$PREINSTALL" ] && [ "$POSTINSTALL$INSTALL$PREINSTALL" != "nullnullnull" ]; then
-                echo "$pkg"
+            if [ -f "node_modules/$pkg/package.json" ]; then
+                HAS_INSTALL=$(jq -r 'if (.scripts.postinstall // .scripts.install // .scripts.preinstall) then "yes" else "" end' "node_modules/$pkg/package.json" 2>/dev/null)
+                if [ -n "$HAS_INSTALL" ]; then
+                    echo "$pkg"
+                fi
+            else
+                POSTINSTALL=$(npm view "$pkg" scripts.postinstall --json 2>/dev/null || echo "")
+                INSTALL=$(npm view "$pkg" scripts.install --json 2>/dev/null || echo "")
+                PREINSTALL=$(npm view "$pkg" scripts.preinstall --json 2>/dev/null || echo "")
+                if [ -n "$POSTINSTALL$INSTALL$PREINSTALL" ] && [ "$POSTINSTALL$INSTALL$PREINSTALL" != "nullnullnull" ]; then
+                    echo "$pkg"
+                fi
             fi
         done | wc -l)
 
