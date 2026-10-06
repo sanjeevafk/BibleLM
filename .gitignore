@@ -20,6 +20,9 @@
 /.wrangler
 /.wrangler-out
 
+# generated study-pane static assets (rebuild: npm run build:study-assets)
+/public/data/
+
 # misc
 .DS_Store
 *.pem

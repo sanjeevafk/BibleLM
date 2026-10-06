@@ -297,7 +297,13 @@ type MessageMetadata = {
 // Component
 // ---------------------------------------------------------------------------
 
-export const Message = React.memo(function Message({ message }: { message: UIMessage }) {
+export const Message = React.memo(function Message({
+  message,
+  onExploreVerse,
+}: {
+  message: UIMessage;
+  onExploreVerse?: (reference: string) => void;
+}) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = React.useState(false);
   const messageText = getMessageText(message);
@@ -360,6 +366,7 @@ export const Message = React.memo(function Message({ message }: { message: UIMes
             blocks={verseBlocks}
             preamble={preamble}
             fallbackSummary={fallbackSummary}
+            onExplore={onExploreVerse}
           />
 
           {/* Postamble */}

@@ -8,6 +8,8 @@ import { Message } from './Message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TranslationSelect } from './TranslationSelect';
+import { StudyPane } from './study/StudyPane';
+import { useStudyPane } from './study/useStudyPane';
 import { Moon, Plus, Sun } from 'lucide-react';
 
 type ChatInnerProps = {
@@ -89,6 +91,21 @@ function ChatInner({
   });
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentContainerClass = 'w-full max-w-[720px] mx-auto px-3 sm:px-4';
+
+  const study = useStudyPane();
+  const [studyPrimary, setStudyPrimary] = useState(selectedTranslation);
+  const [studySecondary, setStudySecondary] = useState(
+    selectedTranslation === 'KJV' ? 'WEB' : 'KJV'
+  );
+
+  // The study pane opens on the chat translation unless the user picked
+  // explicit study translations already.
+  useEffect(() => {
+    if (!study.isOpen) {
+      setStudyPrimary(selectedTranslation);
+      setStudySecondary(selectedTranslation === 'KJV' ? 'WEB' : 'KJV');
+    }
+  }, [selectedTranslation, study.isOpen]);
 
   const chatFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await fetch(input, init);
@@ -174,6 +191,7 @@ function ChatInner({
 
   return (
     <div className="flex min-h-[100vh] min-h-[100dvh] h-[100dvh] flex-col bg-background">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:border-x">
       {/* Header */}
       <header className="shrink-0 border-b bg-card/80 backdrop-blur-md">
@@ -234,7 +252,7 @@ function ChatInner({
           <div className={`${contentContainerClass} py-3 sm:py-4`}>
             <div className="flex flex-col gap-2 pb-4">
               {messages.map((message) => (
-                <Message key={message.id} message={message} />
+                <Message key={message.id} message={message} onExploreVerse={study.openStudy} />
               ))}
 
               {isLoading && messages[messages.length - 1]?.role === 'user' && (
@@ -290,6 +308,56 @@ function ChatInner({
         </div>
       </div>
       </div>
+
+      {/* Desktop (≥1024px): side-by-side split view */}
+      {study.isOpen && study.target && (
+        <aside
+          aria-label="Side-by-side study pane"
+          className="hidden min-h-0 w-[400px] shrink-0 border-l bg-card lg:flex xl:w-[520px]"
+        >
+          <div className="h-full min-h-0 w-full">
+            <StudyPane
+              target={study.target}
+              primary={studyPrimary}
+              secondary={studySecondary}
+              onPrimaryChange={setStudyPrimary}
+              onSecondaryChange={setStudySecondary}
+              onClose={study.closeStudy}
+              onNavigateChapter={study.navigateChapter}
+              onFocusPericope={study.focusPericope}
+            />
+          </div>
+        </aside>
+      )}
+      </div>
+
+      {/* Mobile / tablet (<1024px): slide-out drawer */}
+      {study.isOpen && study.target && (
+        <div className="lg:hidden">
+          <div
+            aria-hidden="true"
+            onClick={study.closeStudy}
+            className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm"
+          />
+          <aside
+            aria-label="Side-by-side study pane"
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-y-0 right-0 z-50 flex w-[min(100vw,440px)] flex-col border-l bg-card shadow-xl"
+          >
+            <StudyPane
+              target={study.target}
+              primary={studyPrimary}
+              secondary={studySecondary}
+              onPrimaryChange={setStudyPrimary}
+              onSecondaryChange={setStudySecondary}
+              onClose={study.closeStudy}
+              onNavigateChapter={study.navigateChapter}
+              onFocusPericope={study.focusPericope}
+            />
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
