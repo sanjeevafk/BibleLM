@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import rawPericopes from '../../data/pericopes.json';
 
 export interface PericopeItem {
   id: string;
@@ -13,21 +12,12 @@ export interface PericopeItem {
   category: 'parable' | 'discourse' | 'narrative' | 'prophecy' | 'hymn' | 'law' | 'epistle';
 }
 
-let cachedPericopes: PericopeItem[] | null = null;
+const pericopesList: PericopeItem[] = Array.isArray(rawPericopes)
+  ? (rawPericopes as PericopeItem[])
+  : ((rawPericopes as any)?.default ?? []);
 
 function loadPericopes(): PericopeItem[] {
-  if (cachedPericopes) return cachedPericopes;
-  try {
-    const filePath = path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'pericopes.json');
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf-8');
-      cachedPericopes = JSON.parse(raw);
-      return cachedPericopes!;
-    }
-  } catch (err) {
-    console.warn('[pericopes] Failed to load data/pericopes.json:', err);
-  }
-  return [];
+  return pericopesList;
 }
 
 /**

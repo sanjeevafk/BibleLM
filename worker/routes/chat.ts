@@ -66,7 +66,9 @@ end
 return current
 `;
 
-const dataValidationPromise = validateDataIntegrity();
+const dataValidationPromise = validateDataIntegrity().catch((err) => {
+  console.warn('[validate-data] Skipping data validation in edge environment:', err);
+});
 
 // ---------------------------------------------------------------------------
 // Types
@@ -201,15 +203,28 @@ async function findPreferredCachedResponse(
     cacheKey: buildCacheKey({ query, translation, model: modelKey, historyHash }),
   }));
 
-  const results = await Promise.all(
-    cacheCandidates.map(async ({ modelKey, cacheKey }) => ({
-      modelKey,
-      cacheKey,
-      response: await getCachedResponse({ query, translation, model: modelKey, historyHash }),
-    }))
-  );
+  try {
+    const results = await Promise.all(
+      cacheCandidates.map(async ({ modelKey, cacheKey }) => {
+        let response = null;
+        try {
+          response = await getCachedResponse({ query, translation, model: modelKey, historyHash });
+        } catch {
+          response = null;
+        }
+        return {
+          modelKey,
+          cacheKey,
+          response,
+        };
+      })
+    );
 
-  return results.find((result) => result.response?.response) ?? null;
+    return results.find((result) => result.response?.response) ?? null;
+  } catch (err) {
+    console.warn('[cache] Cache lookup error, falling back to LLM pipeline:', err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -436,42 +451,44 @@ export async function POST(req: Request, aiBinding?: unknown) {
     // threshold) instead of skipping limiting entirely.
     const UNKNOWN_IP_MAX_REQUESTS = 30;
 
+    const rateLimitKey = getRateLimitKey(req);
+    const isUnknown = rateLimitKey.endsWith(':unknown');
+    const maxForKey = isUnknown ? UNKNOWN_IP_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS;
+
+    let count: number | null = null;
     const redisClient = getRedis();
     if (redisClient) {
-      const rateLimitKey = getRateLimitKey(req);
-      const isUnknown = rateLimitKey.endsWith(':unknown');
-      const maxForKey = isUnknown ? UNKNOWN_IP_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS;
-      const count = await incrementRateLimitCounter(rateLimitKey);
-      debugLog(`Rate limit count: ${count ?? 'n/a'} for key ${rateLimitKey}`);
-      if (typeof count === 'number') {
-        if (count > RATE_LIMIT_WARN_THRESHOLD && count <= maxForKey) {
-          rateLimitWarning = `Approaching rate limit (${count}/${maxForKey} req/min)`;
-        }
-        if (count > maxForKey) {
-          statusCode = 429;
-          return new Response(JSON.stringify({
-            error: `Rate limit exceeded (${maxForKey} req/min). Try again in 60s.`,
-          }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-        }
+      try {
+        count = await incrementRateLimitCounter(rateLimitKey);
+      } catch (redisErr) {
+        console.warn('[rate-limit] Redis counter exception, falling back to in-memory limit:', redisErr);
+        count = null;
+      }
+    }
+
+    if (typeof count === 'number') {
+      debugLog(`Rate limit count: ${count} for key ${rateLimitKey}`);
+      if (count > RATE_LIMIT_WARN_THRESHOLD && count <= maxForKey) {
+        rateLimitWarning = `Approaching rate limit (${count}/${maxForKey} req/min)`;
+      }
+      if (count > maxForKey) {
+        statusCode = 429;
+        return new Response(JSON.stringify({
+          error: `Rate limit exceeded (${maxForKey} req/min). Try again in 60s.`,
+        }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
       }
     } else {
-      // Redis unavailable — use in-memory sliding-window fallback.
-      // Not cluster-safe: configure Upstash Redis for multi-instance deployments.
-      const rateLimitKey = getRateLimitKey(req);
-      const isUnknown = rateLimitKey.endsWith(':unknown');
-      const maxForKey = isUnknown ? UNKNOWN_IP_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS;
-      {
-        const result = inMemoryRateLimit(rateLimitKey, maxForKey, RATE_LIMIT_WINDOW_SECONDS * 1000);
-        debugLog(`[in-memory rate limit] count=${result.count} for key ${rateLimitKey}`);
-        if (!result.allowed) {
-          statusCode = 429;
-          return new Response(JSON.stringify({
-            error: `Rate limit exceeded (${maxForKey} req/min). Try again in 60s.`,
-          }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-        }
-        if (result.count > RATE_LIMIT_WARN_THRESHOLD) {
-          rateLimitWarning = `Approaching rate limit (${result.count}/${maxForKey} req/min)`;
-        }
+      // Redis unavailable or errored — use in-memory sliding-window fallback.
+      const result = inMemoryRateLimit(rateLimitKey, maxForKey, RATE_LIMIT_WINDOW_SECONDS * 1000);
+      debugLog(`[in-memory rate limit] count=${result.count} for key ${rateLimitKey}`);
+      if (!result.allowed) {
+        statusCode = 429;
+        return new Response(JSON.stringify({
+          error: `Rate limit exceeded (${maxForKey} req/min). Try again in 60s.`,
+        }), { status: statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+      }
+      if (result.count > RATE_LIMIT_WARN_THRESHOLD) {
+        rateLimitWarning = `Approaching rate limit (${result.count}/${maxForKey} req/min)`;
       }
     }
 

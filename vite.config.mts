@@ -9,6 +9,10 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './'),
     },
   },
+  build: {
+    outDir: 'dist/client',
+    emptyOutDir: true,
+  },
   server: {
     port: 5173,
     proxy: {
