@@ -53,7 +53,7 @@ async function runSpeculativeBenchmark() {
       const cls = await classifyAndRewriteQuery(tc.query, tc.history);
       if (cls.searchQuery) seqQuery = cls.searchQuery;
     }
-    const seqVerses = await retrieveContextForQuery(seqQuery, 'BSB');
+    await retrieveContextForQuery(seqQuery, 'BSB');
     const seqDuration = performance.now() - seqStart;
 
     // Pause between calls

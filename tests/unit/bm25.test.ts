@@ -12,7 +12,7 @@
  *  - State serialization round-trip (exportState / createFromState)
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { BM25Engine } from '../../lib/retrieval/bm25';
 
 // ---------------------------------------------------------------------------
