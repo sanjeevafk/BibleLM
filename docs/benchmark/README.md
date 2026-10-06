@@ -50,6 +50,8 @@ Matching is case-insensitive and accepts ranged references that start with the e
 
 - `ENABLE_SEMANTIC_RERANKER`
   - Enables optional semantic reranking.
+- `ENABLE_NEURAL_RERANK`
+  - Enables conditional neural re-ranking via Workers AI (`@cf/baai/bge-reranker-base`). Default on; only fires when the gate passes and the `AI` binding is present.
 - `ENABLE_TSK_EXPANSION_GATING`
   - Enables TSK expansion gating.
 - `ENABLE_RETRIEVAL_DEBUG`
