@@ -559,11 +559,16 @@ export async function retrieveContextForQuery(
       const verseTexts = new Map(
         hydrated.map((verse) => [verse.reference.trim().toUpperCase(), verse.text])
       );
-      const reranked = await rerankCandidates(normalizedQuery, rankedForGate, verseTexts, aiBinding);
+      const { ranked: reranked, applied } = await rerankCandidates(
+        normalizedQuery,
+        rankedForGate,
+        verseTexts,
+        aiBinding
+      );
       finalCandidateOrder = reranked.map((candidate) => candidate.verseId.trim().toUpperCase());
       console.info(JSON.stringify({
         event: 'neural_rerank',
-        action: 'applied',
+        action: applied ? 'applied' : 'fallback',
         headCount: headIds.length,
         topRef: finalCandidateOrder[0] ?? null,
         latencyMs: Number((performance.now() - rerankStartedAt).toFixed(2)),
@@ -571,7 +576,7 @@ export async function retrieveContextForQuery(
       if (debugState) {
         addRetrievalStageTrace(debugState, {
           stage: 'neural_rerank',
-          action: 'applied',
+          action: applied ? 'applied' : 'fallback',
           headCount: headIds.length,
           topRef: finalCandidateOrder[0] ?? null,
         });

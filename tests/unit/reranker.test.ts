@@ -118,12 +118,13 @@ describe('rerankCandidates', () => {
         { index: 2, score: 0.5 },
       ],
     });
-    const result = await rerankCandidates(
+    const { ranked: result, applied } = await rerankCandidates(
       'let there be light',
       ranked([0.5, 0.48, 0.47]),
       TEXTS,
       { run }
     );
+    expect(applied).toBe(true);
     expect(run).toHaveBeenCalledWith(
       RERANK_MODEL,
       expect.objectContaining({ query: 'let there be light' })
@@ -148,21 +149,24 @@ describe('rerankCandidates', () => {
       rankLexical: i + 1,
     }));
     const texts = new Map(many.map((c) => [c.verseId, `text for ${c.verseId}`]));
-    const result = await rerankCandidates('a sufficiently long thematic query here', many, texts, { run });
+    const { ranked: result, applied } = await rerankCandidates('a sufficiently long thematic query here', many, texts, { run });
     expect(run.mock.calls[0][1].contexts).toHaveLength(RERANK_MAX_CANDIDATES);
     expect(result).toHaveLength(20);
+    expect(applied).toBe(true);
   });
 
   it('falls back to RRF order when aiBinding is undefined', async () => {
     const input = ranked([0.5, 0.48, 0.47]);
-    const result = await rerankCandidates('let there be light', input, TEXTS, undefined);
+    const { ranked: result, applied } = await rerankCandidates('let there be light', input, TEXTS, undefined);
+    expect(applied).toBe(false);
     expect(result.map((c) => c.verseId)).toEqual(input.map((c) => c.verseId));
   });
 
   it('falls back to RRF order when the binding throws', async () => {
     const run = vi.fn().mockRejectedValue(new Error('rate limited'));
     const input = ranked([0.5, 0.48, 0.47]);
-    const result = await rerankCandidates('let there be light', input, TEXTS, { run });
+    const { ranked: result, applied } = await rerankCandidates('let there be light', input, TEXTS, { run });
+    expect(applied).toBe(false);
     expect(result.map((c) => c.verseId)).toEqual(input.map((c) => c.verseId));
   });
 
@@ -170,7 +174,8 @@ describe('rerankCandidates', () => {
     const input = ranked([0.5, 0.48, 0.47]);
     for (const bad of [{ nope: true }, { response: [{ index: 0 }] }, { response: [] }, null]) {
       const run = vi.fn().mockResolvedValue(bad);
-      const result = await rerankCandidates('let there be light', input, TEXTS, { run });
+      const { ranked: result, applied } = await rerankCandidates('let there be light', input, TEXTS, { run });
+      expect(applied).toBe(false);
       expect(result.map((c) => c.verseId)).toEqual(input.map((c) => c.verseId));
     }
   });
@@ -178,12 +183,33 @@ describe('rerankCandidates', () => {
   it('falls back when all verse texts are missing', async () => {
     const run = vi.fn();
     const input = ranked([0.5, 0.48, 0.47]);
-    const result = await rerankCandidates('let there be light', input, new Map(), { run });
+    const { ranked: result, applied } = await rerankCandidates('let there be light', input, new Map(), { run });
     expect(run).not.toHaveBeenCalled();
+    expect(applied).toBe(false);
     expect(result.map((c) => c.verseId)).toEqual(input.map((c) => c.verseId));
   });
 
+  it('drops textless candidates from the model call but keeps them in order', async () => {
+    const run = vi.fn().mockResolvedValue({
+      response: [
+        { index: 0, score: 0.2 },
+        { index: 1, score: 1.5 },
+      ],
+    });
+    const input = ranked([0.5, 0.48, 0.47]);
+    const partial = new Map([['GEN 1:1', 'text one'], ['GEN 1:3', 'text three']]);
+    const { ranked: result, applied } = await rerankCandidates('let there be light', input, partial, { run });
+    expect(applied).toBe(true);
+    // Only the two text-bearing candidates were sent…
+    expect(run.mock.calls[0][1].contexts).toHaveLength(2);
+    // …the textless GEN 1:2 keeps its relative place behind them.
+    expect(result.map((c) => c.verseId)).toEqual(['GEN 1:3', 'GEN 1:1', 'GEN 1:2']);
+  });
+
   it('returns empty for empty input', async () => {
-    await expect(rerankCandidates('query query query query query', [], TEXTS, undefined)).resolves.toEqual([]);
+    await expect(rerankCandidates('query query query query query', [], TEXTS, undefined)).resolves.toEqual({
+      ranked: [],
+      applied: false,
+    });
   });
 });

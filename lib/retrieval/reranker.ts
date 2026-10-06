@@ -126,52 +126,64 @@ function parseRerankResponse(raw: unknown, expectedCount: number): number[] | nu
 /**
  * Re-orders candidates with the Workers AI reranker model.
  *
- * Only the top RERANK_MAX_CANDIDATES are sent; the remainder keep their
- * relative order behind the reranked head. Returns the input ordering
- * unchanged when the binding is absent, texts are all missing, the
- * response is malformed, or the call throws.
+ * Only the top RERANK_MAX_CANDIDATES are eligible, and of those only
+ * candidates WITH verse text are sent — the model rejects empty strings
+ * (4006/5006), so textless candidates keep their relative order behind
+ * the reranked head instead of failing the whole call. Returns whether
+ * the model actually re-scored (`applied`), so callers can log honestly:
+ * anything else (no binding, no sendable texts, malformed response,
+ * thrown error) keeps the input RRF ordering with `applied: false`.
  */
 export async function rerankCandidates(
   query: string,
   candidates: RankedVerse[],
   verseTexts: Map<string, string>,
   aiBinding?: WorkersAiBinding | null
-): Promise<RankedVerse[]> {
-  if (candidates.length === 0) return [];
-  if (!aiBinding || typeof aiBinding.run !== 'function') return [...candidates];
+): Promise<{ ranked: RankedVerse[]; applied: boolean }> {
+  if (candidates.length === 0) return { ranked: [], applied: false };
+  if (!aiBinding || typeof aiBinding.run !== 'function') {
+    return { ranked: [...candidates], applied: false };
+  }
 
   const head = candidates.slice(0, RERANK_MAX_CANDIDATES);
   const tail = candidates.slice(RERANK_MAX_CANDIDATES);
-  const texts = head.map(
-    (candidate) => verseTexts.get(normalizeVerseId(candidate.verseId)) || ''
+  const sendable = head
+    .map((candidate, position) => ({
+      candidate,
+      position,
+      text: verseTexts.get(normalizeVerseId(candidate.verseId)) || '',
+    }))
+    .filter((entry) => entry.text.trim().length > 0);
+  const unsent = head.filter((_, position) =>
+    !sendable.some((entry) => entry.position === position)
   );
-  if (texts.every((text) => text.trim().length === 0)) return [...candidates];
+  if (sendable.length === 0) return { ranked: [...candidates], applied: false };
 
   try {
     // Documented input shape: contexts as [{ text }]; indices in the
     // response refer to positions in this array.
     const raw = await aiBinding.run(RERANK_MODEL, {
       query,
-      contexts: texts.map((text) => ({ text })),
+      contexts: sendable.map((entry) => ({ text: entry.text })),
     });
-    const logits = parseRerankResponse(raw, head.length);
-    if (!logits) return [...candidates];
+    const logits = parseRerankResponse(raw, sendable.length);
+    if (!logits) return { ranked: [...candidates], applied: false };
 
     const probabilities = softmax(logits);
-    const reranked = head
-      .map((candidate, position) => ({
+    const reranked = sendable
+      .map((entry, order) => ({
         candidate: {
-          ...candidate,
-          score: probabilities[position],
-          relevanceScore: probabilities[position],
+          ...entry.candidate,
+          score: probabilities[order],
+          relevanceScore: probabilities[order],
         },
-        position,
+        order,
       }))
-      .sort((a, b) => b.candidate.score - a.candidate.score || a.position - b.position)
+      .sort((a, b) => b.candidate.score - a.candidate.score || a.order - b.order)
       .map(({ candidate }) => candidate);
-    return [...reranked, ...tail];
+    return { ranked: [...reranked, ...unsent, ...tail], applied: true };
   } catch (error) {
     console.warn('[reranker] Workers AI rerank failed; keeping fused order', error);
-    return [...candidates];
+    return { ranked: [...candidates], applied: false };
   }
 }
