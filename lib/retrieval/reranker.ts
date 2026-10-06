@@ -167,7 +167,18 @@ export async function rerankCandidates(
       contexts: sendable.map((entry) => ({ text: entry.text })),
     });
     const logits = parseRerankResponse(raw, sendable.length);
-    if (!logits) return { ranked: [...candidates], applied: false };
+    if (!logits) {
+      // Log only the response SHAPE (never verse text) for operability.
+      const shape =
+        raw !== null && typeof raw === 'object'
+          ? Object.keys(raw as Record<string, unknown>)
+          : typeof raw;
+      console.warn('[reranker] unparseable model response; keeping fused order', {
+        shape,
+        expected: sendable.length,
+      });
+      return { ranked: [...candidates], applied: false };
+    }
 
     const probabilities = softmax(logits);
     const reranked = sendable
