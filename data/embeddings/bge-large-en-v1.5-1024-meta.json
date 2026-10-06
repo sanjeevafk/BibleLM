@@ -1,0 +1,8 @@
+{
+  "model": "BAAI/bge-large-en-v1.5",
+  "dimension": 1024,
+  "totalVerses": 31086,
+  "binaryBytes": 127328256,
+  "generatedAt": "2026-10-06T09:39:41Z",
+  "valid": true
+}

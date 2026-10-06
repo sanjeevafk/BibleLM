@@ -63,3 +63,7 @@ test_*.py
 rust/target/
 data/rust/*.json
 
+
+# Large generated embedding dumps (data lives in Turso; keep meta/order json)
+data/embeddings/*.bin
+data/embeddings/*.jsonl
