@@ -113,9 +113,9 @@ describe('rerankCandidates', () => {
   it('reorders by softmax probabilities and stamps relevanceScore', async () => {
     const run = vi.fn().mockResolvedValue({
       response: [
-        { index: 0, score: 0.1 },
-        { index: 1, score: 2.0 },
-        { index: 2, score: 0.5 },
+        { id: 0, score: 0.1 },
+        { id: 1, score: 2.0 },
+        { id: 2, score: 0.5 },
       ],
     });
     const { ranked: result, applied } = await rerankCandidates(
@@ -141,7 +141,7 @@ describe('rerankCandidates', () => {
 
   it('caps model input at the top 12 candidates', async () => {
     const run = vi.fn().mockResolvedValue({
-      response: Array.from({ length: 12 }, (_, index) => ({ index, score: 12 - index })),
+      response: Array.from({ length: 12 }, (_, index) => ({ id: index, score: 12 - index })),
     });
     const many = Array.from({ length: 20 }, (_, i) => ({
       verseId: `GEN 1:${i + 1}`,
@@ -192,8 +192,8 @@ describe('rerankCandidates', () => {
   it('drops textless candidates from the model call but keeps them in order', async () => {
     const run = vi.fn().mockResolvedValue({
       response: [
-        { index: 0, score: 0.2 },
-        { index: 1, score: 1.5 },
+        { id: 0, score: 0.2 },
+        { id: 1, score: 1.5 },
       ],
     });
     const input = ranked([0.5, 0.48, 0.47]);

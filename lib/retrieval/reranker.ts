@@ -111,8 +111,10 @@ function parseRerankResponse(raw: unknown, expectedCount: number): number[] | nu
 
   const scores: number[] = new Array(expectedCount).fill(Number.NaN);
   for (const entry of entries) {
-    const typed = entry as Partial<RerankScoreEntry>;
-    const index = typeof typed?.index === 'number' ? typed.index : Number.NaN;
+    // bge-reranker-base keys positions as `id`; accept `index` too.
+    const typed = entry as Partial<RerankScoreEntry> & { id?: unknown };
+    const rawIndex = typed?.index ?? typed?.id;
+    const index = typeof rawIndex === 'number' ? rawIndex : Number.NaN;
     const score = typeof typed?.score === 'number' ? typed.score : Number.NaN;
     if (!Number.isInteger(index) || index < 0 || index >= expectedCount || !Number.isFinite(score)) {
       return null;
