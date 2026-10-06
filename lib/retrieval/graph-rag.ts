@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import type { Client } from '@libsql/client';
+import { getTursoClient } from '../db';
 import {
   GRAPH_RAG_MAX_DEPTH,
   GRAPH_RAG_MAX_EXPANSIONS,
@@ -39,7 +41,7 @@ function loadGraphIndex(): GraphIndex | null {
 
   try {
     const indexPath = path.resolve(process.cwd(), 'data', 'graph-index.json');
-    if (fs.existsSync(indexPath)) {
+    if (typeof fs?.existsSync === 'function' && fs.existsSync(indexPath)) {
       const content = fs.readFileSync(indexPath, 'utf-8');
       cachedIndex = JSON.parse(content) as GraphIndex;
     } else {
@@ -52,6 +54,121 @@ function loadGraphIndex(): GraphIndex | null {
   }
 
   return cachedIndex;
+}
+
+/**
+ * Executes BFS GraphRAG expansion directly via Turso SQL.
+ * Zero-memory footprint on edge workers (no 20MB JSON file in memory).
+ */
+async function expandViaTurso(
+  client: Client,
+  seedVerseIds: string[],
+  queryTopicIds: Set<string>,
+  opts: {
+    maxDepth: number;
+    maxExpansions: number;
+    maxNeighborsPerSeed: number;
+    edgeMinWeight: number;
+  },
+  startMs: number
+): Promise<GraphRagResult> {
+  const seedCount = seedVerseIds.length;
+  const seedSet = new Set(seedVerseIds.map((id) => id.toUpperCase()));
+  let frontier = Array.from(seedSet);
+  const visited = new Set<string>(frontier);
+
+  let depthReached = 0;
+  let expandedTotalCount = 0;
+  const nodeScores = new Map<string, number>();
+
+  for (let depth = 1; depth <= opts.maxDepth; depth++) {
+    if (frontier.length === 0) break;
+    depthReached = depth;
+
+    const placeholders = frontier.map(() => '?').join(',');
+    const res = await client.execute({
+      sql: `SELECT source_id, target_id, weight, kind FROM graph_edges WHERE source_id IN (${placeholders}) AND weight >= ? ORDER BY source_id, weight DESC`,
+      args: [...frontier, opts.edgeMinWeight],
+    });
+
+    const currentCandidates = new Map<string, { score: number; kind: string }>();
+    const neighborsBySource = new Map<string, Array<{ target_id: string; weight: number; kind: string }>>();
+
+    for (const row of res.rows as unknown as Array<{ source_id: string; target_id: string; weight: number; kind: string }>) {
+      let list = neighborsBySource.get(row.source_id);
+      if (!list) {
+        list = [];
+        neighborsBySource.set(row.source_id, list);
+      }
+      list.push(row);
+    }
+
+    for (const nodeId of frontier) {
+      const neighbors = neighborsBySource.get(nodeId) || [];
+      const validNeighbors = neighbors
+        .filter((n) => !visited.has(n.target_id))
+        .slice(0, opts.maxNeighborsPerSeed);
+
+      for (const neighbor of validNeighbors) {
+        let topicBonus = 0;
+        if (neighbor.kind === 'topic') {
+          if (queryTopicIds.has(neighbor.target_id)) {
+            topicBonus = 1;
+          }
+        }
+
+        const score = Number(neighbor.weight) + (0.2 * topicBonus) + ((1 / depth) * 0.1);
+        const existing = currentCandidates.get(neighbor.target_id);
+        if (!existing || score > existing.score) {
+          currentCandidates.set(neighbor.target_id, { score, kind: neighbor.kind });
+        }
+      }
+    }
+
+    if (currentCandidates.size === 0) break;
+
+    const sortedCandidates = Array.from(currentCandidates.entries())
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => b.score - a.score);
+
+    const acceptedCandidates = sortedCandidates.slice(0, opts.maxExpansions);
+    frontier = [];
+    for (const c of acceptedCandidates) {
+      if (expandedTotalCount >= opts.maxExpansions) break;
+      visited.add(c.id);
+      frontier.push(c.id);
+      nodeScores.set(c.id, c.score);
+      expandedTotalCount++;
+    }
+
+    if (expandedTotalCount >= opts.maxExpansions || frontier.length === 0) break;
+  }
+
+  // Finalize results: exclude seeds and non-verse nodes
+  const isVerseId = (id: string): boolean => /(?:[1-3]\s+)?[A-Z0-9]{2,4}\s+\d+:\d+/i.test(id);
+
+  const expandedIds = Array.from(visited)
+    .filter((id) => !seedSet.has(id))
+    .filter((id) => isVerseId(id))
+    .sort((a, b) => (nodeScores.get(b) || 0) - (nodeScores.get(a) || 0));
+
+  const candidates = expandedIds.map((id) => {
+    const rawScore = nodeScores.get(id) || 0.5;
+    const calibratedScore = Math.min(0.85, Math.max(0.40, Math.round(rawScore * 0.65 * 10000) / 10000));
+    return { verseId: id, score: calibratedScore };
+  });
+
+  return {
+    expandedIds,
+    candidates,
+    diagnostics: {
+      seedCount,
+      expandedCount: expandedIds.length,
+      traversalDepthReached: depthReached,
+      graphLatencyMs: performance.now() - startMs,
+      graphContributionTopK: expandedIds.length,
+    },
+  };
 }
 
 /**
@@ -87,15 +204,32 @@ export async function graphRagExpand(
     return emptyResult();
   }
 
-  const index = loadGraphIndex();
-  if (!index) {
-    return emptyResult();
-  }
-
   const maxDepth = opts?.maxDepth ?? GRAPH_RAG_MAX_DEPTH;
   const maxExpansions = opts?.maxExpansions ?? GRAPH_RAG_MAX_EXPANSIONS;
   const maxNeighborsPerSeed = opts?.maxNeighborsPerSeed ?? GRAPH_RAG_MAX_NEIGHBORS_PER_SEED;
   const edgeMinWeight = opts?.edgeMinWeight ?? GRAPH_RAG_EDGE_MIN_WEIGHT;
+
+  // Primary edge path: query Turso SQL directly if available
+  const tursoClient = getTursoClient();
+  if (tursoClient) {
+    try {
+      return await expandViaTurso(
+        tursoClient,
+        seedVerseIds,
+        queryTopicIds,
+        { maxDepth, maxExpansions, maxNeighborsPerSeed, edgeMinWeight },
+        startMs
+      );
+    } catch (err) {
+      console.warn('[GraphRAG] Turso query failed; falling back to local graph index:', err);
+    }
+  }
+
+  // Fallback: local in-memory index
+  const index = loadGraphIndex();
+  if (!index) {
+    return emptyResult();
+  }
 
   // Initialize frontier with normalized, deduplicated seeds
   const seedSet = new Set(seedVerseIds.map(id => id.toUpperCase()));

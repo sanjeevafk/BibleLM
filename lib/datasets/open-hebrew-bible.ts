@@ -167,3 +167,40 @@ export async function getOpenHebrewBibleLayers(
 
   return Object.keys(result).length > 0 ? result : null;
 }
+
+/**
+ * Preformatted OpenHebrew layer string for a verse (prompt parity).
+ * Turso-first (uploaded by scripts/upload-enrichment-to-turso.ts);
+ * falls back to formatting the local layer files.
+ */
+export async function getOpenHebrewText(
+  bookRaw: string,
+  chapter: number,
+  verse: number
+): Promise<string | null> {
+  // Turso verse_ids use canonical 3-letter codes ("GEN 1:1"); the local
+  // layer files are keyed by title ("Gen"), hence the two normalizations.
+  const code = bookRaw.trim().toUpperCase().replace(/\s+/g, '');
+  if (code && Number.isFinite(chapter) && Number.isFinite(verse)) {
+    try {
+      const { getDbPool } = await import('../db');
+      const pool = getDbPool();
+      if (pool) {
+        const res = await pool.query<{ layers?: unknown }>(
+          'SELECT layers FROM openhebrew WHERE verse_id = ?',
+          [`${code} ${chapter}:${verse}`]
+        );
+        const layers = res.rows[0]?.layers;
+        if (typeof layers === 'string' && layers.length > 0) return layers;
+      }
+    } catch {
+      // Fall through to the local dataset below.
+    }
+  }
+
+  const { formatOpenHebrewLayers } = await import('../retrieval/enrichment');
+  const layers = await getOpenHebrewBibleLayers(bookRaw, chapter, verse).catch(() => null);
+  if (!layers) return null;
+  const formatted = formatOpenHebrewLayers(layers);
+  return formatted || null;
+}

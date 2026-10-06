@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import zlib from 'zlib';
+import { getDbPool } from './db';
+import { decodeInterlinearTokens } from './datasets/turso-schema';
 
 export type OpenGntMorphWord = {
   w: string;
@@ -135,13 +137,15 @@ function loadIndexSync(): void {
     // fallback to fs
   }
   try {
-    const raw = fs.readFileSync(INDEX_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, IndexEntry>;
-    for (const [book, entry] of Object.entries(parsed)) {
-      indexCache[book.toUpperCase()] = entry;
+    if (typeof fs.existsSync === 'function' && fs.existsSync(INDEX_PATH)) {
+      const raw = fs.readFileSync(INDEX_PATH, 'utf8');
+      const parsed = JSON.parse(raw) as Record<string, IndexEntry>;
+      for (const [book, entry] of Object.entries(parsed)) {
+        indexCache[book.toUpperCase()] = entry;
+      }
     }
-  } catch (error) {
-    console.warn('OpenGNT index load failed', error);
+  } catch {
+    // Edge environment or file missing
   }
 }
 
@@ -175,6 +179,9 @@ async function loadLayer<T>(bookRaw: string, layer: keyof IndexEntry): Promise<T
   const loader = (async () => {
     try {
       const filePath = path.join(DATA_DIR, file);
+      if (typeof fs.existsSync === 'function' && !fs.existsSync(filePath)) {
+        return null;
+      }
       const raw = await fs.promises.readFile(filePath);
       let inflated: string;
       if (file.endsWith('.br')) {
@@ -223,6 +230,41 @@ export async function getOpenGNTLayers(reference: string): Promise<OpenGntVerseL
 
   if (verseLayersCache.has(cacheKey)) {
     return verseLayersCache.get(cacheKey) ?? null;
+  }
+
+  // Turso-first: compact interlinear rows uploaded for edge parity. Clause
+  // metadata is not uploaded (display-only); clauses stay undefined here.
+  try {
+    const pool = getDbPool();
+    if (pool) {
+      const res = await pool.query<{ tokens?: unknown }>(
+        'SELECT tokens FROM interlinear_nt WHERE verse_id = ?',
+        [cacheKey]
+      );
+      const raw = res.rows[0]?.tokens;
+      if (typeof raw === 'string') {
+        const tokens = decodeInterlinearTokens(JSON.parse(raw));
+        if (tokens && tokens.length > 0) {
+          const layers: OpenGntVerseLayers = {
+            morphology: tokens.map((t) => ({
+              w: t.w,
+              s: t.s,
+              ...(t.m ? { r: t.m } : {}),
+              ...(t.tr ? { l: t.tr } : {}),
+            })),
+            interlinear: tokens.map((t) => ({ w: t.w, ...(t.g ? { i: t.g } : {}) })),
+          };
+          if (verseLayersCache.size >= MAX_CACHED_VERSE_LAYERS) {
+            const firstKey = verseLayersCache.keys().next().value;
+            if (firstKey !== undefined) verseLayersCache.delete(firstKey);
+          }
+          verseLayersCache.set(cacheKey, layers);
+          return layers;
+        }
+      }
+    }
+  } catch {
+    // Fall through to the local dataset below.
   }
 
   const existingInFlight = verseInFlight.get(cacheKey);

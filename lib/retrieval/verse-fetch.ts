@@ -4,7 +4,7 @@
  * the API-fallback retrieval path.
  */
 
-import { Pool } from 'pg';
+import type { DbPool } from '../db';
 import fs from 'fs';
 import path from 'path';
 import { ensureDbReady, getDbPool } from '../db';
@@ -24,7 +24,10 @@ let bibleIndexCache: Record<string, VerseContext> | null = null;
 
 function shouldUseDb(): boolean {
   if (process.env.BIBLELM_DISABLE_DB === '1') return false;
-  return Boolean(process.env.POSTGRES_URL && process.env.POSTGRES_URL.trim());
+  return Boolean(
+    (process.env.TURSO_DATABASE_URL && process.env.TURSO_DATABASE_URL.trim()) ||
+    (process.env.POSTGRES_URL && process.env.POSTGRES_URL.trim())
+  );
 }
 
 function shouldUseExternalFallback(): boolean {
@@ -38,12 +41,16 @@ function getBibleIndexPath(): string {
 function getBibleIndex(): Record<string, VerseContext> {
   if (bibleIndexCache) return bibleIndexCache;
   try {
-    const raw = fs.readFileSync(getBibleIndexPath(), 'utf8');
-    bibleIndexCache = JSON.parse(raw) as Record<string, VerseContext>;
-  } catch (error) {
-    console.warn('[retrieval] bible-full-index.json load failed; indexed fallback unavailable.', error);
-    bibleIndexCache = {};
+    const indexPath = getBibleIndexPath();
+    if (typeof fs.existsSync === 'function' && fs.existsSync(indexPath)) {
+      const raw = fs.readFileSync(indexPath, 'utf8');
+      bibleIndexCache = JSON.parse(raw) as Record<string, VerseContext>;
+      return bibleIndexCache;
+    }
+  } catch {
+    // Edge environment or file missing
   }
+  bibleIndexCache = {};
   return bibleIndexCache;
 }
 
@@ -123,11 +130,37 @@ export function extractDirectReferences(
 // ---------------------------------------------------------------------------
 
 async function fetchVersesByRefs(
-  pool: Pool,
+  pool: NonNullable<DbPool>,
   refs: Array<{ book: string; chapter: number; verse: number }>,
   translation: string
 ): Promise<VerseContext[]> {
   if (refs.length === 0) return [];
+
+  // Turso / SQLite fast edge path
+  if (process.env.TURSO_DATABASE_URL) {
+    try {
+      const ids = refs.map((r) => `${r.book} ${r.chapter}:${r.verse}`);
+      const placeholders = ids.map(() => '?').join(', ');
+      const res = await pool.query<{
+        id: string;
+        book: string;
+        chapter: number;
+        verse: number;
+        text: string;
+      }>(`SELECT id, book, chapter, verse, text FROM verses WHERE id IN (${placeholders})`, ids);
+
+      if (res.rows.length > 0) {
+        return res.rows.map((row) => ({
+          reference: row.id,
+          translation: translation || 'BSB',
+          text: row.text,
+          original: [],
+        }));
+      }
+    } catch (err) {
+      console.warn('[verse-fetch] Turso query failed; attempting fallback path', err);
+    }
+  }
 
   const values: Array<string | number> = [translation];
   const tuples: string[] = [];
@@ -222,8 +255,10 @@ export async function fetchVersesByIds(verseIds: string[], translation: string):
     try {
       await ensureDbReady();
       const pool = getDbPool();
-      const rows = await fetchVersesByRefs(pool, refs, translation);
-      for (const row of rows) byId.set(row.reference, row);
+      if (pool) {
+        const rows = await fetchVersesByRefs(pool, refs, translation);
+        for (const row of rows) byId.set(row.reference, row);
+      }
     } catch (error) {
       console.warn('DB verse fetch failed; falling back to local/API', error);
     }
@@ -395,6 +430,7 @@ export async function fetchPassageWindowCandidates(
   try {
     await ensureDbReady();
     const pool = getDbPool();
+    if (!pool) return [];
     const q = `%${escapeLikePattern(query.toLowerCase().trim())}%`;
     const result = await pool.query<{
       passage_id: string;

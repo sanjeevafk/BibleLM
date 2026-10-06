@@ -1,6 +1,8 @@
 import path from 'path';
 
 import { loadJsonDataset, markDatasetMissing, resolveDatasetPath } from './base';
+import { getDbPool } from '../db';
+import { decodeMorphTokens } from './turso-schema';
 
 export type MorphWord = {
   t: string;
@@ -90,6 +92,28 @@ export async function getMorphForVerse(
   chapter: number,
   verse: number
 ): Promise<MorphWord[] | null> {
+  const book = normalizeBook(bookRaw);
+  if (book && Number.isFinite(chapter) && Number.isFinite(verse)) {
+    try {
+      const pool = getDbPool();
+      if (pool) {
+        const res = await pool.query<{ tokens?: unknown }>(
+          'SELECT tokens FROM morph_ot WHERE verse_id = ?',
+          [`${book} ${chapter}:${verse}`]
+        );
+        const raw = res.rows[0]?.tokens;
+        if (typeof raw === 'string') {
+          const decoded = decodeMorphTokens(JSON.parse(raw));
+          if (decoded && decoded.length > 0) {
+            return decoded.map((t) => ({ t: t.t, s: t.s, m: t.m || '' }));
+          }
+        }
+      }
+    } catch {
+      // Fall through to the local dataset below.
+    }
+  }
+
   const data = await loadMorphHB(bookRaw);
   if (!data) {
     return null;

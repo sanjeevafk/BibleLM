@@ -1,42 +1,57 @@
-import { Pool } from 'pg';
+import { createClient, type Client } from '@libsql/client';
 
-type PoolGlobal = typeof globalThis & { __bibleLmPool?: Pool };
-let dbReady = false;
+export type DbQueryResult<T = unknown> = {
+  rows: T[];
+  rowCount?: number;
+};
 
-export function getDbPool(): Pool {
-  const globalForPool = globalThis as PoolGlobal;
-  if (globalForPool.__bibleLmPool) {
-    return globalForPool.__bibleLmPool;
+export interface DbPool {
+  query<R = unknown>(sql: string, params?: unknown[]): Promise<DbQueryResult<R>>;
+}
+
+let tursoClientInstance: Client | null = null;
+
+export function getTursoClient(): Client | null {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+  if (!url) return null;
+  if (!tursoClientInstance) {
+    tursoClientInstance = createClient({ url, authToken });
   }
+  return tursoClientInstance;
+}
 
-  const connectionString = process.env.POSTGRES_URL;
-  if (!connectionString) {
-    throw new Error('POSTGRES_URL is not set');
-  }
+/**
+ * Returns the active database pool backed by Turso/libSQL over HTTP.
+ * 100% compatible with Cloudflare Workers edge environment.
+ */
+export function getDbPool(): DbPool | null {
+  const client = getTursoClient();
+  if (!client) return null;
 
-  globalForPool.__bibleLmPool = new Pool({ connectionString });
-  return globalForPool.__bibleLmPool;
+  return {
+    async query<R = unknown>(sql: string, params?: unknown[]): Promise<DbQueryResult<R>> {
+      // Convert Postgres $1, $2 placeholders to SQLite ? placeholders if needed
+      const sqliteSql = sql.replace(/\$\d+/g, '?');
+      const res = await client.execute({
+        sql: sqliteSql,
+        args: (params as any[]) || [],
+      });
+      return {
+        rows: res.rows as unknown as R[],
+        rowCount: res.rows.length,
+      };
+    },
+  };
 }
 
 export async function ensureDbReady(): Promise<void> {
-  if (dbReady) return;
-
-  const pool = getDbPool();
-  const vectorExt = await pool.query<{ extname: string }>(
-    "SELECT extname FROM pg_extension WHERE extname = 'vector'",
-  );
-  if (vectorExt.rowCount === 0) {
-    throw new Error('pgvector extension is not installed');
+  const client = getTursoClient();
+  if (client) {
+    try {
+      await client.execute('SELECT 1');
+    } catch (err) {
+      console.warn('[db] Turso ping check warning:', err);
+    }
   }
-
-  const embeddingCol = await pool.query<{ data_type: string }>(
-    `SELECT data_type
-     FROM information_schema.columns
-     WHERE table_name = 'verses' AND column_name = 'embedding'`,
-  );
-  if (embeddingCol.rowCount === 0) {
-    throw new Error('verses.embedding column is missing');
-  }
-
-  dbReady = true;
 }
