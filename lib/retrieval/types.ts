@@ -74,6 +74,9 @@ export type RankedVerse = {
   verseId: string;
   score: number;
   rankLexical: number;
+  semanticSimilarity?: number;
+  /** Neural re-ranker probability (softmax over Workers AI logits). */
+  relevanceScore?: number;
 };
 
 // ---------------------------------------------------------------------------

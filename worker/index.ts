@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import type { Ai } from '@cloudflare/workers-types';
 import { handleChat } from './routes/chat';
 import { handleHealth } from './routes/health';
 import { handleEvaluate } from './routes/evaluate';
@@ -12,6 +13,8 @@ export type Bindings = {
   GROQ_SECONDARY_MODEL?: string;
   UPSTASH_REDIS_REST_URL?: string;
   UPSTASH_REDIS_REST_TOKEN?: string;
+  /** Cloudflare Workers AI binding (optional; neural re-rank only). */
+  AI?: Ai;
   DATABASE_URL?: string;
   POSTGRES_URL?: string;
   EVAL_SECRET?: string;

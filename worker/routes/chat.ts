@@ -252,6 +252,8 @@ async function executeUncachedPipeline(options: {
   modelHistory: ModelHistoryMessage[];
   historyHash?: string;
   requestId: string;
+  /** Cloudflare env.AI binding, forwarded for neural re-ranking. */
+  aiBinding?: unknown;
 }): Promise<PipelineExecutionResult> {
   const pipelineMetrics: Partial<LatencyMetrics> = {};
 
@@ -269,7 +271,7 @@ async function executeUncachedPipeline(options: {
       onMetric: (metric, durationMs) => {
         pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
       },
-    });
+    }, { aiBinding: options.aiBinding });
   } else {
     // Turn 2+ speculative parallel execution:
     // Launch raw query retrieval and history classification concurrently.
@@ -282,7 +284,8 @@ async function executeUncachedPipeline(options: {
         onMetric: (metric, durationMs) => {
           pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
         },
-      }
+      },
+      { aiBinding: options.aiBinding }
     ).catch((err) => {
       console.warn('[speculative-retrieval] Raw query retrieval failed:', err);
       return [] as VerseContext[];
@@ -320,7 +323,8 @@ async function executeUncachedPipeline(options: {
           onMetric: (metric, durationMs) => {
             pipelineMetrics[metric] = roundLatencyMs((pipelineMetrics[metric] || 0) + durationMs);
           },
-        }
+        },
+        { aiBinding: options.aiBinding }
       );
     } else {
       // Query did not need rewrite: use speculative parallel result immediately (0 ms added latency!)
@@ -389,7 +393,7 @@ async function executeUncachedPipeline(options: {
 // POST handler
 // ---------------------------------------------------------------------------
 
-export async function POST(req: Request) {
+export async function POST(req: Request, aiBinding?: unknown) {
   const requestId = randomUUID();
   const requestStartedAt = performance.now();
   const latencyMetrics = createLatencyMetrics();
@@ -558,7 +562,7 @@ export async function POST(req: Request) {
     } else {
       debugLog('In-flight dedup MISS – starting pipeline', inflightKey);
       pipelinePromise = executeUncachedPipeline({
-        query, requestedTranslation, modelHistory, historyHash, requestId,
+        query, requestedTranslation, modelHistory, historyHash, requestId, aiBinding,
       }).finally(() => {
         if (inflightRequests.get(inflightKey) === pipelinePromise) {
           inflightRequests.delete(inflightKey);
@@ -653,5 +657,5 @@ export async function POST(req: Request) {
 }
 
 export async function handleChat(c: Context) {
-  return POST(c.req.raw);
+  return POST(c.req.raw, c.env.AI);
 }
