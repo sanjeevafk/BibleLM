@@ -4,6 +4,7 @@
 [![Runtime](https://img.shields.io/badge/Runtime-Cloudflare%20Workers-F38020?style=flat-square&logo=cloudflare)](https://developers.cloudflare.com/workers/)
 [![Dataset](https://img.shields.io/badge/Dataset-Hugging%20Face-yellow?style=flat-square)](https://huggingface.co/datasets/sanjeevafk/biblelm)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![launch with diploi badge](https://diploi.com/launch.svg)](https://diploi.com/launch/sanjeevafk/BibleLM)
 
 **BibleLM** is a high-performance, text-first Retrieval-Augmented Generation (RAG) architecture designed to deliver uncompromising biblical search and original-language insights. 
 
@@ -179,7 +180,37 @@ npx tsc --noEmit
 npm run e2e:study && npm run e2e:stream   # set E2E_BASE to target a deployed URL
 ```
 
-> **Docker / Diploi:** the bundled `Dockerfile` and Diploi launch config predate the Vite + Workers migration (they build Next.js standalone output) and are not maintained for the current stack. Use Cloudflare Workers.
+### Self-hosted: Docker
+
+The app is Worker-native, so the image serves it with `wrangler dev` (local workerd) on port **8787**. Secrets are passed as environment variables, never baked into the image.
+
+```bash
+cp .env.example .env.local   # GROQ_API_KEY, optional TURSO_*, UPSTASH_*
+docker compose up --build    # app + local Redis + Upstash-compatible REST gateway
+# health check: http://localhost:8787/api/health
+```
+
+Or build and run the image alone: `docker build -t biblelm . && docker run -p 8787:8787 --env-file .env.local biblelm`.
+
+Self-hosted limits: Workers AI is unavailable without Cloudflare credentials, so neural re-ranking is off (`ENABLE_NEURAL_RERANK=0`). Without `TURSO_*` the app reads the bundled static data files. If you use Upstash cloud, set `UPSTASH_REDIS_REST_*` and drop the `redis` and `redis-rest` services from `docker-compose.yml`.
+
+### Deploy with Diploi
+
+[![launch with diploi button](https://diploi.com/launch-big.svg)](https://diploi.com/launch/sanjeevafk/BibleLM)
+
+1. Launch the project
+
+   Click the launch button above to create a new Diploi deployment for BibleLM.
+
+2. Add environment variables
+
+   Open the **Environment** tab in the sidebar and add the required variables from [`.env.example`](.env.example).
+
+3. View the deployment
+
+   Open the preview URL from your Diploi deployment page.
+
+For more information, visit [diploi.com](https://diploi.com/).
 
 ---
 

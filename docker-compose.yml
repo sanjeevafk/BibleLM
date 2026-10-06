@@ -8,7 +8,7 @@
 #   docker compose down                 # stop
 #
 # Services:
-#   biblelm   — Next.js app (port 3000)
+#   biblelm   — Vite client + Hono Worker via wrangler dev (port 8787)
 #   redis     — Plain Redis store (RESP on 6379, internal only)
 #   redis-rest — Upstash REST gateway (serverless-redis-http) in front of redis.
 #               REQUIRED because @upstash/redis speaks REST, not RESP.
@@ -17,7 +17,7 @@
 
 services:
   # ---------------------------------------------------------------------------
-  # BibleLM Next.js application
+  # BibleLM application (Worker served locally by wrangler dev / workerd)
   # ---------------------------------------------------------------------------
   biblelm:
     build:
@@ -27,7 +27,7 @@ services:
     container_name: biblelm
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8787:8787"
     environment:
       # ── LLM Providers ──────────────────────────────────────────────────────
       GROQ_API_KEY: ${GROQ_API_KEY}
@@ -42,20 +42,26 @@ services:
       UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-http://redis-rest}
       UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-local-dev-token}
 
+      # ── Data store (optional) ───────────────────────────────────────────────
+      # Without Turso the app falls back to the bundled static data files.
+      TURSO_DATABASE_URL: ${TURSO_DATABASE_URL:-}
+      TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN:-}
+
       # ── Runtime ────────────────────────────────────────────────────────────
       NODE_ENV: production
-      PORT: 3000
+      # Workers AI needs Cloudflare credentials; off for self-hosting.
+      ENABLE_NEURAL_RERANK: "0"
     depends_on:
       redis:
         condition: service_healthy
       redis-rest:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8787/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 40s
 
   # ---------------------------------------------------------------------------
   # Local Redis store (RESP only — NOT directly usable by @upstash/redis).

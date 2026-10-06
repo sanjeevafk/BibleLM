@@ -1,35 +1,21 @@
 # =============================================================================
-# BibleLM — Production Dockerfile
-# Multi-stage build: deps → builder → runner
+# BibleLM — self-hosted image (Vite client + Hono Worker run under workerd)
 #
-# Final image is based on Alpine Linux and only contains the minimal set of
-# files output by Next.js "standalone" mode — no node_modules, no source.
+# The app is Cloudflare-Worker-native, so the container serves it with
+# `wrangler dev` (local workerd). Production on Cloudflare uses `wrangler deploy`.
 #
-# Build:
-#   docker build -t biblelm .
-#   (Runtime secrets via --env-file .env.local or compose environment, NOT build-arg.)
+# Build:  docker build -t biblelm .
+# Run:    docker run -p 8787:8787 --env-file .env.local biblelm
 #
-# Run:
-#   docker run -p 3000:3000 --env-file .env.local biblelm
+# Notes:
+#  - Secrets come from the environment (CLOUDFLARE_INCLUDE_PROCESS_ENV=true makes
+#    wrangler expose process env vars to the Worker). Never bake them in.
+#  - The Workers AI binding needs Cloudflare credentials, so neural re-ranking is
+#    disabled here (ENABLE_NEURAL_RERANK=0). Everything else works offline.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: deps — install production dependencies only
-# -----------------------------------------------------------------------------
-FROM node:22-alpine AS deps
-
-# libc6-compat is required for certain native Node addons on Alpine
-RUN apk add --no-cache libc6-compat
-
-WORKDIR /app
-
-# Copy manifests first so Docker layer-caching skips npm install when unchanged
-COPY package.json package-lock.json ./
-
-RUN npm ci --omit=dev
-
-# -----------------------------------------------------------------------------
-# Stage 2: builder — compile TypeScript, run data scripts, produce Next build
+# Stage 1: builder — install deps, build data bundles + client, precompute BM25
 # -----------------------------------------------------------------------------
 FROM node:22-alpine AS builder
 
@@ -37,58 +23,38 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-# Copy ALL dependencies (including devDependencies) needed to build
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy the rest of the source
 COPY . .
 
-# Pre-process data bundles via `npm run build`, which already runs
-# build:morphhb + build:openhebrewbible + build:translations + build:opengnt
-# (see package.json) before `next build`. Do NOT duplicate those steps here.
-# If data/ is already populated (e.g. checked into git) the scripts are idempotent.
-
-# Build the Next.js app in standalone mode
-# NEXT_TELEMETRY_DISABLED silences the anonymous telemetry prompt
-ENV NEXT_TELEMETRY_DISABLED=1
+# `npm run build` runs the data-bundle scripts, then `vite build` -> dist/client
 RUN npm run build
 
-# Pre-compute the BM25 search-engine state so cold starts are <10ms at runtime
+# Pre-compute BM25 state so cold starts hydrate in <10ms
 RUN npx ts-node --project tsconfig.scripts.json scripts/build-retrieval-index.ts
 
 # -----------------------------------------------------------------------------
-# Stage 3: runner — minimal production image
+# Stage 2: runner — workerd needs wrangler (a devDependency) at runtime
 # -----------------------------------------------------------------------------
 FROM node:22-alpine AS runner
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat libstdc++
 
 WORKDIR /app
 
-# Security: run as non-root
-RUN addgroup --system --gid 1001 nodejs \
- && adduser  --system --uid 1001 nextjs
-
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-# Bind to all interfaces inside the container; the host port is mapped via -p
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+ENV CLOUDFLARE_INCLUDE_PROCESS_ENV=true
+ENV WRANGLER_SEND_METRICS=false
+ENV ENABLE_NEURAL_RERANK=0
 
-# Copy the self-contained server bundle produced by Next.js standalone output.
-# This includes the minimal node_modules required to run — nothing more.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static   ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public         ./public
+COPY --from=builder --chown=node:node /app /app
 
-# Copy the pre-built data bundles (BM25 state, Bible index, morphology, etc.)
-# These are read at runtime by the retrieval engine.
-COPY --from=builder --chown=nextjs:nodejs /app/data ./data
+# Writable dir for wrangler's local state/logs when running non-root
+RUN mkdir -p /app/.wrangler /home/node/.config && chown -R node:node /app/.wrangler /home/node
 
-USER nextjs
+USER node
 
-EXPOSE 3000
+EXPOSE 8787
 
-# Start the standalone Next.js server (no next start needed)
-CMD ["node", "server.js"]
+CMD ["npx", "wrangler", "dev", "--local", "--ip", "0.0.0.0", "--port", "8787", "--var", "ENABLE_NEURAL_RERANK:0"]
