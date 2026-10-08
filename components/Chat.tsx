@@ -148,19 +148,34 @@ function ChatInner({
   const shouldAutoScroll = useRef(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isProgrammaticScroll = useRef(false);
+  const programmaticScrollTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     localStorage.setItem(TRANSLATION_STORAGE_KEY, selectedTranslation);
   }, [selectedTranslation]);
 
+  const setProgrammaticScroll = useCallback(() => {
+    isProgrammaticScroll.current = true;
+    if (programmaticScrollTimer.current) {
+      clearTimeout(programmaticScrollTimer.current);
+    }
+    programmaticScrollTimer.current = setTimeout(() => {
+      isProgrammaticScroll.current = false;
+    }, 600);
+  }, []);
+
   const scrollToBottom = useCallback((smooth = false) => {
     if (scrollRef.current) {
+      if (smooth) {
+        setProgrammaticScroll();
+      }
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: smooth ? 'smooth' : 'auto',
       });
     }
-  }, []);
+  }, [setProgrammaticScroll]);
 
   const handleScrollToBottom = useCallback(() => {
     // Re-pin follow mode so appended stream tokens keep us at the bottom
@@ -170,25 +185,47 @@ function ChatInner({
     scrollToBottom(true);
   }, [scrollToBottom]);
 
+  const handleUserScrollIntent = useCallback(() => {
+    isProgrammaticScroll.current = false;
+    if (programmaticScrollTimer.current) {
+      clearTimeout(programmaticScrollTimer.current);
+      programmaticScrollTimer.current = null;
+    }
+  }, []);
+
   const handleScroll = useCallback(() => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
       // Disengage autoscroll as soon as the user scrolls up past 40px.
       const atBottom = scrollHeight - scrollTop - clientHeight < 40;
-      shouldAutoScroll.current = atBottom;
-      setIsAtBottom(atBottom);
+      if (atBottom) {
+        isProgrammaticScroll.current = false;
+        shouldAutoScroll.current = true;
+        setIsAtBottom(true);
+      } else if (!isProgrammaticScroll.current) {
+        shouldAutoScroll.current = false;
+        setIsAtBottom(false);
+      }
     }
   }, []);
 
   useLayoutEffect(() => {
-    if (shouldAutoScroll.current) {
+    if (shouldAutoScroll.current && messages.length > 0) {
       scrollToBottom();
     }
   }, [messages, isLoading, scrollToBottom]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages.length, scrollToBottom]);
+
+  useEffect(() => {
+    const handleResize = () => handleScroll();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [handleScroll]);
 
   const handleTranslationChange = useCallback((newTranslation: string) => {
     setSelectedTranslation(newTranslation);
@@ -227,13 +264,16 @@ function ChatInner({
     void regenerate({ body: { translation: selectedTranslation } });
   }, [regenerate, selectedTranslation]);
 
-  // Auto-grow the composer up to its max height.
+  // Auto-grow the composer up to its max height and keep scroll anchored if at bottom.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [input]);
+    if (shouldAutoScroll.current && messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [input, messages.length, scrollToBottom]);
 
   const lastMessage = messages[messages.length - 1];
   const lastAssistantText = lastMessage?.role === 'assistant' ? getAssistantText(lastMessage) : '';
@@ -284,9 +324,11 @@ function ChatInner({
 
       {/* Messages */}
       <section
-        className="flex-1 min-h-0 overflow-y-auto"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
         ref={scrollRef}
         onScroll={handleScroll}
+        onWheel={handleUserScrollIntent}
+        onTouchMove={handleUserScrollIntent}
       >
         {messages.length === 0 ? (
           <div className="flex min-h-full items-center justify-center py-6">
@@ -363,8 +405,8 @@ function ChatInner({
         )}
       </section>
 
-      {/* Floating scroll-to-bottom during streaming */}
-      {isLoading && !isAtBottom && messages.length > 0 && (
+      {/* Floating scroll-to-bottom button */}
+      {!isAtBottom && messages.length > 0 && (
         <Button
           size="icon"
           onClick={handleScrollToBottom}
